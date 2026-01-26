@@ -1,26 +1,37 @@
 import TurnManager from "./turnManager";
 import EnemyActionResolver from "./enemyActionResolver";
-import DamageCalculator from "../systems/damageCalculator";
+// import DamageCalculator from "../systems/damageCalculator";
+import PlayerActionExecutor from "./playerActionExecutor";
+import EnemyActionExecutor from "./enemyActionExecutor";
 
 export default class BattleManager {
     constructor({ players = [], enemies = [], startTurn = 'player'}) {
         this.players = players;
         this.enemies = enemies;
-
         this.turnManager = new TurnManager({ startTurn});
         this.battleEnded = false;
     }
 
-    executeAction(char, action, target, id) {
-        if (action.type === 'basic') {
-            return DamageCalculator.basicAttack(char, target);
-        } else
-        if (action.type === 'skill') {
-            return DamageCalculator.skillAttack(char, target, id);
-        } else
-        if (action.type === 'heal') {
-            return DamageCalculator.heal(target, name);
-        }
+    // executeAction(char, action, target, id) {
+    //     if (action.type === 'basic') {
+    //         return DamageCalculator.basicAttack(char, target);
+    //     } else
+    //     if (action.type === 'skill') {
+    //         return DamageCalculator.skillAttack(char, target, id);
+    //     } else
+    //     if (action.type === 'heal') {
+    //         return DamageCalculator.heal(target, name);
+    //     }
+    // }
+
+    // Player Turn
+    executePlayerTurn(player, action, target, id) {
+        PlayerActionExecutor.execute(player, action, target, id);
+    }
+
+    // Enemy Turn
+    executeEnemyTurn(enemy, action, target, id) {
+        EnemyActionExecutor.execute(enemy, action, target, id);
     }
 
     resolveEnemyTurn() {

@@ -39,14 +39,17 @@ export default class DamageCalculator {
     //     };
     // }
 
-    static heal(target, skill) {
-        const healAmount = skill.power;
+    static heal(attacker, target, skill) {
+        const rawHeal = (attacker.atk * skill.power);
+        const healAmount = Math.max(rawHeal, 1);
+        // const healAmount = skill.power;
         target.heal(healAmount);
         skill.triggerCooldown();
 
         return {
             type: 'heal',
-            amount
+            skillName: skill.name,
+            healAmount
         }
     }
 }
