@@ -5,6 +5,7 @@ const express = require('express');
 const cors = require('cors');
 
 const idxRoutes = require('./routes');
+
 const authRoutes = require('./routes/authRoutes');
 const playerRoutes = require('./routes/playerRoutes');
 const battleRoutes = require('./routes/battleRoutes');
