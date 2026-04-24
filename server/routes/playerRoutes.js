@@ -1,7 +1,16 @@
-const express = require('express');
-const router = express.Router();
-const playerController = require('../controllers/playerController');
+// const express = require('express');
+// const router = express.Router();
+// const playerController = require('../controllers/playerController');
 
-router.get('/:id', playerController.getPlayer);
+// router.get('/:id', playerController.getPlayer);
 
-module.exports = router;
+// module.exports = router;
+
+const express = require('express')
+const router = express.Router()
+
+const playerController = require('../controllers/playerController')
+
+router.get('/:playerId/party', playerController.getPlayerParty)
+
+module.exports = router
