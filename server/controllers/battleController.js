@@ -1,14 +1,14 @@
 const db = require('../config/db');
 
 exports.initBattle = async (req, res) => {
-// 1. Tangkap data yang dikirim dari Phaser
-    const { playerId, questId, presetSlot} = req.body;
+    // 1. Tangkap data yang dikirim dari Phaser
+    const { playerId, questId, presetSlot } = req.body;
 
     // Validasi sederhana
     if (!playerId || !questId || !presetSlot) {
-        return res.status(400).json({ 
-            status: 'error', 
-            message: 'playerId, questId, dan presetSlot wajib diisi!' 
+        return res.status(400).json({
+            status: 'error',
+            message: 'playerId, questId, dan presetSlot wajib diisi!'
         });
     }
 
@@ -19,55 +19,56 @@ exports.initBattle = async (req, res) => {
         SELECT * FROM player_party_presets WHERE player_id = ${playerId} AND preset_slot = ${presetSlot}
         )
         SELECT 'Main Character' AS role_slot, pi.inv_id, 'Character' AS item_type, pi.item_level AS LEVEL,
-        mc.mc_name AS NAME, mc.mc_element AS element, mc.mc_portrait_path AS image_path,
-        (mc.mc_base_hp + (mc.mc_hp_growth * (pi.item_level - 1))) AS calculated_hp,
-        (mc.mc_base_atk + (mc.mc_atk_growth * (pi.item_level - 1))) AS calculated_atk
+            mc.mc_name AS NAME, mc.mc_element AS element, mc.mc_portrait_path AS image_path,
+            (mc.mc_base_hp + (mc.mc_hp_growth * (pi.item_level - 1))) AS calculated_hp,
+            (mc.mc_base_atk + (mc.mc_atk_growth * (pi.item_level - 1))) AS calculated_atk
         FROM ppp JOIN player_inventories PI ON ppp.main_char_inv_id = pi.inv_id 
         JOIN master_characters mc ON pi.master_item_id = mc.mc_id AND pi.item_type = 'Character'
         UNION ALL
         SELECT 'Char Slot 1', pi.inv_id, 'Character', pi.item_level, mc.mc_name, mc.mc_element, mc.mc_portrait_path,
-        (mc.mc_base_hp + (mc.mc_hp_growth * (pi.item_level - 1))), (mc.mc_base_atk + (mc.mc_atk_growth * (pi.item_level - 1)))
+            (mc.mc_base_hp + (mc.mc_hp_growth * (pi.item_level - 1))), (mc.mc_base_atk + (mc.mc_atk_growth * (pi.item_level - 1)))
         FROM ppp JOIN player_inventories PI ON ppp.char_slot_1_inv_id = pi.inv_id 
         JOIN master_characters mc ON pi.master_item_id = mc.mc_id AND pi.item_type = 'Character'
         UNION ALL
         SELECT 'Char Slot 2', pi.inv_id, 'Character', pi.item_level, mc.mc_name, mc.mc_element, mc.mc_portrait_path,
-        (mc.mc_base_hp + (mc.mc_hp_growth * (pi.item_level - 1))), (mc.mc_base_atk + (mc.mc_atk_growth * (pi.item_level - 1)))
+            (mc.mc_base_hp + (mc.mc_hp_growth * (pi.item_level - 1))), (mc.mc_base_atk + (mc.mc_atk_growth * (pi.item_level - 1)))
         FROM ppp JOIN player_inventories PI ON ppp.char_slot_2_inv_id = pi.inv_id 
         JOIN master_characters mc ON pi.master_item_id = mc.mc_id AND pi.item_type = 'Character'
         UNION ALL
         SELECT 'Char Slot 3', pi.inv_id, 'Character', pi.item_level, mc.mc_name, mc.mc_element, mc.mc_portrait_path,
-        (mc.mc_base_hp + (mc.mc_hp_growth * (pi.item_level - 1))), (mc.mc_base_atk + (mc.mc_atk_growth * (pi.item_level - 1)))
+            (mc.mc_base_hp + (mc.mc_hp_growth * (pi.item_level - 1))), (mc.mc_base_atk + (mc.mc_atk_growth * (pi.item_level - 1)))
         FROM ppp JOIN player_inventories PI ON ppp.char_slot_3_inv_id = pi.inv_id 
         JOIN master_characters mc ON pi.master_item_id = mc.mc_id AND pi.item_type = 'Character'
         UNION ALL
         SELECT 'Weapon Grid 1', pi.inv_id, 'Weapon', pi.item_level, mw.mw_name, mw.mw_element, mw.mw_img_path,
-        (mw.mw_base_hp + (mw.mw_hp_growth * (pi.item_level - 1))), (mw.mw_base_atk + (mw.mw_atk_growth * (pi.item_level - 1)))
+            (mw.mw_base_hp + (mw.mw_hp_growth * (pi.item_level - 1))), (mw.mw_base_atk + (mw.mw_atk_growth * (pi.item_level - 1)))
         FROM ppp JOIN player_inventories PI ON ppp.weap_grid_1_inv_id = pi.inv_id 
         JOIN master_weapons mw ON pi.master_item_id = mw.mw_id AND pi.item_type = 'Weapon'
         UNION ALL
         SELECT 'Weapon Grid 2', pi.inv_id, 'Weapon', pi.item_level, mw.mw_name, mw.mw_element, mw.mw_img_path,
-        (mw.mw_base_hp + (mw.mw_hp_growth * (pi.item_level - 1))), (mw.mw_base_atk + (mw.mw_atk_growth * (pi.item_level - 1)))
+            (mw.mw_base_hp + (mw.mw_hp_growth * (pi.item_level - 1))), (mw.mw_base_atk + (mw.mw_atk_growth * (pi.item_level - 1)))
         FROM ppp JOIN player_inventories PI ON ppp.weap_grid_2_inv_id = pi.inv_id 
         JOIN master_weapons mw ON pi.master_item_id = mw.mw_id AND pi.item_type = 'Weapon'
         UNION ALL
         SELECT 'Weapon Grid 3', pi.inv_id, 'Weapon', pi.item_level, mw.mw_name, mw.mw_element, mw.mw_img_path,
-        (mw.mw_base_hp + (mw.mw_hp_growth * (pi.item_level - 1))), (mw.mw_base_atk + (mw.mw_atk_growth * (pi.item_level - 1)))
+            (mw.mw_base_hp + (mw.mw_hp_growth * (pi.item_level - 1))), (mw.mw_base_atk + (mw.mw_atk_growth * (pi.item_level - 1)))
         FROM ppp JOIN player_inventories PI ON ppp.weap_grid_3_inv_id = pi.inv_id 
         JOIN master_weapons mw ON pi.master_item_id = mw.mw_id AND pi.item_type = 'Weapon'
         UNION ALL
         SELECT 'Weapon Grid 4', pi.inv_id, 'Weapon', pi.item_level, mw.mw_name, mw.mw_element, mw.mw_img_path,
-        (mw.mw_base_hp + (mw.mw_hp_growth * (pi.item_level - 1))), (mw.mw_base_atk + (mw.mw_atk_growth * (pi.item_level - 1)))
+            (mw.mw_base_hp + (mw.mw_hp_growth * (pi.item_level - 1))), (mw.mw_base_atk + (mw.mw_atk_growth * (pi.item_level - 1)))
         FROM ppp JOIN player_inventories PI ON ppp.weap_grid_4_inv_id = pi.inv_id 
         JOIN master_weapons mw ON pi.master_item_id = mw.mw_id AND pi.item_type = 'Weapon'
         UNION ALL
         SELECT 'Weapon Grid 5', pi.inv_id, 'Weapon', pi.item_level, mw.mw_name, mw.mw_element, mw.mw_img_path,
-        (mw.mw_base_hp + (mw.mw_hp_growth * (pi.item_level - 1))), (mw.mw_base_atk + (mw.mw_atk_growth * (pi.item_level - 1)))
+            (mw.mw_base_hp + (mw.mw_hp_growth * (pi.item_level - 1))), (mw.mw_base_atk + (mw.mw_atk_growth * (pi.item_level - 1)))
         FROM ppp JOIN player_inventories PI ON ppp.weap_grid_5_inv_id = pi.inv_id 
         JOIN master_weapons mw ON pi.master_item_id = mw.mw_id AND pi.item_type = 'Weapon';
         `;
         // Query ambil Skill party
         const querySkills = `
-        SELECT pi.inv_id, ms.ms_name, ms.ms_category, ms.ms_modifier_value, ms.ms_cooldown, ms.ms_element
+        SELECT pi.inv_id, ms.ms_name, ms.ms_category, ms.ms_modifier_value, ms.ms_cooldown,
+            ms.ms_element, ms.ms_target_type, ms.ms_icon_path, ms.ms_vfx_path
         FROM player_party_presets ppp
         JOIN player_inventories PI ON pi.inv_id IN (
         ppp.main_char_inv_id, ppp.char_slot_1_inv_id, ppp.char_slot_2_inv_id, ppp.char_slot_3_inv_id,
@@ -130,6 +131,8 @@ exports.initBattle = async (req, res) => {
                 modifier: s.ms_modifier_value,
                 cooldown: s.ms_cooldown,
                 element: s.ms_element,
+                target_type: s.ms_target_type,
+                icon_path: s.ms_icon_path,
                 vfx_path: s.ms_vfx_path
             }));
 
@@ -137,7 +140,7 @@ exports.initBattle = async (req, res) => {
                 // Konversi ke Number untuk jaga-jaga MySQL mengembalikan string
                 totalGridHp += Number(item.calculated_hp) || 0;
                 totalGridAtk += Number(item.calculated_atk) || 0;
-                
+
                 formattedSkills.forEach(skill => {
                     if (skill.category === 'Passive') {
                         globalPassives.push({ source_weapon: item.name, ...skill });
@@ -176,9 +179,9 @@ exports.initBattle = async (req, res) => {
                     name: row.mon_name,
                     element: row.mon_element,
                     level: row.monster_level || 1, // Fallback aman
-                    final_stats: { 
-                        hp: Number(row.calculated_hp) || 0, 
-                        atk: Number(row.calculated_atk) || 0 
+                    final_stats: {
+                        hp: Number(row.calculated_hp) || 0,
+                        atk: Number(row.calculated_atk) || 0
                     },
                     ai_behaviors: []
                 };
@@ -191,12 +194,12 @@ exports.initBattle = async (req, res) => {
                         name: row.skill_name,
                         category: row.ms_category,
                         modifier: row.ms_modifier_value,
-                        // vfx_path: row.ms_vfx_path
+                        vfx_path: row.ms_vfx_path
                     }
                 });
             }
         });
-        
+
         for (const key in monsterMap) {
             enemies.push(monsterMap[key]);
         }
@@ -226,8 +229,8 @@ exports.initBattle = async (req, res) => {
 
     } catch (error) {
         console.error("Error init battle:", error);
-        res.status(500).json({ 
-            status: 'error', 
+        res.status(500).json({
+            status: 'error',
             message: 'Terjadi kesalahan pada server saat memuat data battle',
             error_detail: error.message
         });
