@@ -141,13 +141,14 @@ CREATE TABLE `master_monsters` (
   `mon_base_atk` int NOT NULL,
   `mon_element` enum('Fire','Wind','Earth') COLLATE utf8mb4_general_ci NOT NULL,
   `mon_icon_path` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `mon_sprite_path` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
   PRIMARY KEY (`mon_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 /*Data for the table `master_monsters` */
 
-insert  into `master_monsters`(`mon_id`,`mon_name`,`mon_base_hp`,`mon_base_atk`,`mon_element`,`mon_icon_path`) values 
-(1,'Areus',245,95,'Wind',NULL);
+insert  into `master_monsters`(`mon_id`,`mon_name`,`mon_base_hp`,`mon_base_atk`,`mon_element`,`mon_icon_path`,`mon_sprite_path`) values 
+(1,'Areus',245,95,'Wind',NULL,NULL);
 
 /*Table structure for table `master_quests` */
 
@@ -177,20 +178,23 @@ CREATE TABLE `master_skills` (
   `ms_cooldown` int DEFAULT '0',
   `ms_element` enum('Fire','Wind','Earth') COLLATE utf8mb4_general_ci NOT NULL,
   `ms_category` enum('Special','Active','Passive') COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'Active',
+  `ms_target_type` enum('Single_Enemy','All_Enemy','Single_Allies','All_Allies','Self') COLLATE utf8mb4_general_ci DEFAULT 'Single_Enemy',
   `ms_modifier_value` float NOT NULL DEFAULT '0',
+  `ms_icon_path` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `ms_vfx_path` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
   PRIMARY KEY (`ms_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 /*Data for the table `master_skills` */
 
-insert  into `master_skills`(`ms_id`,`ms_name`,`ms_desc`,`ms_cooldown`,`ms_element`,`ms_category`,`ms_modifier_value`) values 
-(1,'Lohenweg ++','Ultra Fire DMG to a foe. (MC Charge Attack)',0,'Fire','Special',5),
-(2,'Fire Majesty Medium','Medium boost to Fire allies ATK',0,'Fire','Passive',0.45),
-(3,'Scarlet Convergence','Big boost to Fire allies ATK',0,'Fire','Passive',0.7),
-(4,'Scythe of Execution','Deal Fire DMG to all foes',5,'Fire','Active',1.5),
-(5,'Ascending Shadow','Boost to own ATK',6,'Fire','Active',0.3),
-(6,'Lacrime di Sangue','Massive Fire DMG to a foe (Character Ultimate)',0,'Fire','Special',4),
-(7,'Roar','Dealt Wind area damage',0,'Wind','Special',2.5);
+insert  into `master_skills`(`ms_id`,`ms_name`,`ms_desc`,`ms_cooldown`,`ms_element`,`ms_category`,`ms_target_type`,`ms_modifier_value`,`ms_icon_path`,`ms_vfx_path`) values 
+(1,'Lohenweg ++','Ultra Fire DMG to a foe. (MC Charge Attack)',0,'Fire','Special','Single_Enemy',5,NULL,NULL),
+(2,'Fire Majesty Medium','Medium boost to Fire allies ATK',0,'Fire','Passive','All_Allies',0.45,NULL,NULL),
+(3,'Scarlet Convergence','Big boost to Fire allies ATK',0,'Fire','Passive','All_Allies',0.7,NULL,NULL),
+(4,'Scythe of Execution','Deal Fire DMG to all foes',5,'Fire','Active','All_Enemy',1.5,NULL,NULL),
+(5,'Ascending Shadow','Boost to own ATK',6,'Fire','Active','Self',0.3,NULL,NULL),
+(6,'Lacrime di Sangue','Massive Fire DMG to a foe (Character Ultimate)',0,'Fire','Special','Single_Enemy',4,NULL,NULL),
+(7,'Roar','Dealt Wind area damage',0,'Wind','Special','All_Enemy',3,NULL,NULL);
 
 /*Table structure for table `master_status_effects` */
 
