@@ -89,7 +89,17 @@ insert  into `item_skills`(`item_id`,`item_type`,`ms_id`,`unlock_level`) values
 (5,'Weapon',3,1),
 (2,'Character',6,1),
 (2,'Character',4,1),
-(2,'Character',5,1);
+(2,'Character',5,1),
+(1,'Character',1,1),
+(1,'Character',8,1),
+(1,'Character',9,1),
+(1,'Character',10,1),
+(3,'Character',11,1),
+(3,'Character',12,1),
+(3,'Character',13,1),
+(4,'Character',14,1),
+(4,'Character',15,1),
+(4,'Character',16,1);
 
 /*Table structure for table `master_characters` */
 
@@ -148,7 +158,7 @@ CREATE TABLE `master_monsters` (
 /*Data for the table `master_monsters` */
 
 insert  into `master_monsters`(`mon_id`,`mon_name`,`mon_base_hp`,`mon_base_atk`,`mon_element`,`mon_icon_path`,`mon_sprite_path`) values 
-(1,'Areus',245,95,'Wind',NULL,NULL);
+(1,'Areus',12500,45,'Wind',NULL,NULL);
 
 /*Table structure for table `master_quests` */
 
@@ -183,7 +193,7 @@ CREATE TABLE `master_skills` (
   `ms_icon_path` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
   `ms_vfx_path` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
   PRIMARY KEY (`ms_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=19 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 /*Data for the table `master_skills` */
 
@@ -194,7 +204,18 @@ insert  into `master_skills`(`ms_id`,`ms_name`,`ms_desc`,`ms_cooldown`,`ms_eleme
 (4,'Scythe of Execution','Deal Fire DMG to all foes',5,'Fire','Active','All_Enemy',1.5,NULL,NULL),
 (5,'Ascending Shadow','Boost to own ATK',6,'Fire','Active','Self',0.3,NULL,NULL),
 (6,'Lacrime di Sangue','Massive Fire DMG to a foe (Character Ultimate)',0,'Fire','Special','Single_Enemy',4,NULL,NULL),
-(7,'Roar','Dealt Wind area damage',0,'Wind','Special','All_Enemy',3,NULL,NULL);
+(7,'Roar','Dealt Wind area damage',0,'Wind','Special','All_Enemy',3,NULL,NULL),
+(8,'Armor Break','Deal Fire DMG and lower enemy DEF',4,'Fire','Active','Single_Enemy',2,NULL,NULL),
+(9,'Rage III','Boost all allies ATK',5,'Fire','Active','All_Allies',0.4,NULL,NULL),
+(10,'Cleave','Deal Fire DMG to all foes',3,'Fire','Active','All_Enemy',1.5,NULL,NULL),
+(11,'Hellfire Barrage','Massive Fire DMG to a foe',0,'Fire','Special','Single_Enemy',4.5,NULL,NULL),
+(12,'Suppression Fire','Fire DMG to all foes and reduce ATK',5,'Fire','Active','All_Enemy',2,NULL,NULL),
+(13,'Tactical Reload','Boost own ATK and skill damage',6,'Fire','Active','Self',0.5,NULL,NULL),
+(14,'Twin Strike','Ultra Fire DMG to a foe',0,'Fire','Special','Single_Enemy',4,NULL,NULL),
+(15,'Roaring Tiger','Gain shield and draw enemy attacks',5,'Fire','Active','Self',0,NULL,NULL),
+(16,'Beast Fang','Heavy Fire DMG to a foe',4,'Fire','Active','Single_Enemy',3,NULL,NULL),
+(17,'Aerial Blast','Massive Wind DMG to all foes',0,'Wind','Special','All_Enemy',3.5,NULL,NULL),
+(18,'Storm Barrier','Boost own DEF and heal slightly',4,'Wind','Active','Self',0.2,NULL,NULL);
 
 /*Table structure for table `master_status_effects` */
 
@@ -243,20 +264,24 @@ DROP TABLE IF EXISTS `monster_ai_behavior`;
 CREATE TABLE `monster_ai_behavior` (
   `mai_id` bigint NOT NULL AUTO_INCREMENT,
   `mon_id` int NOT NULL,
-  `condition_type` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `condition_value` int DEFAULT NULL,
   `ms_id` int NOT NULL,
+  `boss_phase` enum('Normal','Enraged','Exhausted') COLLATE utf8mb4_general_ci DEFAULT 'Normal',
+  `base_utility` float NOT NULL DEFAULT '1',
+  `score_modifiers` json DEFAULT NULL,
   PRIMARY KEY (`mai_id`),
-  KEY `mon_id` (`mon_id`),
-  KEY `ms_id` (`ms_id`),
+  KEY `fk_mai_mon` (`mon_id`),
+  KEY `fk_mai_ms` (`ms_id`),
   CONSTRAINT `fk_mai_mon` FOREIGN KEY (`mon_id`) REFERENCES `master_monsters` (`mon_id`),
   CONSTRAINT `fk_mai_ms` FOREIGN KEY (`ms_id`) REFERENCES `master_skills` (`ms_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 /*Data for the table `monster_ai_behavior` */
 
-insert  into `monster_ai_behavior`(`mai_id`,`mon_id`,`condition_type`,`condition_value`,`ms_id`) values 
-(1,1,NULL,NULL,7);
+insert  into `monster_ai_behavior`(`mai_id`,`mon_id`,`ms_id`,`boss_phase`,`base_utility`,`score_modifiers`) values 
+(1,1,7,'Normal',1,'{\"P_HP_High\": 0.5, \"P_Buff_gt_2\": -0.2}'),
+(2,1,18,'Normal',0.6,'{\"P_Buff_gt_2\": 0.8}'),
+(3,1,17,'Enraged',2,'{\"P_HP_High\": 0.5, \"M_Status_gt_2\": 0.3}'),
+(4,1,7,'Exhausted',0.5,'{}');
 
 /*Table structure for table `player_gacha_pity` */
 
@@ -410,7 +435,7 @@ CREATE TABLE `quest_enemies` (
 /*Data for the table `quest_enemies` */
 
 insert  into `quest_enemies`(`mq_id`,`mon_id`,`monster_level`) values 
-(1,1,1);
+(1,1,80);
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
 /*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
