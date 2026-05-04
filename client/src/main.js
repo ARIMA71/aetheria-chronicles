@@ -3,9 +3,9 @@ import BattleScene from './scenes/battleScene.js';
 
 const config = {
     type: Phaser.AUTO,
-    width: 800,
-    height: 600,
-    backgroundColor: '#222',
+    width: 450,
+    height: 800,
+    backgroundColor: '#1a1a2e',
     scene: [BattleScene]
 };
 
