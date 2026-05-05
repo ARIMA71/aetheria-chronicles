@@ -1,31 +1,30 @@
 /**
  * Player — Phaser.GameObjects.Container
  *
- * Visual berupa portrait card (70x100) dengan border warna yang berubah
- * saat karakter aktif (setHighlight).
- * Data berasal dari API: response.data.player_party.characters[i]
+ * Portrait card 70×90 di area Party HUD.
+ * Tap portrait → buka Skill Window sidebar.
+ * isSAReady = true saat SA dikonfirmasi dari sidebar.
  */
 export default class Player extends Phaser.GameObjects.Container {
     /**
      * @param {Phaser.Scene} scene
      * @param {number} x
      * @param {number} y
-     * @param {object} data - Satu objek karakter dari API.
+     * @param {object} data - Satu objek karakter dari API (player_party.characters[i])
      */
     constructor(scene, x, y, data) {
         super(scene, x, y);
         scene.add.existing(this);
 
-        // ── Data Mapping dari API ──────────────────────────────────────────────
+        // ── Data Mapping ──────────────────────────────────────────────────────
         this.charName = data.name;
         this.element  = data.element || 'None';
         this.level    = data.level   || 1;
+        this.maxHp    = data.final_stats.hp;
+        this.hp       = data.final_stats.hp;
+        this.atk      = data.final_stats.atk;
 
-        this.maxHp = data.final_stats.hp;
-        this.hp    = data.final_stats.hp;
-        this.atk   = data.final_stats.atk;
-
-        // Stat default yang belum ada di API
+        // Stats default
         this.def        = 10;
         this.crit       = 0.1;
         this.critDamage = 2.0;
@@ -33,208 +32,174 @@ export default class Player extends Phaser.GameObjects.Container {
         // ── Combat State ──────────────────────────────────────────────────────
         this.specialBar  = 0;
         this.specialMax  = 100;
-        this.activeBuffs = [];   // { stat, value, duration }
-        this.cooldowns   = {};   // { skillId: sisaTurn }
+        this.activeBuffs = [];
+        this.cooldowns   = {};
+        this.isSAReady   = false; // SA stance untuk Aether Link
 
         // ── Normalisasi Skills dari API ───────────────────────────────────────
-        this.skills = (data.skills || []).map(s => ({
-            id:       s.ms_id,
-            name:     s.ms_name      || s.name,
-            type:     this._mapCategory(s.ms_category || s.category),
-            target:   this._mapTarget(s.ms_target_type || s.target_type || 'single'),
-            power:    parseFloat(s.ms_modifier_value ?? s.modifier ?? 1.0),
-            cooldown: s.ms_cooldown  || s.cooldown || 0,
-            stat:     s.stat     || null,
-            value:    s.value    || 0,
-            duration: s.duration || 0
-        }));
+        // Passive dibuang — tidak ditampilkan di skill window
+        this.skills = (data.skills || [])
+            .filter(s => {
+                const cat = (s.ms_category || s.category || '').toLowerCase();
+                return cat !== 'passive';
+            })
+            .map(s => ({
+                id:       s.ms_id,
+                name:     s.ms_name      || s.name,
+                type:     this._mapCategory(s.ms_category || s.category),
+                target:   this._mapTarget(s.ms_target_type || s.target_type || 'single'),
+                power:    parseFloat(s.ms_modifier_value ?? s.modifier ?? 1.0),
+                // SA (Special) tidak pakai cooldown — dikendalikan oleh specialBar
+                cooldown: (s.ms_category || '').toLowerCase() === 'special' ? 0 : (s.ms_cooldown || s.cooldown || 0),
+                stat:     s.stat     || null,
+                value:    s.value    || 0,
+                duration: s.duration || 0
+            }));
 
-        // Special Attack: cari skill 'special', fallback hardcode Limit Break
-        const specialSkill = this.skills.find(s => s.type === 'special');
-        this.specialAttack = specialSkill
-            ? { id: specialSkill.id, name: specialSkill.name, power: specialSkill.power }
+        // Special Attack — skill berkategori 'special', fallback Limit Break
+        const spSkill = this.skills.find(s => s.type === 'special');
+        this.specialAttack = spSkill
+            ? { id: spSkill.id, name: spSkill.name, power: spSkill.power }
             : { id: 'limit_break', name: 'Limit Break', power: 3.5 };
 
-        // ── Dimensi visual card ───────────────────────────────────────────────
-        this._W = 70;
-        this._H = 100;
+        // ── Dimensi & Warna ───────────────────────────────────────────────────
+        this._W           = 70;
+        this._H           = 90;
+        this._elemColor   = this._getElementColor(this.element);
+        this._baseX       = x;
+        this._isHighlight = false;
 
-        // ── Warna tema elemen ─────────────────────────────────────────────────
-        this._elementColor = this._getElementColor(this.element);
-        this._normalBorder  = this._elementColor;
-        this._activeBorder  = 0xffffff;
-
-        // ── Buat visual elements ──────────────────────────────────────────────
+        // ── Visual Elements ───────────────────────────────────────────────────
         // Background card
-        this._bg = scene.add.rectangle(0, 0, this._W, this._H, 0x16213e);
-        this._bg.setStrokeStyle(2, this._normalBorder);
+        this._bg = scene.add.rectangle(0, 0, this._W, this._H, 0x12192b);
+        this._bg.setStrokeStyle(2, this._elemColor);
 
-        // Elemen color accent (strip atas)
-        this._accent = scene.add.rectangle(0, -(this._H / 2) + 6, this._W, 12, this._elementColor);
+        // Accent strip atas (elemen)
+        this._accent = scene.add.rectangle(0, -(this._H / 2) + 5, this._W, 10, this._elemColor);
 
-        // Nama karakter
-        this._nameLabel = scene.add.text(0, -(this._H / 2) + 16, this._shortName(this.charName), {
-            fontSize: '9px',
-            color: '#e0e0e0',
-            fontStyle: 'bold'
+        // Nama (singkat)
+        this._nameText = scene.add.text(0, -(this._H / 2) + 13, this._shortName(this.charName), {
+            fontSize: '8px', color: '#dddddd', fontStyle: 'bold'
         }).setOrigin(0.5, 0);
 
-        // Label HP
-        this._hpLabel = scene.add.text(0, 22, `${this.hp}`, {
-            fontSize: '10px',
-            color: '#a8e6cf'
-        }).setOrigin(0.5, 0.5);
+        // HP Bar bg
+        this._hpBarBg = scene.add.rectangle(0, 20, 56, 7, 0x222222);
 
-        // HP bar background
-        this._hpBarBg = scene.add.rectangle(0, 36, 54, 6, 0x2d2d2d);
+        // HP Bar fill
+        this._hpFill = scene.add.rectangle(-28, 20, 56, 7, 0x27ae60).setOrigin(0, 0.5);
 
-        // HP bar fill
-        this._hpBarFill = scene.add.rectangle(0, 36, 54, 6, 0x27ae60);
-        this._hpBarFill.setOrigin(0.5, 0.5);
+        // HP angka
+        this._hpText = scene.add.text(0, 30, `${this.hp}`, {
+            fontSize: '8px', color: '#aaaaaa'
+        }).setOrigin(0.5, 0);
 
-        // SA bar (tebal tipis di bagian paling bawah card)
-        this._saBarBg   = scene.add.rectangle(0, (this._H / 2) - 5, 54, 4, 0x1a1a1a);
-        this._saBarFill = scene.add.rectangle(
-            -(27), (this._H / 2) - 5, 0, 4, 0xf1c40f
-        ).setOrigin(0, 0.5);
+        // SA Bar bg (bawah card)
+        this._saBarBg   = scene.add.rectangle(0, this._H / 2 - 6, 56, 5, 0x111111);
+        this._saFill    = scene.add.rectangle(-28, this._H / 2 - 6, 0, 5, 0xf1c40f).setOrigin(0, 0.5);
 
-        // Indikator "DEAD"
-        this._deadOverlay = scene.add.rectangle(0, 0, this._W, this._H, 0x000000);
-        this._deadOverlay.setAlpha(0);
+        // SA Ready indicator (gem menyala)
+        this._saReadyGem = scene.add.circle(28, -(this._H / 2) + 6, 5, 0xf39c12);
+        this._saReadyGem.setAlpha(0);
 
-        this._deadText = scene.add.text(0, 0, 'KO', {
-            fontSize: '16px',
-            color: '#ff5555',
-            fontStyle: 'bold'
-        }).setOrigin(0.5).setAlpha(0);
+        // KO Overlay
+        this._koOverlay = scene.add.rectangle(0, 0, this._W, this._H, 0x000000).setAlpha(0);
+        this._koText    = scene.add.text(0, 0, 'KO', { fontSize: '18px', color: '#ff4444', fontStyle: 'bold' })
+            .setOrigin(0.5).setAlpha(0);
 
-        // Gabungkan semua ke container
         this.add([
-            this._bg,
-            this._accent,
-            this._nameLabel,
-            this._hpLabel,
-            this._hpBarBg,
-            this._hpBarFill,
-            this._saBarBg,
-            this._saBarFill,
-            this._deadOverlay,
-            this._deadText
+            this._bg, this._accent, this._nameText,
+            this._hpBarBg, this._hpFill, this._hpText,
+            this._saBarBg, this._saFill, this._saReadyGem,
+            this._koOverlay, this._koText
         ]);
-
-        // State highlight
-        this._isHighlighted = false;
-        this._baseX = x; // simpan posisi asal untuk animasi geser
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // PUBLIC METHODS
+    // PUBLIC
     // ─────────────────────────────────────────────────────────────────────────
 
-    /**
-     * Ubah tampilan border untuk menandai karakter aktif/tidak.
-     * @param {boolean} isActive
-     */
+    /** Highlight karakter aktif: border glow + geser kiri */
     setHighlight(isActive) {
-        this._isHighlighted = isActive;
-
+        this._isHighlight = isActive;
         if (isActive) {
-            // Glow border putih + geser ke kiri sedikit
-            this._bg.setStrokeStyle(3, this._activeBorder);
+            this._bg.setStrokeStyle(3, 0xffffff);
             this._accent.setFillStyle(0xffffff);
+        } else {
+            this._bg.setStrokeStyle(2, this._elemColor);
+            this._accent.setFillStyle(this._elemColor);
+        }
+        this.scene.tweens.add({
+            targets: this,
+            x: isActive ? this._baseX - 10 : this._baseX,
+            duration: 160,
+            ease: 'Power2'
+        });
+    }
+
+    /** Set/unset SA stance; refresh visual indikator */
+    setSAReady(val) {
+        this.isSAReady = val;
+        if (val) {
+            this._saReadyGem.setAlpha(1);
+            // Pulse animation
             this.scene.tweens.add({
-                targets: this,
-                x: this._baseX - 8,
-                duration: 150,
-                ease: 'Power2'
+                targets: this._saReadyGem,
+                scaleX: 1.4, scaleY: 1.4,
+                yoyo: true, repeat: -1,
+                duration: 500, ease: 'Sine.easeInOut'
             });
         } else {
-            // Kembalikan ke warna elemen + geser balik ke posisi asal
-            this._bg.setStrokeStyle(2, this._normalBorder);
-            this._accent.setFillStyle(this._elementColor);
-            this.scene.tweens.add({
-                targets: this,
-                x: this._baseX,
-                duration: 150,
-                ease: 'Power2'
-            });
+            this.scene.tweens.killTweensOf(this._saReadyGem);
+            this._saReadyGem.setAlpha(0).setScale(1);
         }
     }
 
-    /**
-     * Perbarui semua visual berdasarkan state HP & SA terkini.
-     * Dipanggil oleh BattleScene setiap kali ada perubahan stat.
-     */
+    /** Refresh semua visual bar dan label */
     refreshVisual() {
-        // HP label
-        this._hpLabel.setText(`${Math.max(0, Math.floor(this.hp))}`);
-
-        // HP bar
-        const hpRatio  = Math.max(0, this.hp / this.maxHp);
-        const barWidth = 54 * hpRatio;
-        this._hpBarFill.setSize(barWidth, 6);
-        this._hpBarFill.setX(-(27) + barWidth / 2);
-
-        // Ubah warna HP bar berdasarkan persentase
-        if (hpRatio > 0.5) {
-            this._hpBarFill.setFillStyle(0x27ae60); // Hijau
-        } else if (hpRatio > 0.25) {
-            this._hpBarFill.setFillStyle(0xe67e22); // Oranye
-        } else {
-            this._hpBarFill.setFillStyle(0xe74c3c); // Merah
-        }
+        // HP
+        const hpRatio = Math.max(0, this.hp / this.maxHp);
+        this._hpFill.setSize(56 * hpRatio, 7);
+        this._hpText.setText(`${Math.max(0, Math.floor(this.hp))}`);
+        this._hpFill.setFillStyle(hpRatio > 0.5 ? 0x27ae60 : hpRatio > 0.25 ? 0xe67e22 : 0xe74c3c);
 
         // SA bar
-        const saRatio   = Math.max(0, this.specialBar / this.specialMax);
-        const saWidth   = 54 * saRatio;
-        this._saBarFill.setSize(saWidth, 4);
+        const saRatio = Math.min(1, this.specialBar / this.specialMax);
+        this._saFill.setSize(56 * saRatio, 5);
+        this._saFill.setFillStyle(saRatio >= 1 ? 0xf39c12 : 0xf1c40f);
 
-        // KO overlay
+        // KO
         if (this.hp <= 0) {
-            this._deadOverlay.setAlpha(0.6);
-            this._deadText.setAlpha(1);
-            this._bg.setStrokeStyle(2, 0x555555);
-            this._accent.setFillStyle(0x555555);
+            this._koOverlay.setAlpha(0.65);
+            this._koText.setAlpha(1);
+            this._bg.setStrokeStyle(2, 0x444444);
+            this._accent.setFillStyle(0x444444);
+            this.setSAReady(false);
         }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // PRIVATE HELPERS
+    // PRIVATE
     // ─────────────────────────────────────────────────────────────────────────
+    _shortName(n) { return n && n.length > 7 ? n.substring(0, 7) + '.' : (n || '???'); }
 
-    _shortName(name) {
-        // Potong nama agar muat di card 70px
-        return name && name.length > 7 ? name.substring(0, 7) + '.' : (name || '???');
+    _getElementColor(el) {
+        return { Fire: 0xe74c3c, Wind: 0x2ecc71, Earth: 0xe67e22, Water: 0x3498db, Light: 0xf1c40f, Dark: 0x9b59b6 }[el] || 0x7f8c8d;
     }
 
-    _getElementColor(element) {
-        const palette = {
-            'Fire':  0xe74c3c,
-            'Wind':  0x2ecc71,
-            'Earth': 0xe67e22,
-            'Water': 0x3498db,
-            'Light': 0xf1c40f,
-            'Dark':  0x9b59b6
-        };
-        return palette[element] || 0x7f8c8d;
-    }
-
-    _mapCategory(category) {
-        if (!category) return 'damage';
-        const c = category.toLowerCase();
-        if (c === 'active damage' || c === 'damage') return 'damage';
-        if (c === 'active buff'   || c === 'buff')   return 'buff';
-        if (c === 'active heal'   || c === 'heal')   return 'heal';
-        if (c === 'special')                         return 'special';
-        if (c === 'passive')                         return 'passive';
+    _mapCategory(cat) {
+        if (!cat) return 'damage';
+        const c = cat.toLowerCase();
+        if (c.includes('special'))          return 'special';
+        if (c.includes('buff'))             return 'buff';
+        if (c.includes('heal'))             return 'heal';
         return 'damage';
     }
 
-    _mapTarget(targetType) {
-        if (!targetType) return 'single';
-        const t = targetType.toLowerCase();
-        if (t === 'all_enemies' || t === 'all') return 'all';
-        if (t === 'self')                       return 'self';
+    _mapTarget(t) {
+        if (!t) return 'single';
+        const v = t.toLowerCase();
+        if (v.includes('all'))  return 'all';
+        if (v.includes('self')) return 'self';
         return 'single';
     }
 }

@@ -1,607 +1,352 @@
 import Player from "../entities/player";
-import Enemy  from "../entities/enemy";
-
-// ── Konstanta Layout (Canvas: 450 × 800) ─────────────────────────────────────
-const W = 450;
-const H = 800;
-
-// Zona posisi utama
-const ARENA_CENTER_X   = W / 2;        // 225
-const ARENA_ENEMY_Y    = 240;          // Tengah zona arena
-const PARTY_ROW_Y      = 600;          // Baris potret party
-const ACTION_BAR_Y     = 490;          // Tombol Attack & Aether Burst
-const HEAL_BTN_Y       = 740;          // Tombol Heal (safe area bawah)
-const SIDEBAR_HIDDEN_X = W + 120;      // X sidebar saat tersembunyi (di luar layar kanan)
-const SIDEBAR_SHOWN_X  = W - 100;      // X sidebar saat muncul
-
-export default class BattleScene extends Phaser.Scene {
-    constructor() {
-        super('BattleScene');
-    }
-
-    // ── Phaser Lifecycle ───────────────────────────────────────────────────────
-    create() {
-        this.turn        = "player";
-        this.currentTurn = 1;
-
-        // Array party & state aktif
-        this.players      = [];
-        this.activePlayer = null;
-
-        // Gambar background gradient sederhana
-        this._drawBackground();
-
-        // Loading text di tengah
-        this.loadingText = this.add.text(ARENA_CENTER_X, H / 2, 'Loading Battle Data...', {
-            fontSize: '20px',
-            color: '#cccccc'
-        }).setOrigin(0.5);
-
-        this.fetchBattleData();
-    }
-
-    // ── Background ─────────────────────────────────────────────────────────────
-    _drawBackground() {
-        // Sky gradient simulasi dengan beberapa rectangle
-        const sky = this.add.rectangle(ARENA_CENTER_X, 200, W, 400, 0x0f3460);
-        const ground = this.add.rectangle(ARENA_CENTER_X, 600, W, 400, 0x16213e);
-        // Divider garis tipis antara arena dan HUD
-        this.add.rectangle(ARENA_CENTER_X, 430, W, 2, 0x0f3460);
-        this.add.rectangle(ARENA_CENTER_X, 550, W, 2, 0x0a0a1a);
-    }
-
-    // ── API Fetching ───────────────────────────────────────────────────────────
-    async fetchBattleData() {
-        try {
-            const res = await fetch('http://localhost:3000/api/battle/init', {
-                method:  'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ playerId: 1, presetSlot: 1, questId: 1 })
-            });
-
-            if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
-
-            const json = await res.json();
-            if (json.status !== 'success') throw new Error(json.message || 'API error.');
-
-            this.loadingText.destroy();
-
-            // ── Inisialisasi Party (maks 4 karakter) ──────────────────────────
-            const characters = json.data.player_party.characters.slice(0, 4);
-            const totalChars = characters.length;
-
-            // Hitung posisi X agar party terpusat di baris bawah
-            const cardW    = 70;
-            const cardGap  = 12;
-            const totalW   = totalChars * cardW + (totalChars - 1) * cardGap;
-            const startX   = (W - totalW) / 2 + cardW / 2;
-
-            characters.forEach((charData, i) => {
-                const px = startX + i * (cardW + cardGap);
-                const player = new Player(this, px, PARTY_ROW_Y, charData);
-                player._baseX = px;
-
-                // Klik karakter → jadikan activePlayer
-                player.setInteractive(
-                    new Phaser.Geom.Rectangle(-35, -50, 70, 100),
-                    Phaser.Geom.Rectangle.Contains
-                );
-                player.on('pointerdown', () => {
-                    if (this.turn !== 'player') return;
-                    this._setActivePlayer(player);
-                });
-
-                this.players.push(player);
-            });
-
-            // Karakter pertama aktif secara default
-            this._setActivePlayer(this.players[0]);
-
-            // ── Inisialisasi Musuh ─────────────────────────────────────────────
-            this.enemy = new Enemy(this, ARENA_CENTER_X, ARENA_ENEMY_Y, json.data.enemies[0]);
-
-            // ── Setup UI setelah semua entity siap ────────────────────────────
-            this._setupBattleUI();
-
-        } catch (err) {
-            console.error('[BattleScene] fetchBattleData gagal:', err);
-            this.loadingText
-                .setText(`Error: ${err.message}\nPastikan server berjalan di port 3000.`)
-                .setColor('#ff5555')
-                .setAlign('center');
-        }
-    }
-
-    // ── Set Active Player ──────────────────────────────────────────────────────
-    _setActivePlayer(newActive) {
-        // Lepas highlight dari yang lama
-        if (this.activePlayer && this.activePlayer !== newActive) {
-            this.activePlayer.setHighlight(false);
-        }
-        this.activePlayer = newActive;
-        this.activePlayer.setHighlight(true);
-
-        // Jika sidebar skill sedang terbuka, refresh isinya
-        if (this._sidebarOpen) {
-            this._renderSkillsInSidebar();
-        }
-    }
-
-    // ── Setup Seluruh UI ───────────────────────────────────────────────────────
-    _setupBattleUI() {
-        this._buildHeader();
-        this._buildActionButtons();
-        this._buildSkillSidebar();
-        this._buildHealButton();
-        this._updateHeader();
-    }
-
-    // ── Header: Turn counter + CA gauge ───────────────────────────────────────
-    _buildHeader() {
-        // Panel header tipis
-        this.add.rectangle(ARENA_CENTER_X, 28, W, 56, 0x0a0a1a);
-
-        this.turnText = this.add.text(ARENA_CENTER_X, 16, 'Turn 1', {
-            fontSize: '14px', color: '#cccccc', fontStyle: 'bold'
-        }).setOrigin(0.5, 0);
-
-        this.enemyCaText = this.add.text(ARENA_CENTER_X, 34, '', {
-            fontSize: '11px', color: '#ffaa00'
-        }).setOrigin(0.5, 0);
-
-        this._updateHeader();
-    }
-
-    _updateHeader() {
-        if (!this.turnText) return;
-        this.turnText.setText(`TURN  ${this.currentTurn}`);
-        if (this.enemy && this.enemyCaText) {
-            this.enemyCaText.setText(
-                `${this.enemy.charName}  CHARGE: ${'■'.repeat(this.enemy.caBar)}${'□'.repeat(this.enemy.caMax - this.enemy.caBar)}`
-            );
-        }
-    }
-
-    // ── Tombol Aksi (Attack & Aether Burst) ───────────────────────────────────
-    _buildActionButtons() {
-        // ── ATTACK button — bulat, sisi kanan ─────────────────────────────────
-        const atkX = W - 60;
-        const atkY = ACTION_BAR_Y;
-
-        const atkBg = this.add.circle(atkX, atkY, 44, 0xe74c3c);
-        atkBg.setStrokeStyle(3, 0xff8a80);
-
-        const atkInner = this.add.circle(atkX, atkY, 36, 0xc0392b);
-
-        const atkText = this.add.text(atkX, atkY, 'ATK', {
-            fontSize: '15px', color: '#ffffff', fontStyle: 'bold'
-        }).setOrigin(0.5);
-
-        atkBg.setInteractive();
-        atkBg.on('pointerdown', () => {
-            if (this.turn !== 'player') return;
-            this.playerAttack();
-        });
-
-        // ── AETHER BURST toggle — sisi kiri ───────────────────────────────────
-        const burstX = 60;
-        const burstY = ACTION_BAR_Y;
-
-        const burstBg = this.add.circle(burstX, burstY, 44, 0x1a1a4e);
-        burstBg.setStrokeStyle(3, 0x7b68ee);
-
-        this._burstFill = this.add.arc(burstX, burstY, 36, 0, 0, false, 0x7b68ee);
-
-        const burstText = this.add.text(burstX, burstY - 2, '✦', {
-            fontSize: '22px', color: '#ccccff'
-        }).setOrigin(0.5);
-
-        this.add.text(burstX, burstY + 18, 'AETHER', {
-            fontSize: '8px', color: '#9999cc'
-        }).setOrigin(0.5);
-
-        burstBg.setInteractive();
-        burstBg.on('pointerdown', () => {
-            if (this.turn !== 'player') return;
-            this.playerSpecialAttack();
-        });
-
-        // ── Tombol SKILL — di antara dua tombol ───────────────────────────────
-        const skillBtnX = ARENA_CENTER_X;
-        const skillBtnY = ACTION_BAR_Y + 36;
-
-        const skillBg = this.add.rectangle(skillBtnX, skillBtnY, 90, 28, 0x1e3a5f);
-        skillBg.setStrokeStyle(1, 0x4a90d9);
-
-        this.add.text(skillBtnX, skillBtnY, 'SKILL ▶', {
-            fontSize: '12px', color: '#7ec8e3'
-        }).setOrigin(0.5);
-
-        skillBg.setInteractive();
-        skillBg.on('pointerdown', () => {
-            if (this.turn !== 'player') return;
-            this._sidebarOpen ? this.closeSkillSidebar() : this.openSkillSidebar();
-        });
-    }
-
-    // ── Skill Sidebar ──────────────────────────────────────────────────────────
-    _buildSkillSidebar() {
-        this._sidebarOpen = false;
-        const SBW = 200; // lebar sidebar
-        const SBH = H;
-
-        // Overlay transparan — tap di luar sidebar untuk menutup
-        this._sidebarOverlay = this.add.rectangle(
-            ARENA_CENTER_X - SBW / 2, H / 2, W - SBW, H, 0x000000
-        );
-        this._sidebarOverlay.setAlpha(0).setInteractive();
-        this._sidebarOverlay.on('pointerdown', () => this.closeSkillSidebar());
-
-        // Panel sidebar (dimulai di luar layar kanan)
-        this._sidebarPanel = this.add.container(SIDEBAR_HIDDEN_X, H / 2);
-
-        const panelBg = this.add.rectangle(0, 0, SBW, SBH, 0x0d1b2a);
-        panelBg.setStrokeStyle(1, 0x4a90d9);
-
-        const panelTitle = this.add.text(0, -(H / 2) + 20, 'SKILLS', {
-            fontSize: '13px', color: '#7ec8e3', fontStyle: 'bold'
-        }).setOrigin(0.5, 0);
-
-        this._sidebarPanel.add([panelBg, panelTitle]);
-
-        // Container isi tombol skill (di-clear dan di-render ulang saat ganti aktif)
-        this._skillBtnContainer = this.add.container(SIDEBAR_HIDDEN_X, H / 2);
-    }
-
-    openSkillSidebar() {
-        this._sidebarOpen = true;
-        this._renderSkillsInSidebar();
-
-        // Fade overlay
-        this.tweens.add({
-            targets: this._sidebarOverlay,
-            alpha:   0.45,
-            duration: 200
-        });
-
-        // Slide in sidebar panel
-        this.tweens.add({
-            targets:  [this._sidebarPanel, this._skillBtnContainer],
-            x:        SIDEBAR_SHOWN_X,
-            duration: 220,
-            ease:     'Power2'
-        });
-    }
-
-    closeSkillSidebar() {
-        this._sidebarOpen = false;
-
-        this.tweens.add({
-            targets: this._sidebarOverlay,
-            alpha:   0,
-            duration: 180
-        });
-
-        this.tweens.add({
-            targets:  [this._sidebarPanel, this._skillBtnContainer],
-            x:        SIDEBAR_HIDDEN_X,
-            duration: 200,
-            ease:     'Power2'
-        });
-    }
-
-    _renderSkillsInSidebar() {
-        // Bersihkan tombol skill lama
-        this._skillBtnContainer.removeAll(true);
-
-        if (!this.activePlayer) return;
-        const skills = this.activePlayer.skills;
-
-        const startY = -(H / 2) + 55;
-        const btnH   = 54;
-        const btnGap = 8;
-
-        skills.forEach((skill, index) => {
-            const cd          = this.activePlayer.cooldowns[skill.id] || 0;
-            const isAvailable = cd === 0;
-            const btnY        = startY + index * (btnH + btnGap);
-
-            // Background tombol skill
-            const bg = this.add.rectangle(0, btnY, 180, btnH,
-                isAvailable ? 0x1e3a5f : 0x111111
-            );
-            bg.setStrokeStyle(1, isAvailable ? 0x4a90d9 : 0x333333);
-
-            // Nama skill
-            const nameText = this.add.text(-82, btnY - 14, skill.name, {
-                fontSize: '12px',
-                color: isAvailable ? '#e0e0ff' : '#555555',
-                fontStyle: 'bold'
-            }).setOrigin(0, 0.5);
-
-            // Tipe skill
-            const typeColor = { damage: '#ff8a80', buff: '#a5d6a7', heal: '#80deea', special: '#ce93d8' };
-            const typeText = this.add.text(-82, btnY + 2, `[${skill.type.toUpperCase()}]`, {
-                fontSize: '9px',
-                color: typeColor[skill.type] || '#aaaaaa'
-            }).setOrigin(0, 0.5);
-
-            // Cooldown info
-            const cdText = this.add.text(82, btnY, cd > 0 ? `CD:${cd}` : `CD:${skill.cooldown}T`, {
-                fontSize: '10px',
-                color: cd > 0 ? '#ff5555' : '#7777aa'
-            }).setOrigin(1, 0.5);
-
-            this._skillBtnContainer.add([bg, nameText, typeText, cdText]);
-
-            if (isAvailable) {
-                bg.setInteractive();
-                bg.on('pointerdown', () => {
-                    this.useSkill(index);
-                    this.closeSkillSidebar();
-                });
-            }
-        });
-    }
-
-    // ── Tombol Heal ───────────────────────────────────────────────────────────
-    _buildHealButton() {
-        const healBg = this.add.rectangle(ARENA_CENTER_X, HEAL_BTN_Y, 300, 44, 0x1a4a2e);
-        healBg.setStrokeStyle(2, 0x2ecc71);
-
-        this.add.text(ARENA_CENTER_X, HEAL_BTN_Y, '⊕  HEAL  (Coming Soon)', {
-            fontSize: '13px', color: '#a8e6cf'
-        }).setOrigin(0.5);
-        // Tombol Heal adalah placeholder untuk Fase 3
-    }
-
-    // ── Battle Log ─────────────────────────────────────────────────────────────
-    _ensureBattleLog() {
-        if (this.battleLog) return;
-        this.battleLog = this.add.text(ARENA_CENTER_X, 400, '', {
-            fontSize: '16px',
-            color:    '#ffffff',
-            backgroundColor: '#000000cc',
-            padding:  { x: 10, y: 6 },
-            align:    'center'
-        }).setOrigin(0.5).setDepth(10);
-    }
-
-    showBattleLog(message) {
-        this._ensureBattleLog();
-        if (this._logTimer) this._logTimer.remove();
-        this.battleLog.setText(message).setVisible(true);
-        this._logTimer = this.time.delayedCall(2000, () => {
-            this.battleLog.setText('');
-        });
-    }
-
-    // ── Turn Management ───────────────────────────────────────────────────────
-    processTurnEnd() {
-        // Proses cooldown & buff untuk SEMUA player yang masih hidup
-        this.players.forEach(p => {
-            if (p.hp <= 0) return;
-
-            for (let id in p.cooldowns) {
-                if (p.cooldowns[id] > 0) p.cooldowns[id]--;
-            }
-
-            p.activeBuffs = p.activeBuffs.filter(buff => {
-                buff.duration--;
-                if (buff.duration <= 0) {
-                    p[buff.stat] -= buff.value;
-                    this.showBattleLog(`${p.charName}: ${buff.stat} effect expired!`);
-                    return false;
-                }
-                return true;
-            });
-
-            p.refreshVisual();
-        });
-
-        this.currentTurn++;
-        this._updateHeader();
-
-        // Jika sidebar terbuka, refresh cooldown
-        if (this._sidebarOpen) this._renderSkillsInSidebar();
-    }
-
-    // ── Player Actions ────────────────────────────────────────────────────────
-    playerAttack() {
-        const livingPlayers = this.players.filter(p => p.hp > 0);
-        if (livingPlayers.length === 0) return;
-
-        let totalDamage = 0;
-        let logParts = [];
-
-        for (const p of livingPlayers) {
-            const rawDamage  = p.atk - this.enemy.def;
-            let damage       = Math.max(rawDamage, 1);
-            const isCrit     = Math.random() < p.crit;
-            if (isCrit) damage *= p.critDamage;
-
-            damage = Math.floor(damage);
-            this.enemy.hp -= damage;
-            totalDamage   += damage;
-
-            // Isi special bar
-            p.specialBar = Math.min(p.specialBar + 20, p.specialMax);
-            p.refreshVisual();
-
-            logParts.push(`${p.charName}${isCrit ? '💥' : ''}: ${damage}`);
-
-            if (this.enemy.hp <= 0) {
-                this.enemy.hp = 0;
-                this.enemy.refreshVisual();
-                this.enemy.playHitAnim();
-                this.showBattleLog(`VICTORY! 🎉\n${logParts.join(' | ')}`);
-                this.turn = 'none';
-                return;
-            }
-        }
-
-        this.enemy.hp = Math.max(0, this.enemy.hp);
-        this.enemy.refreshVisual();
-        this.enemy.playHitAnim();
-        this.showBattleLog(`Party attacks!\n${logParts.join(' | ')}`);
-        this._updateHeader();
-
-        this.turn = 'enemy';
-        this.time.delayedCall(1500, () => this.enemyAttack());
-    }
-
-    playerSpecialAttack() {
-        if (!this.activePlayer || this.activePlayer.hp <= 0) {
-            this.showBattleLog('No active character!');
-            return;
-        }
-        if (this.activePlayer.specialBar < this.activePlayer.specialMax) {
-            this.showBattleLog(`${this.activePlayer.charName}: Aether Burst not ready!`);
-            return;
-        }
-
-        const p         = this.activePlayer;
-        const sa        = p.specialAttack;
-        const rawDamage = (p.atk * sa.power) - this.enemy.def;
-        const damage    = Math.floor(Math.max(rawDamage, 1));
-
-        this.enemy.hp  -= damage;
-        p.specialBar    = 0;
-        p.refreshVisual();
-
-        this.enemy.hp = Math.max(0, this.enemy.hp);
-        this.enemy.refreshVisual();
-        this.enemy.playHitAnim();
-
-        this.showBattleLog(`✨ ${p.charName} AETHER BURST! ${damage} dmg`);
-
-        if (this.enemy.hp <= 0) {
-            this.showBattleLog('VICTORY! 🎉');
-            this.turn = 'none';
-            return;
-        }
-
-        this.turn = 'enemy';
-        this.time.delayedCall(1500, () => this.enemyAttack());
-    }
-
-    useSkill(index) {
-        const p     = this.activePlayer;
-        const skill = p ? p.skills[index] : null;
-        if (!skill || this.turn !== 'player' || p.hp <= 0) return;
-
-        if (p.cooldowns[skill.id] > 0) {
-            this.showBattleLog(`${skill.name} is on cooldown!`);
-            return;
-        }
-
-        if (skill.type === 'damage') {
-            const rawDamage = (p.atk * skill.power) - this.enemy.def;
-            const damage    = Math.floor(Math.max(rawDamage, 1));
-            this.enemy.hp  -= damage;
-            this.enemy.hp   = Math.max(0, this.enemy.hp);
-            this.enemy.refreshVisual();
-            this.enemy.playHitAnim();
-            this.showBattleLog(`${p.charName}: ${skill.name}\n→ ${damage} damage!`);
-        } else if (skill.type === 'buff') {
-            p.activeBuffs.push({ stat: skill.stat, value: skill.value, duration: skill.duration });
-            p[skill.stat] += skill.value;
-            this.showBattleLog(`${p.charName}: ${skill.name}\n→ ${skill.stat} +${skill.value}!`);
-        } else if (skill.type === 'heal') {
-            const healed = Math.min(skill.value, p.maxHp - p.hp);
-            p.hp = Math.min(p.hp + skill.value, p.maxHp);
-            this.showBattleLog(`${p.charName}: ${skill.name}\n→ Healed ${healed} HP!`);
-        }
-
-        if (skill.cooldown) p.cooldowns[skill.id] = skill.cooldown;
-        p.refreshVisual();
-
-        if (this.enemy.hp <= 0) {
-            this.turn = 'none';
-            this.showBattleLog('VICTORY! 🎉');
-            return;
-        }
-
-        this.turn = 'enemy';
-        this.time.delayedCall(1500, () => this.enemyAttack());
-    }
-
-    // ── Enemy Actions ─────────────────────────────────────────────────────────
-    enemyAttack() {
-        if (this.enemy.caBar >= this.enemy.caMax) {
-            this.enemyChargeAttack();
-            return;
-        }
-
-        const target = this._pickRandomLivingPlayer();
-        if (!target) return; // semua mati (seharusnya sudah ketangkap sebelumnya)
-
-        const rawDamage  = this.enemy.atk - target.def;
-        let damage       = Math.max(rawDamage, 1);
-        const isCrit     = Math.random() < this.enemy.crit;
-        if (isCrit) damage *= this.enemy.critDamage;
-        damage = Math.floor(damage);
-
-        target.hp -= damage;
-        target.hp  = Math.max(0, target.hp);
-        target.refreshVisual();
-
-        this.enemy.caBar = Math.min(this.enemy.caBar + 1, this.enemy.caMax);
-        this._updateHeader();
-
-        this.showBattleLog(
-            isCrit
-                ? `${this.enemy.charName} CRIT HIT ${target.charName}! 💥 ${damage}`
-                : `${this.enemy.charName} attacks ${target.charName}! ${damage}`
-        );
-
-        if (this._isPartyDefeated()) {
-            this.turn = 'none';
-            this.showBattleLog('DEFEAT... 💀');
-            return;
-        }
-
-        this.turn = 'player';
-        this.time.delayedCall(1500, () => this.processTurnEnd());
-    }
-
-    enemyChargeAttack() {
-        const ca     = this.enemy.skills[0];
-        const target = this._pickRandomLivingPlayer();
-        if (!target || !ca) {
-            this.turn = 'player';
-            return;
-        }
-
-        const rawDamage = (this.enemy.atk * ca.power) - target.def;
-        const damage    = Math.floor(Math.max(rawDamage, 1));
-
-        target.hp        -= damage;
-        target.hp         = Math.max(0, target.hp);
-        this.enemy.caBar  = 0;
-        target.refreshVisual();
-        this._updateHeader();
-
-        this.showBattleLog(`⚡ ${this.enemy.charName}: ${ca.name}!\n→ ${target.charName} takes ${damage}!`);
-
-        if (this._isPartyDefeated()) {
-            this.turn = 'none';
-            this.showBattleLog('DEFEAT... 💀');
-            return;
-        }
-
-        this.turn = 'player';
-        this.time.delayedCall(1500, () => this.processTurnEnd());
-    }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
-    _pickRandomLivingPlayer() {
-        const living = this.players.filter(p => p.hp > 0);
-        if (living.length === 0) return null;
-        return living[Math.floor(Math.random() * living.length)];
-    }
-
-    _isPartyDefeated() {
-        return this.players.every(p => p.hp <= 0);
-    }
+import Enemy from "../entities/enemy";
+const W=450,H=800,CX=225;
+export default class BattleScene extends Phaser.Scene{
+constructor(){super("BattleScene");}
+create(){
+this.turn="player";this.currentTurn=1;
+this.players=[];this.activePlayer=null;
+this.aetherGauge=0;this.aetherGaugeMax=100;
+this._sidebarOpen=false;this._timerSec=2699;this._exhaustedTurns=0;
+this.add.rectangle(CX,H/2,W,H,0x1a1a2e);
+this.add.rectangle(CX,26,W,52,0x0a0a17);
+this.add.rectangle(CX,435,W,2,0x0f2040);
+this.add.rectangle(CX,550,W,2,0x0a0a1a);
+this.loadingText=this.add.text(CX,H/2,"Loading...",{fontSize:"20px",color:"#ccc"}).setOrigin(0.5);
+this.fetchBattleData();
+}
+async fetchBattleData(){
+try{
+const r=await fetch("http://localhost:3000/api/battle/init",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({playerId:1,presetSlot:1,questId:1})});
+if(!r.ok)throw new Error("HTTP "+r.status);
+const j=await r.json();
+if(j.status!=="success")throw new Error(j.message||"API error");
+this.loadingText.destroy();
+const chars=j.data.player_party.characters.slice(0,4);
+const cW=70,gap=12,total=chars.length,totalW=total*cW+(total-1)*gap,sx=(W-totalW)/2+cW/2;
+chars.forEach((d,i)=>{
+const px=sx+i*(cW+gap);
+const p=new Player(this,px,600,d);
+p._baseX=px;
+p.setInteractive(new Phaser.Geom.Rectangle(-35,-45,70,90),Phaser.Geom.Rectangle.Contains);
+p.on("pointerdown",()=>{if(this.turn!=="player")return;this._tapPortrait(p);});
+this.players.push(p);
+});
+this._setActive(this.players[0]);
+this.enemy=new Enemy(this,CX,270,j.data.enemies[0]);
+this._setupUI();
+}catch(e){
+console.error(e);
+this.loadingText.setText("Error: "+e.message).setColor("#f55").setAlign("center");
+}
+}
+_setActive(p){
+if(this.activePlayer&&this.activePlayer!==p)this.activePlayer.setHighlight(false);
+this.activePlayer=p;p.setHighlight(true);
+if(this._sidebarOpen)this._renderSidebar();
+}
+_tapPortrait(p){
+if(this.activePlayer===p&&this._sidebarOpen){this.closeSidebar();return;}
+this._setActive(p);
+if(!this._sidebarOpen)this.openSidebar();else this._renderSidebar();
+}
+_setupUI(){
+this._buildLayer1();this._buildEnemyHUD();this._buildArenaButtons();
+this._buildPartySprites();this._buildLayer4();this._buildSidebar();this._buildBattleLog();
+this._startTimer();this._refreshEnemyHUD();
+}
+_buildLayer1(){
+this.turnText=this.add.text(20,15,"TURN 1",{fontSize:"13px",color:"#aaa",fontStyle:"bold"}).setOrigin(0,0);
+this.timerText=this.add.text(CX,15,"44:59",{fontSize:"18px",color:"#fff",fontStyle:"bold"}).setOrigin(0.5,0);
+const mb=this.add.rectangle(420,26,50,34,0x1e3a5f).setInteractive();
+mb.setStrokeStyle(1,0x4a90d9);
+this.add.text(420,26,"☰",{fontSize:"18px",color:"#7ec8e3"}).setOrigin(0.5);
+}
+_buildEnemyHUD(){
+this.add.rectangle(CX,96,W,88,0x0d1420);
+this.add.rectangle(CX,140,W,1,0x1e3a5f);
+const ec=this._elemColor(this.enemy.element);
+this._enemyIcon=this.add.rectangle(38,96,50,50,0x2c1810);
+this._enemyIcon.setStrokeStyle(2,ec);
+this.add.text(38,96,this.enemy.element.substring(0,2).toUpperCase(),{fontSize:"9px",color:"#fff"}).setOrigin(0.5);
+this._hpPct=this.add.text(75,65,"100%",{fontSize:"11px",color:"#ff8a80",fontStyle:"bold"}).setOrigin(0,1);
+this._hpBarBg=this.add.rectangle(262,79,340,14,0x2d2d2d);
+this._hpBarBg.setStrokeStyle(2,0x555555);
+this._hpFill=this.add.rectangle(92,79,336,12,0xe74c3c).setOrigin(0,0.5);
+this._hpEnrage=this.add.rectangle(262,79,340,14,0,0).setAlpha(0);
+this._hpEnrage.setStrokeStyle(2,0xffffff);
+this._caBarBg=this.add.rectangle(228,100,280,8,0x1a1a1a);
+this._caFill=this.add.rectangle(88,100,0,6,0xffaa00).setOrigin(0,0.5);
+this.add.text(75,106,"CA",{fontSize:"9px",color:"#ffaa00"}).setOrigin(0,0.5);
+this.add.text(75,115,this.enemy.charName+" Lv."+this.enemy.level,{fontSize:"10px",color:"#888"}).setOrigin(0,0);
+this.add.text(CX,338,this.enemy.charName+"  Lv."+this.enemy.level,{fontSize:"13px",color:"#ff8a80",fontStyle:"bold"}).setOrigin(0.5,0);
+}
+_refreshEnemyHUD(){
+if(!this._hpFill)return;
+const hr=Math.max(0,this.enemy.hp/this.enemy.maxHp);
+this._hpFill.setSize(336*hr,12);
+this._hpPct.setText(Math.ceil(hr*100)+"%");
+this._caFill.setSize(280*Math.min(1,this.enemy.caBar/this.enemy.caMax),6);
+this._updateEnrageHUD();this.enemy.updateEnrageVisual();
+}
+_updateEnrageHUD(){
+const cols={enraged:0xe74c3c,exhausted:0x3498db};
+const c=cols[this.enemy.modeState];
+if(c){this._hpEnrage.setStrokeStyle(2,c);this._hpEnrage.setAlpha(0.9);}
+else this._hpEnrage.setAlpha(0);
+}
+_applyEnemyDamage(dmg){
+this.enemy.hp=Math.max(0,this.enemy.hp-dmg);
+const e=this.enemy;
+if(e.modeState==="normal"){
+e.modeBar+=dmg;
+if(e.modeBar>=e.modeMax){e.modeState="enraged";e.modeBar=e.modeMax;this.showLog("ENEMY ENRAGED!");}
+}else if(e.modeState==="enraged"){
+e.modeBar-=dmg;
+if(e.modeBar<=0){e.modeState="exhausted";e.modeBar=0;this._exhaustedTurns=2;this.showLog("ENEMY BREAK/EXHAUSTED!");}
+}
+this._refreshEnemyHUD();
+this.enemy.playHitAnim();
+}
+_buildArenaButtons(){
+const ab=this.add.rectangle(408,450,76,140,0xc0392b);
+ab.setStrokeStyle(3,0xff8a80);
+this.add.rectangle(408,450,62,126,0xe74c3c);
+this.add.text(408,450,"ATK\n⚔",{fontSize:"16px",color:"#fff",fontStyle:"bold",align:"center"}).setOrigin(0.5);
+ab.setInteractive();ab.on("pointerdown",()=>{if(this.turn==="player")this.playerAttack();});
+}
+_buildPartySprites(){
+const cW=70,gap=12,total=this.players.length,totalW=total*cW+(total-1)*gap,sx=(W-totalW)/2+cW/2;
+this.players.forEach((_,i)=>{
+const px=sx+i*(cW+gap);
+const b=this.add.rectangle(px,490,58,58,0x1e3a5f,0.6);
+b.setStrokeStyle(1,0x4a90d9);
+this.add.text(px,490,"?",{fontSize:"20px",color:"#4a90d9"}).setOrigin(0.5);
+});
+}
+_buildLayer4(){
+this._aethBarBg=this.add.rectangle(CX,693,W-40,10,0x0d1420);
+this._aethBarBg.setStrokeStyle(1,0x7b68ee);
+this._aethFill=this.add.rectangle(20,693,0,8,0x7b68ee).setOrigin(0,0.5);
+this._aethPct=this.add.text(W-20,683,"0%",{fontSize:"8px",color:"#9999cc"}).setOrigin(1,1);
+this.add.text(20,683,"AETHER",{fontSize:"8px",color:"#9999cc"}).setOrigin(0,1);
+this._abBg=this.add.rectangle(80,735,130,44,0x0d0d3a);
+this._abBg.setStrokeStyle(2,0x5555bb);
+this._abText=this.add.text(80,735,"✦ AETHER BURST",{fontSize:"11px",color:"#7777cc",align:"center"}).setOrigin(0.5);
+this._abBg.setInteractive();this._abBg.on("pointerdown",()=>{if(this.turn==="player")this.aetherBurst();});
+const hb=this.add.rectangle(300,735,220,44,0x0d2a1a);
+hb.setStrokeStyle(2,0x2ecc71);
+this.add.text(300,735,"⊕  HEAL  (Fase 3)",{fontSize:"12px",color:"#a8e6cf"}).setOrigin(0.5);
+this._refreshAetherUI();
+}
+_refreshAetherUI(){
+if(!this._aethFill)return;
+const r=Math.min(1,this.aetherGauge/this.aetherGaugeMax);
+this._aethFill.setSize((W-40)*r,8);
+this._aethPct.setText(Math.floor(r*100)+"%");
+const rdy=this.aetherGauge>=this.aetherGaugeMax;
+this._abBg.setStrokeStyle(2,rdy?0xaa88ff:0x5555bb);
+this._abText.setColor(rdy?"#ccaaff":"#7777cc");
+}
+_buildSidebar(){
+const SBW=210,SHX=W+SBW/2;
+this._sbShownX=W-SBW/2;this._sbHiddenX=SHX;
+this._overlay=this.add.rectangle(CX,H/2,W,H,0x000000).setAlpha(0).setInteractive().setDepth(8);
+this._overlay.on("pointerdown",()=>this.closeSidebar());
+this._sbPanel=this.add.container(SHX,H/2).setDepth(9);
+const bg=this.add.rectangle(0,0,SBW,H,0x0d1b2a);bg.setStrokeStyle(1,0x4a90d9);
+this._sbPanel.add([bg,this.add.text(0,-(H/2)+16,"SKILLS",{fontSize:"13px",color:"#7ec8e3",fontStyle:"bold"}).setOrigin(0.5,0)]);
+this._sbBtns=this.add.container(SHX,H/2).setDepth(9);
+}
+openSidebar(){
+this._sidebarOpen=true;this._renderSidebar();
+this.tweens.add({targets:this._overlay,alpha:0.5,duration:200});
+this.tweens.add({targets:[this._sbPanel,this._sbBtns],x:this._sbShownX,duration:220,ease:"Power2"});
+}
+closeSidebar(){
+this._sidebarOpen=false;
+this.tweens.add({targets:this._overlay,alpha:0,duration:180});
+this.tweens.add({targets:[this._sbPanel,this._sbBtns],x:this._sbHiddenX,duration:200,ease:"Power2"});
+}
+_renderSidebar(){
+this._sbBtns.removeAll(true);
+if(!this.activePlayer)return;
+const p=this.activePlayer,skills=p.skills;
+const sy=-(H/2)+48,bH=60,bG=5;
+const tC={damage:"#ff8a80",buff:"#a5d6a7",heal:"#80deea",special:"#ce93d8"};
+skills.forEach((sk,i)=>{
+const isSA=sk.type==="special";
+const cd=isSA?0:(p.cooldowns[sk.id]||0);
+const saRdy=isSA&&p.specialBar>=p.specialMax;
+const canUse=isSA?saRdy:(cd===0);
+const by=sy+i*(bH+bG);
+const bgR=this.add.rectangle(0,by,192,bH,canUse?(isSA?0x1a1a4e:0x1e3a5f):0x111111);
+bgR.setStrokeStyle(1,canUse?(isSA?0x7b68ee:0x4a90d9):0x333333);
+const nm=this.add.text(-88,by-20,sk.name,{fontSize:"11px",color:canUse?"#e0e0ff":"#555",fontStyle:"bold"}).setOrigin(0,0.5);
+const tp=this.add.text(-88,by-6,isSA?"[SA]":"["+sk.type.toUpperCase()+"]",{fontSize:"9px",color:tC[sk.type]||"#aaa"}).setOrigin(0,0.5);
+const items=[bgR,nm,tp];
+if(isSA){
+const bW=140,bBg=this.add.rectangle(-88+bW/2,by+10,bW,6,0x222222).setOrigin(0.5);
+const bF=this.add.rectangle(-88,by+10,bW*(p.specialBar/p.specialMax),6,0xf39c12).setOrigin(0,0.5);
+const bL=this.add.text(58,by+10,p.specialBar+"/"+p.specialMax,{fontSize:"8px",color:"#f1c40f"}).setOrigin(0,0.5);
+items.push(bBg,bF,bL);
+if(p.isSAReady){const rd=this.add.text(0,by+22,"✦ STANCE ACTIVE",{fontSize:"9px",color:"#f39c12"}).setOrigin(0.5);items.push(rd);}
+}else{
+const cdT=this.add.text(88,by,cd>0?"CD:"+cd:"CD:"+sk.cooldown+"T",{fontSize:"9px",color:cd>0?"#f55":"#777"}).setOrigin(1,0.5);
+items.push(cdT);
+}
+this._sbBtns.add(items);
+if(canUse){
+bgR.setInteractive();
+bgR.on("pointerdown",()=>{
+if(isSA){p.setSAReady(!p.isSAReady);if(p.isSAReady)this.showLog("✦ "+p.charName+": SA STANCE!");else this.showLog(p.charName+": SA cancelled");this._renderSidebar();}
+else{this.useSkill(i);this.closeSidebar();}
+});
+}
+});
+}
+_buildBattleLog(){
+this.battleLog=this.add.text(CX,380,"",{fontSize:"14px",color:"#fff",backgroundColor:"#000000cc",padding:{x:10,y:6},align:"center",wordWrap:{width:360}}).setOrigin(0.5).setDepth(10);
+}
+showLog(msg){
+if(this._logTimer)this._logTimer.remove();
+this.battleLog.setText(msg);
+this._logTimer=this.time.delayedCall(2200,()=>this.battleLog.setText(""));
+}
+_startTimer(){
+this.timerEvent=this.time.addEvent({delay:1000,repeat:-1,callback:()=>{
+if(this.turn==="none")return;
+this._timerSec--;
+if(this._timerSec<=0){this._timerSec=0;this.timerText.setText("00:00").setColor("#f00");this.turn="none";this.showLog("TIME UP! ⏰ DEFEAT");return;}
+const m=Math.floor(this._timerSec/60),s=this._timerSec%60;
+this.timerText.setText((m<10?"0":"")+m+":"+(s<10?"0":"")+s);
+this.timerText.setColor(this._timerSec<60?"#ff4444":"#ffffff");
+}});
+}
+processTurnEnd(){
+if(this.enemy.modeState==="exhausted"){
+this._exhaustedTurns--;
+if(this._exhaustedTurns<=0){this.enemy.modeState="normal";this.enemy.modeBar=0;this._refreshEnemyHUD();}
+}
+this.players.forEach(p=>{
+if(p.hp<=0)return;
+for(let id in p.cooldowns)if(p.cooldowns[id]>0)p.cooldowns[id]--;
+p.activeBuffs=p.activeBuffs.filter(b=>{b.duration--;if(b.duration<=0){p[b.stat]-=b.value;return false;}return true;});
+p.refreshVisual();
+});
+this.currentTurn++;
+this.turnText.setText("TURN "+this.currentTurn);
+if(this._sidebarOpen)this._renderSidebar();
+}
+playerAttack(){
+const alive=this.players.filter(p=>p.hp>0);
+if(!alive.length)return;
+this.closeSidebar();
+let logs=[],dead=false;
+for(const p of alive){
+const eDef = this.enemy.def * (this.enemy.modeState === "exhausted" ? 0.7 : 1);
+const pAtk = p.atk;
+let dmg=Math.max(pAtk-eDef,1);
+const crit=Math.random()<p.crit;
+if(crit)dmg*=p.critDamage;
+dmg=Math.floor(dmg);
+this._applyEnemyDamage(dmg);
+p.specialBar=Math.min(p.specialBar+20,p.specialMax);
+p.refreshVisual();
+logs.push(p.charName+(crit?"💥":"")+":"+dmg);
+if(this.enemy.hp<=0){dead=true;break;}
+}
+if(!dead){
+const saUsers=alive.filter(p=>p.isSAReady);
+if(saUsers.length>0){
+const mult=[0,1,0.5,1.0,2.0];
+const lNames=["","","Small","Medium","Big"];
+let bonus=0;
+saUsers.forEach(p=>{
+const eDef = this.enemy.def * (this.enemy.modeState === "exhausted" ? 0.7 : 1);
+const pAtk = p.atk;
+const raw=(pAtk*p.specialAttack.power)-eDef;
+const add=Math.floor(Math.max(raw,1)*(saUsers.length>=2?mult[saUsers.length]:1));
+this._applyEnemyDamage(add);bonus+=add;
+p.specialBar=0;p.setSAReady(false);p.refreshVisual();
+this.aetherGauge=Math.min(this.aetherGaugeMax,this.aetherGauge+10);
+});
+if(saUsers.length>=2){logs.push("⚡LINK("+(lNames[saUsers.length]||"Boost")+":"+bonus+")");}
+else{logs.push("✦"+saUsers[0].charName+":"+bonus);}
+if(this.enemy.hp<=0)dead=true;
+}
+}
+this._refreshAetherUI();
+this.showLog(logs.join(" | "));
+if(dead){this.turn="none";this.showLog("VICTORY! 🎉");return;}
+this.turn="enemy";
+this.time.delayedCall(1800,()=>this.enemyAttack());
+}
+useSkill(idx){
+const p=this.activePlayer,sk=p?p.skills[idx]:null;
+if(!sk||this.turn!=="player"||!p||p.hp<=0)return;
+if(sk.type==="special"){p.setSAReady(!p.isSAReady);this._renderSidebar();return;}
+if(p.cooldowns[sk.id]>0){this.showLog(sk.name+" on cooldown!");return;}
+if(sk.type==="damage"){
+const eDef = this.enemy.def * (this.enemy.modeState === "exhausted" ? 0.7 : 1);
+const pAtk = p.atk;
+const dmg=Math.floor(Math.max((pAtk*sk.power)-eDef,1));
+this._applyEnemyDamage(dmg);
+this.showLog(p.charName+": "+sk.name+" → "+dmg+" dmg");
+}else if(sk.type==="buff"){
+p.activeBuffs.push({stat:sk.stat,value:sk.value,duration:sk.duration});
+p[sk.stat]+=sk.value;
+this.showLog(p.charName+": "+sk.name+" → "+sk.stat+" +"+sk.value);
+}else if(sk.type==="heal"){
+const h=Math.min(sk.value,p.maxHp-p.hp);
+p.hp=Math.min(p.hp+sk.value,p.maxHp);
+this.showLog(p.charName+": "+sk.name+" → healed "+h);
+}
+if(sk.cooldown)p.cooldowns[sk.id]=sk.cooldown;
+p.refreshVisual();
+if(this.enemy.hp<=0){this.turn="none";this.showLog("VICTORY! 🎉");}
+}
+aetherBurst(){
+if(this.aetherGauge<this.aetherGaugeMax){this.showLog("Aether Burst not ready!");return;}
+const totalAtk=this.players.filter(p=>p.hp>0).reduce((s,p)=>s+p.atk,0);
+const dmg=Math.floor(totalAtk*2.5);
+this._applyEnemyDamage(dmg);
+this.aetherGauge=0;
+this._refreshAetherUI();
+this.showLog("✦✦ AETHER BURST! → "+dmg+" DMG!");
+if(this.enemy.hp<=0){this.turn="none";this.showLog("VICTORY! 🎉");}
+}
+enemyAttack(attackCount = 1){
+if(this.enemy.caBar>=this.enemy.caMax){this.enemyChargeAttack();return;}
+const t=this._randAlive();if(!t)return;
+const eAtk = this.enemy.atk * (this.enemy.modeState === "exhausted" ? 0.7 : (this.enemy.modeState === "enraged" ? 1.5 : 1));
+let dmg=Math.max(eAtk-t.def,1);
+const crit=Math.random()<this.enemy.crit;
+if(crit)dmg*=this.enemy.critDamage;
+dmg=Math.floor(dmg);
+t.hp=Math.max(0,t.hp-dmg);t.refreshVisual();
+if(this.enemy.modeState!=="exhausted")this.enemy.caBar=Math.min(this.enemy.caBar+1,this.enemy.caMax);
+this._refreshEnemyHUD();
+this.showLog(crit?this.enemy.charName+" CRIT "+t.charName+"! 💥 "+dmg:this.enemy.charName+" → "+t.charName+": "+dmg);
+if(this.players.every(p=>p.hp<=0)){this.turn="none";this.showLog("DEFEAT... 💀");return;}
+if (this.enemy.modeState === "enraged" && attackCount === 1) {
+    this.time.delayedCall(800,()=>this.enemyAttack(2));
+} else {
+    this.turn="player";this.time.delayedCall(1500,()=>this.processTurnEnd());
+}
+}
+enemyChargeAttack(){
+const ca=this.enemy.skills[0],t=this._randAlive();
+if(!t||!ca){this.turn="player";return;}
+const eAtk = this.enemy.atk * (this.enemy.modeState === "exhausted" ? 0.7 : (this.enemy.modeState === "enraged" ? 1.5 : 1));
+const dmg=Math.floor(Math.max((eAtk*ca.power)-t.def,1));
+t.hp=Math.max(0,t.hp-dmg);t.refreshVisual();
+this.enemy.caBar=0;
+this._refreshEnemyHUD();
+this.showLog("⚡ "+this.enemy.charName+": "+ca.name+"! → "+t.charName+" -"+dmg);
+if(this.players.every(p=>p.hp<=0)){this.turn="none";this.showLog("DEFEAT... 💀");return;}
+this.turn="player";this.time.delayedCall(1500,()=>this.processTurnEnd());
+}
+_randAlive(){const l=this.players.filter(p=>p.hp>0);return l.length?l[Math.floor(Math.random()*l.length)]:null;}
+_elemColor(el){return{Fire:0xe74c3c,Wind:0x2ecc71,Earth:0xe67e22,Water:0x3498db,Light:0xf1c40f,Dark:0x9b59b6}[el]||0xff5555;}
 }

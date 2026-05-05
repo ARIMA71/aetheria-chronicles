@@ -6,6 +6,12 @@ const config = {
     width: 450,
     height: 800,
     backgroundColor: '#1a1a2e',
+    scale: {
+        mode:       Phaser.Scale.FIT,
+        autoCenter: Phaser.Scale.CENTER_BOTH,
+        width:  450,
+        height: 800
+    },
     scene: [BattleScene]
 };
 
