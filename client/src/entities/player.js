@@ -137,14 +137,14 @@ export default class Player extends Phaser.GameObjects.Container {
     }
 
     /** Shake animation when hit */
-    playHitAnim() {
-        this.scene.tweens.add({
-            targets: this, x: this._baseX + 8,
-            duration: 50, yoyo: true, repeat: 2,
-            ease: 'Power1',
-            onComplete: () => { this.x = this._baseX; }
-        });
-    }
+    // playHitAnim() {
+    //     this.scene.tweens.add({
+    //         targets: this, x: this._baseX + 8,
+    //         duration: 50, yoyo: true, repeat: 2,
+    //         ease: 'Power1',
+    //         onComplete: () => { this.x = this._baseX; }
+    //     });
+    // }
 
     /** Set/unset SA stance; refresh visual indikator */
     setSAReady(val) {

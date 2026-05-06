@@ -31,7 +31,7 @@ export default class Enemy extends Phaser.GameObjects.Container {
         // ── Mode State: 'normal' | 'enraged' | 'exhausted' ─────
         this.modeState = 'normal';
         this.modeBar = 0;
-        this.modeMax = this.maxHp;
+        this.modeMax = this.maxHp * 0.2; // 20% threshold to trigger Enraged
 
         // ── Skills (dari ai_behaviors) ────────────────────────────────────────
         this.skills = (data.ai_behaviors || [])

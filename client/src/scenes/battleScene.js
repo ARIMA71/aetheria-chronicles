@@ -1,4 +1,4 @@
-﻿import Player from "../entities/player";
+import Player from "../entities/player";
 import Enemy from "../entities/enemy";
 const W = 450, H = 800, CX = 225;
 export default class BattleScene extends Phaser.Scene {
@@ -7,7 +7,7 @@ export default class BattleScene extends Phaser.Scene {
         this.turn = "player"; this.currentTurn = 1;
         this.players = []; this.activePlayer = null;
         this.aetherGauge = 0; this.aetherGaugeMax = 100;
-        this._sidebarOpen = false; this._timerSec = 2699; this._exhaustedTurns = 0;
+        this._sidebarOpen = false; this._timerSec = 2699; this._exhaustedTurns = 0; this._enragedTurns = 0;
         this.add.rectangle(CX, H / 2, W, H, 0x1a1a2e);
         this.add.rectangle(CX, 26, W, 52, 0x0a0a17);
         this.add.rectangle(CX, 435, W, 2, 0x0f2040);
@@ -74,8 +74,10 @@ export default class BattleScene extends Phaser.Scene {
         this._hpBarBg = this.add.rectangle(85, 92, 340, 14, 0x2d2d2d).setOrigin(0, 0.5);
         this._hpBarBg.setStrokeStyle(2, 0x555555);
         this._hpFill = this.add.rectangle(85, 92, 336, 12, 0xe74c3c).setOrigin(0, 0.5);
-        this._hpEnrage = this.add.rectangle(85, 92, 340, 14, 0, 0).setOrigin(0, 0.5).setAlpha(0);
+        this._hpEnrage = this.add.rectangle(85, 92, 340, 14, 0, 0).setOrigin(0, 0.5).setAlpha(1);
         this._hpEnrage.setStrokeStyle(2, 0xffffff);
+        // Mode Gauge (Bar tipis di bawah HP)
+        this._modeFill = this.add.rectangle(85, 100, 0, 4, 0xffffff).setOrigin(0, 0.5);
         this.add.text(85, 115, "CA", { fontSize: "9px", color: "#ffaa00" }).setOrigin(0, 0.5);
         this._caSegments = [];
         for (let i = 0; i < this.enemy.caMax; i++) {
@@ -91,24 +93,64 @@ export default class BattleScene extends Phaser.Scene {
         const hr = Math.max(0, this.enemy.hp / this.enemy.maxHp);
         this._hpFill.setSize(336 * hr, 12);
         this._hpPct.setText(Math.ceil(hr * 100) + "%");
-        if (this._caSegments) this._caSegments.forEach((f, i) => f.setAlpha(i < this.enemy.caBar ? 1 : 0));
+        
+        // Update Mode Bar Gauge
+        const mr = Math.min(1, this.enemy.modeBar / this.enemy.modeMax);
+        this._modeFill.setSize(340 * mr, 4);
+
+        if (this._caSegments) {
+            const caColor = (this.enemy.modeState === "exhausted") ? 0x3498db : 0xffaa00;
+            this._caSegments.forEach((f, i) => { f.setFillStyle(caColor); f.setAlpha(i < this.enemy.caBar ? 1 : 0); });
+        }
         this._updateEnrageHUD(); this.enemy.updateEnrageVisual();
     }
     _updateEnrageHUD() {
-        const cols = { enraged: 0xe74c3c, exhausted: 0x3498db };
-        const c = cols[this.enemy.modeState];
-        if (c) { this._hpEnrage.setStrokeStyle(2, c); this._hpEnrage.setAlpha(0.9); }
-        else this._hpEnrage.setAlpha(0);
+        const state = this.enemy.modeState;
+        const ratio = this.enemy.modeBar / this.enemy.modeMax;
+        
+        let color = 0xffffff; // Default Putih
+        let alpha = 0.5;
+
+        if (state === "enraged") {
+            color = 0xe74c3c; // Merah
+            alpha = 1;
+        } else if (state === "exhausted") {
+            color = 0x3498db; // Biru
+            alpha = 1;
+        } else if (state === "normal") {
+            if (ratio >= 0.75) {
+                color = 0xf1c40f; // Kuning (Warning)
+                alpha = 1;
+            } else {
+                color = 0xffffff; // Putih
+                alpha = 0.5;
+            }
+        }
+
+        this._hpEnrage.setStrokeStyle(2, color);
+        this._hpEnrage.setAlpha(alpha);
+        this._modeFill.setFillStyle(color);
     }
     _applyEnemyDamage(dmg) {
         this.enemy.hp = Math.max(0, this.enemy.hp - dmg);
         const e = this.enemy;
         if (e.modeState === "normal") {
             e.modeBar += dmg;
-            if (e.modeBar >= e.modeMax) { e.modeState = "enraged"; e.modeBar = e.modeMax; this.showLog("ENEMY ENRAGED!"); }
+            if (e.modeBar >= e.modeMax) { 
+                e.modeState = "enraged"; 
+                e.modeBar = e.modeMax; 
+                this._enragedTurns = 3; 
+                this.showLog("ENEMY ENRAGED! (3 Turns)"); 
+            }
         } else if (e.modeState === "enraged") {
             e.modeBar -= dmg;
-            if (e.modeBar <= 0) { e.modeState = "exhausted"; e.modeBar = 0; this._exhaustedTurns = 2; this.showLog("ENEMY BREAK/EXHAUSTED!"); }
+            if (e.modeBar <= 0) { 
+                e.modeState = "exhausted"; 
+                e.modeBar = 0; 
+                this._enragedTurns = 0;
+                this._exhaustedTurns = 2; 
+                this.showLog("ENEMY BREAK! (Exhausted)"); 
+            }
         }
         this._refreshEnemyHUD();
         this.enemy.playHitAnim();
@@ -130,16 +172,7 @@ export default class BattleScene extends Phaser.Scene {
             p.spriteObj = this.add.container(px, 500, [b, t]);
         });
     }
-    _playSpriteHitAnim(p) {
-        if (!p || !p.spriteObj) return;
-        const ox = p.spriteObj.x;
-        this.tweens.add({
-            targets: p.spriteObj, x: ox + 8,
-            duration: 50, yoyo: true, repeat: 2,
-            ease: 'Power1',
-            onComplete: () => { p.spriteObj.x = ox; }
-        });
-    }
+    
     _buildLayer4() {
         this._aethBarBg = this.add.rectangle(CX, 693, W - 40, 10, 0x0d1420);
         this._aethBarBg.setStrokeStyle(1, 0x7b68ee);
@@ -222,6 +255,16 @@ export default class BattleScene extends Phaser.Scene {
             }
         });
     }
+    playSpriteHitAnim(p) {
+        if (!p || !p.spriteObj) return;
+        const ox = p.spriteObj.x;
+        this.tweens.add({
+            targets: p.spriteObj, x: ox + 8,
+            duration: 50, yoyo: true, repeat: 2,
+            ease: 'Power1',
+            onComplete: () => { p.spriteObj.x = ox; }
+        });
+    }
     _buildBattleLog() {
         this.battleLog = this.add.text(CX, 380, "", { fontSize: "14px", color: "#fff", backgroundColor: "#000000cc", padding: { x: 10, y: 6 }, align: "center", wordWrap: { width: 360 } }).setOrigin(0.5).setDepth(10);
     }
@@ -243,9 +286,21 @@ export default class BattleScene extends Phaser.Scene {
         });
     }
     processTurnEnd() {
-        if (this.enemy.modeState === "exhausted") {
+        if (this.enemy.modeState === "enraged") {
+            this._enragedTurns--;
+            if (this._enragedTurns <= 0) {
+                this.enemy.modeState = "exhausted";
+                this.enemy.modeBar = 0;
+                this._exhaustedTurns = 2;
+                this.showLog("ENEMY ENRAGE ENDED! Entering Exhausted...");
+            }
+        } else if (this.enemy.modeState === "exhausted") {
             this._exhaustedTurns--;
-            if (this._exhaustedTurns <= 0) { this.enemy.modeState = "normal"; this.enemy.modeBar = 0; this._refreshEnemyHUD(); }
+            if (this._exhaustedTurns <= 0) { 
+                this.enemy.modeState = "normal"; 
+                this.enemy.modeBar = 0; 
+                this._refreshEnemyHUD(); 
+            }
         }
         this.players.forEach(p => {
             if (p.hp <= 0) return;
@@ -347,15 +402,16 @@ export default class BattleScene extends Phaser.Scene {
         if (this.enemy.hp <= 0) { this.turn = "none"; this.showLog("VICTORY! 🎉"); }
     }
     enemyAttack(attackCount = 1) {
-        if (this.enemy.caBar >= this.enemy.caMax) { this.enemyChargeAttack(); return; }
+        if (this.enemy.caBar >= this.enemy.caMax && this.enemy.modeState !== "exhausted") { this.enemyChargeAttack(); return; }
         const t = this._randAlive(); if (!t) return;
         const eAtk = this.enemy.atk * (this.enemy.modeState === "exhausted" ? 0.7 : (this.enemy.modeState === "enraged" ? 1.5 : 1));
         let dmg = Math.max(eAtk - t.def, 1);
         const crit = Math.random() < this.enemy.crit;
         if (crit) dmg *= this.enemy.critDamage;
         dmg = Math.floor(dmg);
-        t.hp = Math.max(0, t.hp - dmg); t.refreshVisual(); this._playSpriteHitAnim(t);
-        if (this.enemy.modeState !== "exhausted") this.enemy.caBar = Math.min(this.enemy.caBar + 1, this.enemy.caMax);
+        t.hp = Math.max(0, t.hp - dmg); t.refreshVisual(); this.playSpriteHitAnim(t);
+        const isLastAttack = (this.enemy.modeState !== "enraged" || attackCount === 2);
+        if (this.enemy.modeState !== "exhausted" && isLastAttack) this.enemy.caBar = Math.min(this.enemy.caBar + 1, this.enemy.caMax);
         this._refreshEnemyHUD();
         this.showLog(crit ? this.enemy.charName + " CRIT " + t.charName + "! 💥 " + dmg : this.enemy.charName + " → " + t.charName + ": " + dmg);
         if (this.players.every(p => p.hp <= 0)) { this.turn = "none"; this.showLog("DEFEAT... 💀"); return; }
@@ -370,7 +426,7 @@ export default class BattleScene extends Phaser.Scene {
         if (!t || !ca) { this.turn = "player"; return; }
         const eAtk = this.enemy.atk * (this.enemy.modeState === "exhausted" ? 0.7 : (this.enemy.modeState === "enraged" ? 1.5 : 1));
         const dmg = Math.floor(Math.max((eAtk * ca.power) - t.def, 1));
-        t.hp = Math.max(0, t.hp - dmg); t.refreshVisual(); this._playSpriteHitAnim(t);
+        t.hp = Math.max(0, t.hp - dmg); t.refreshVisual(); this.playSpriteHitAnim(t);
         this.enemy.caBar = 0;
         this._refreshEnemyHUD();
         this.showLog("⚡ " + this.enemy.charName + ": " + ca.name + "! → " + t.charName + " -" + dmg);
