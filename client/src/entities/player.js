@@ -25,8 +25,8 @@ export default class Player extends Phaser.GameObjects.Container {
         this.atk      = data.final_stats.atk;
 
         // Base stats (disimpan untuk referensi getStat())
-        this._baseAtk = data.final_stats.atk;
-        this._baseDef = data.final_stats.def || 10;
+        this._baseAtk  = data.final_stats.atk;
+        this._baseDef  = data.final_stats.def || 500;
         this._baseCrit = 0.1;
 
         this.def        = this._baseDef;
@@ -148,7 +148,8 @@ export default class Player extends Phaser.GameObjects.Container {
 
     /**
      * Hitung nilai final dari satu stat secara dinamis berdasarkan activeEffects.
-     * Rumus: baseStat + (baseStat * totalMultiplier)
+     * Rumus: baseStat * (1 + clampedMultiplier)
+     * Hard Cap: multiplier dibatasi ±50% untuk mencegah stat inflation.
      * @param {string} statName - 'ATK' | 'DEF' | 'CRIT'
      * @returns {number}
      */
@@ -169,7 +170,10 @@ export default class Player extends Phaser.GameObjects.Container {
             .filter(e => e.target_stat === statName)
             .reduce((sum, e) => sum + (Number(e.value) || 0), 0);
 
-        return Math.max(0, base + (base * totalMult));
+        // Hard Cap: batasi multiplier antara -50% dan +50%
+        const clampedMult = Math.max(-0.5, Math.min(0.5, totalMult));
+
+        return Math.max(0, base * (1 + clampedMult));
     }
 
     /**

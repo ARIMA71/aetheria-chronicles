@@ -138,6 +138,7 @@ CREATE TABLE `master_characters` (
   `mc_base_atk` int NOT NULL DEFAULT '10',
   `mc_atk_growth` int NOT NULL DEFAULT '0',
   `mc_base_def` int NOT NULL DEFAULT '10',
+  `mc_def_growth` float NOT NULL DEFAULT '0',
   `mc_max_sa` int NOT NULL DEFAULT '100',
   `mc_special_attack_id` int DEFAULT NULL,
   `mc_portrait_path` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
@@ -149,23 +150,23 @@ CREATE TABLE `master_characters` (
 
 /*Data for the table `master_characters` */
 
-insert  into `master_characters`(`mc_id`,`mc_name`,`mc_desc`,`mc_rarity`,`mc_element`,`mc_base_hp`,`mc_hp_growth`,`mc_base_atk`,`mc_atk_growth`,`mc_base_def`,`mc_max_sa`,`mc_special_attack_id`,`mc_portrait_path`,`mc_sprite_path`) values 
-(1,'Main Character (MC)','Karakter utama dalam cerita, selalu ada dalam party, dan bisa diganti gender','SSR','Any',300,130,1200,16,500,100,NULL,NULL,NULL),
-(2,'Percival','Gacha atau Hadiah First Clear Impossible Quest','SSR','Fire',355,40,1510,15,500,100,12,NULL,NULL),
-(3,'Lowenheigh','Gacha, Rare Drop Stage 7++, atau Impossible Quest','SSR','Fire',250,40,1280,15,500,100,16,NULL,NULL),
-(4,'Siegfired','Gacha atau Hadiah First Clear Impossible Quest','SSR','Earth',280,40,1200,15,500,100,20,NULL,NULL),
-(5,'Lowein','Gacha, Rare Drop Stage 7++, atau Impossible Quest','SSR','Earth',342,40,1150,15,500,100,24,NULL,NULL),
-(6,'Ereshkigal','Gacha atau Hadiah First Clear Impossible Quest','SSR','Wind',350,40,1100,15,500,100,28,NULL,NULL),
-(7,'Narmaya','Gacha, Rare Drop Stage 7++, atau Impossible Quest','SSR','Wind',280,40,1510,15,500,100,32,NULL,NULL),
-(8,'Agris','Karakter diberikan gratis dari progres Quest 0-5','SR','Fire',255,30,890,10,300,100,55,NULL,NULL),
-(9,'Ember','Karakter diberikan gratis dari progres Quest 0-5','SR','Fire',245,30,920,10,300,100,NULL,NULL,NULL),
-(10,'Ferry','Gacha, Drop Stage 7, dan Impossible Quest','SR','Fire',260,30,900,10,300,100,NULL,NULL,NULL),
-(11,'Ragnar','Gacha, Drop Stage 7, dan Impossible Quest','SR','Earth',270,30,800,10,300,100,NULL,NULL,NULL),
-(12,'Terra','Karakter diberikan gratis dari progres Quest 0-5','SR','Earth',255,30,880,10,300,100,NULL,NULL,NULL),
-(13,'Kael','Karakter diberikan gratis dari progres Quest 0-5','SR','Earth',235,30,925,10,300,100,NULL,NULL,NULL),
-(14,'Diane','Karakter diberikan gratis dari progres Quest 0-5','SR','Wind',260,30,875,10,300,100,NULL,NULL,NULL),
-(15,'Zephyra','Karakter diberikan gratis dari progres Quest 0-5','SR','Wind',225,30,950,10,300,100,NULL,NULL,NULL),
-(16,'Zephyr','Karakter diberikan gratis dari progres Quest 0-5','SR','Wind',255,30,890,10,300,100,NULL,NULL,NULL);
+insert  into `master_characters`(`mc_id`,`mc_name`,`mc_desc`,`mc_rarity`,`mc_element`,`mc_base_hp`,`mc_hp_growth`,`mc_base_atk`,`mc_atk_growth`,`mc_base_def`,`mc_def_growth`,`mc_max_sa`,`mc_special_attack_id`,`mc_portrait_path`,`mc_sprite_path`) values 
+(1,'Main Character (MC)','Karakter utama dalam cerita, selalu ada dalam party, dan bisa diganti gender','SSR','Any',300,130,1200,16,225,3.5,100,NULL,NULL,NULL),
+(2,'Percival','Gacha atau Hadiah First Clear Impossible Quest','SSR','Fire',355,40,1510,15,250,4,100,12,NULL,NULL),
+(3,'Lowenheigh','Gacha, Rare Drop Stage 7++, atau Impossible Quest','SSR','Fire',250,40,1280,15,250,4,100,16,NULL,NULL),
+(4,'Siegfired','Gacha atau Hadiah First Clear Impossible Quest','SSR','Earth',280,40,1200,15,250,4,100,20,NULL,NULL),
+(5,'Lowein','Gacha, Rare Drop Stage 7++, atau Impossible Quest','SSR','Earth',342,40,1150,15,250,4,100,24,NULL,NULL),
+(6,'Ereshkigal','Gacha atau Hadiah First Clear Impossible Quest','SSR','Wind',350,40,1100,15,250,4,100,28,NULL,NULL),
+(7,'Narmaya','Gacha, Rare Drop Stage 7++, atau Impossible Quest','SSR','Wind',280,40,1510,15,250,4,100,32,NULL,NULL),
+(8,'Agris','Karakter diberikan gratis dari progres Quest 0-5','SR','Fire',255,30,890,10,200,2.5,100,55,NULL,NULL),
+(9,'Ember','Karakter diberikan gratis dari progres Quest 0-5','SR','Fire',245,30,920,10,200,2.5,100,NULL,NULL,NULL),
+(10,'Ferry','Gacha, Drop Stage 7, dan Impossible Quest','SR','Fire',260,30,900,10,200,2.5,100,NULL,NULL,NULL),
+(11,'Ragnar','Gacha, Drop Stage 7, dan Impossible Quest','SR','Earth',270,30,800,10,200,2.5,100,NULL,NULL,NULL),
+(12,'Terra','Karakter diberikan gratis dari progres Quest 0-5','SR','Earth',255,30,880,10,200,2.5,100,NULL,NULL,NULL),
+(13,'Kael','Karakter diberikan gratis dari progres Quest 0-5','SR','Earth',235,30,925,10,200,2.5,100,NULL,NULL,NULL),
+(14,'Diane','Karakter diberikan gratis dari progres Quest 0-5','SR','Wind',260,30,875,10,200,2.5,100,NULL,NULL,NULL),
+(15,'Zephyra','Karakter diberikan gratis dari progres Quest 0-5','SR','Wind',225,30,950,10,200,2.5,100,NULL,NULL,NULL),
+(16,'Zephyr','Karakter diberikan gratis dari progres Quest 0-5','SR','Wind',255,30,890,10,200,2.5,100,NULL,NULL,NULL);
 
 /*Table structure for table `master_materials` */
 
@@ -197,8 +198,11 @@ CREATE TABLE `master_monsters` (
   `mon_id` int NOT NULL AUTO_INCREMENT,
   `mon_name` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
   `mon_base_hp` int NOT NULL,
+  `mon_hp_growth` int NOT NULL DEFAULT '0',
   `mon_base_atk` int NOT NULL,
+  `mon_atk_growth` int NOT NULL DEFAULT '0',
   `mon_base_def` int NOT NULL DEFAULT '10',
+  `mon_def_growth` int NOT NULL DEFAULT '0',
   `mon_max_sa` int NOT NULL DEFAULT '5',
   `mon_element` enum('Fire','Wind','Earth') COLLATE utf8mb4_general_ci NOT NULL,
   `mon_icon_path` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
@@ -208,18 +212,18 @@ CREATE TABLE `master_monsters` (
 
 /*Data for the table `master_monsters` */
 
-insert  into `master_monsters`(`mon_id`,`mon_name`,`mon_base_hp`,`mon_base_atk`,`mon_base_def`,`mon_max_sa`,`mon_element`,`mon_icon_path`,`mon_sprite_path`) values 
-(1,'Clams',15000,150,50,2,'Wind',NULL,NULL),
-(2,'Fire Spirit',25000,300,100,3,'Fire',NULL,NULL),
-(3,'Iron Fist',35000,450,120,4,'Earth',NULL,NULL),
-(4,'Flame Lizard',50000,600,150,3,'Fire',NULL,NULL),
-(5,'Syren',105000,830,195,4,'Wind',NULL,NULL),
-(6,'Giant Skeleton',65000,750,180,3,'Earth',NULL,NULL),
-(7,'Ashound',250000,1000,225,4,'Fire',NULL,NULL),
-(8,'Golem',500000,1250,250,4,'Earth',NULL,NULL),
-(9,'Fenrir',1200000,2000,425,3,'Fire',NULL,NULL),
-(10,'Lucoa',1400000,1800,450,4,'Wind',NULL,NULL),
-(11,'Kileroid',1100000,2200,400,4,'Earth',NULL,NULL);
+insert  into `master_monsters`(`mon_id`,`mon_name`,`mon_base_hp`,`mon_hp_growth`,`mon_base_atk`,`mon_atk_growth`,`mon_base_def`,`mon_def_growth`,`mon_max_sa`,`mon_element`,`mon_icon_path`,`mon_sprite_path`) values 
+(1,'Clams',15000,1500,150,15,50,5,2,'Wind',NULL,NULL),
+(2,'Fire Spirit',25000,2500,300,30,100,10,3,'Fire',NULL,NULL),
+(3,'Iron Fist',35000,3500,450,45,120,12,4,'Earth',NULL,NULL),
+(4,'Flame Lizard',50000,5000,600,60,150,15,3,'Fire',NULL,NULL),
+(5,'Syren',105000,10500,830,83,195,20,4,'Wind',NULL,NULL),
+(6,'Giant Skeleton',65000,6500,750,75,180,18,3,'Earth',NULL,NULL),
+(7,'Ashound',250000,25000,1000,100,225,23,4,'Fire',NULL,NULL),
+(8,'Golem',500000,50000,1250,125,250,25,4,'Earth',NULL,NULL),
+(9,'Fenrir',1200000,120000,2000,200,425,43,3,'Fire',NULL,NULL),
+(10,'Lucoa',1400000,140000,1800,180,450,45,4,'Wind',NULL,NULL),
+(11,'Kileroid',1100000,110000,2200,220,400,40,4,'Earth',NULL,NULL);
 
 /*Table structure for table `master_quests` */
 
@@ -397,47 +401,47 @@ CREATE TABLE `master_weapons` (
 /*Data for the table `master_weapons` */
 
 insert  into `master_weapons`(`mw_id`,`mw_name`,`mw_rarity`,`mw_element`,`unlocks_mc_id`,`mw_special_attack_id`,`mw_base_hp`,`mw_hp_growth`,`mw_base_atk`,`mw_atk_growth`,`mw_img_path`) values 
-(1,'Lord of Vermilion','SSR','Fire',2,35,31,3,370,30,NULL),
-(2,'Lohengrin','SSR','Fire',3,38,28,3,385,30,NULL),
-(3,'Balmung','SSR','Earth',4,NULL,33,3,367,30,NULL),
-(4,'Sinensis','SSR','Earth',3,NULL,30,3,377,30,NULL),
-(5,'Ascalon','SSR','Wind',6,NULL,45,3,325,30,NULL),
-(6,'Evanescence','SSR','Wind',7,NULL,22,3,412,30,NULL),
-(7,'Flamebound Saber','SR','Fire',8,41,25,2,215,20,NULL),
-(8,'Infernal Brand','SR','Fire',9,44,22,2,245,20,NULL),
-(9,'Ember Edge','SR','Fire',10,47,45,2,211,20,NULL),
-(10,'Cinder Blade','SR','Fire',NULL,NULL,22,2,248,20,NULL),
-(11,'Inferno Edge','SR','Fire',NULL,NULL,25,2,216,20,NULL),
-(12,'Terra Sunder','SR','Earth',11,NULL,23,2,245,20,NULL),
-(13,'Earth Breaker','SR','Earth',12,NULL,46,2,208,20,NULL),
-(14,'Earth Splitter','SR','Earth',13,NULL,23,2,248,20,NULL),
-(15,'Terra Edge','SR','Earth',NULL,NULL,25,2,217,20,NULL),
-(16,'Loberg','SR','Earth',NULL,NULL,24,2,245,20,NULL),
-(17,'Gale Force','SR','Wind',14,NULL,47,2,200,20,NULL),
-(18,'Sky Breaker','SR','Wind',15,NULL,24,2,248,20,NULL),
-(19,'Gale Whisperer','SR','Wind',16,NULL,25,2,218,20,NULL),
-(20,'Zephyr Gale','SR','Wind',NULL,NULL,48,2,200,20,NULL),
-(21,'Wind Whisperer','SR','Wind',NULL,NULL,25,2,248,20,NULL),
-(22,'Ember Blade','R','Fire',NULL,NULL,32,1,120,10,NULL),
-(23,'Inferno Fang','R','Fire',NULL,NULL,15,1,200,10,NULL),
-(24,'Ashertein','R','Fire',NULL,NULL,29,1,178,10,NULL),
-(25,'Fire Pillar','R','Fire',NULL,NULL,30,1,160,10,NULL),
-(26,'Crimson Ember','R','Fire',NULL,NULL,22,1,189,10,NULL),
-(27,'Ignis Fatuus','R','Fire',NULL,NULL,26,1,124,10,NULL),
-(28,'Earth Crusher','R','Earth',NULL,NULL,24,1,137,10,NULL),
-(29,'Earth Shard','R','Earth',NULL,NULL,32,1,121,10,NULL),
-(30,'Gaia Crag','R','Earth',NULL,NULL,16,1,200,10,NULL),
-(31,'Terra Breaker','R','Earth',NULL,NULL,30,1,178,10,NULL),
-(32,'Earthbreaker','R','Earth',NULL,NULL,30,1,161,10,NULL),
-(33,'Girbaltein','R','Earth',NULL,NULL,22,1,190,10,NULL),
-(34,'Steins','R','Earth',NULL,NULL,26,1,125,10,NULL),
-(35,'Zeros','R','Wind',NULL,NULL,24,1,138,10,NULL),
-(36,'Wind Whisper','R','Wind',NULL,NULL,32,1,122,10,NULL),
-(37,'Sky Piercer','R','Wind',NULL,NULL,17,1,200,10,NULL),
-(38,'Gale Storm','R','Wind',NULL,NULL,31,1,178,10,NULL),
-(39,'Gale Carver','R','Wind',NULL,NULL,30,1,162,10,NULL),
-(40,'Helios','R','Wind',NULL,NULL,22,1,191,10,NULL),
-(41,'Whiztletein','R','Wind',NULL,NULL,26,1,126,10,NULL);
+(1,'Lord of Vermilion','SSR','Fire',2,35,31,3,370,6,NULL),
+(2,'Lohengrin','SSR','Fire',3,38,28,3,385,6,NULL),
+(3,'Balmung','SSR','Earth',4,NULL,33,3,367,6,NULL),
+(4,'Sinensis','SSR','Earth',3,NULL,30,3,377,6,NULL),
+(5,'Ascalon','SSR','Wind',6,NULL,45,3,325,6,NULL),
+(6,'Evanescence','SSR','Wind',7,NULL,22,3,412,6,NULL),
+(7,'Flamebound Saber','SR','Fire',8,41,25,2,215,4,NULL),
+(8,'Infernal Brand','SR','Fire',9,44,22,2,245,4,NULL),
+(9,'Ember Edge','SR','Fire',10,47,45,2,211,4,NULL),
+(10,'Cinder Blade','SR','Fire',NULL,NULL,22,2,248,4,NULL),
+(11,'Inferno Edge','SR','Fire',NULL,NULL,25,2,216,4,NULL),
+(12,'Terra Sunder','SR','Earth',11,NULL,23,2,245,4,NULL),
+(13,'Earth Breaker','SR','Earth',12,NULL,46,2,208,4,NULL),
+(14,'Earth Splitter','SR','Earth',13,NULL,23,2,248,4,NULL),
+(15,'Terra Edge','SR','Earth',NULL,NULL,25,2,217,4,NULL),
+(16,'Loberg','SR','Earth',NULL,NULL,24,2,245,4,NULL),
+(17,'Gale Force','SR','Wind',14,NULL,47,2,200,4,NULL),
+(18,'Sky Breaker','SR','Wind',15,NULL,24,2,248,4,NULL),
+(19,'Gale Whisperer','SR','Wind',16,NULL,25,2,218,4,NULL),
+(20,'Zephyr Gale','SR','Wind',NULL,NULL,48,2,200,4,NULL),
+(21,'Wind Whisperer','SR','Wind',NULL,NULL,25,2,248,4,NULL),
+(22,'Ember Blade','R','Fire',NULL,NULL,32,1,120,2,NULL),
+(23,'Inferno Fang','R','Fire',NULL,NULL,15,1,200,2,NULL),
+(24,'Ashertein','R','Fire',NULL,NULL,29,1,178,2,NULL),
+(25,'Fire Pillar','R','Fire',NULL,NULL,30,1,160,2,NULL),
+(26,'Crimson Ember','R','Fire',NULL,NULL,22,1,189,2,NULL),
+(27,'Ignis Fatuus','R','Fire',NULL,NULL,26,1,124,2,NULL),
+(28,'Earth Crusher','R','Earth',NULL,NULL,24,1,137,2,NULL),
+(29,'Earth Shard','R','Earth',NULL,NULL,32,1,121,2,NULL),
+(30,'Gaia Crag','R','Earth',NULL,NULL,16,1,200,2,NULL),
+(31,'Terra Breaker','R','Earth',NULL,NULL,30,1,178,2,NULL),
+(32,'Earthbreaker','R','Earth',NULL,NULL,30,1,161,2,NULL),
+(33,'Girbaltein','R','Earth',NULL,NULL,22,1,190,2,NULL),
+(34,'Steins','R','Earth',NULL,NULL,26,1,125,2,NULL),
+(35,'Zeros','R','Wind',NULL,NULL,24,1,138,2,NULL),
+(36,'Wind Whisper','R','Wind',NULL,NULL,32,1,122,2,NULL),
+(37,'Sky Piercer','R','Wind',NULL,NULL,17,1,200,2,NULL),
+(38,'Gale Storm','R','Wind',NULL,NULL,31,1,178,2,NULL),
+(39,'Gale Carver','R','Wind',NULL,NULL,30,1,162,2,NULL),
+(40,'Helios','R','Wind',NULL,NULL,22,1,191,2,NULL),
+(41,'Whiztletein','R','Wind',NULL,NULL,26,1,126,2,NULL);
 
 /*Table structure for table `monster_ai_behavior` */
 
@@ -505,19 +509,19 @@ CREATE TABLE `player_inventories` (
 /*Data for the table `player_inventories` */
 
 insert  into `player_inventories`(`inv_id`,`player_id`,`master_item_id`,`item_type`,`item_level`,`limit_break_level`,`item_exp`) values 
-(101,1,1,'Character',40,0,0),
-(102,1,2,'Character',80,0,0),
-(103,1,3,'Character',80,0,0),
-(104,1,4,'Character',80,0,0),
-(105,1,8,'Character',60,0,0),
-(201,1,1,'Weapon',100,0,0),
-(202,1,2,'Weapon',100,0,0),
-(203,1,3,'Weapon',100,0,0),
-(204,1,4,'Weapon',100,0,0),
-(205,1,5,'Weapon',100,0,0),
-(206,1,7,'Weapon',100,0,0),
-(207,1,8,'Weapon',100,0,0),
-(208,1,9,'Weapon',100,0,0);
+(101,1,1,'Character',20,0,0),
+(102,1,2,'Character',40,0,0),
+(103,1,3,'Character',40,0,0),
+(104,1,4,'Character',40,0,0),
+(105,1,8,'Character',30,0,0),
+(201,1,1,'Weapon',50,0,0),
+(202,1,2,'Weapon',50,0,0),
+(203,1,3,'Weapon',50,0,0),
+(204,1,4,'Weapon',50,0,0),
+(205,1,5,'Weapon',50,0,0),
+(206,1,7,'Weapon',50,0,0),
+(207,1,8,'Weapon',50,0,0),
+(208,1,9,'Weapon',50,0,0);
 
 /*Table structure for table `player_materials` */
 

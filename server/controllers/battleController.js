@@ -45,8 +45,9 @@ exports.initBattle = async (req, res) => {
             mc.mc_id,
             mc.mc_name          AS name,
             mc.mc_element       AS element,
-            (mc.mc_base_hp + (mc.mc_hp_growth * (pi.item_level - 1))) AS base_hp,
+            (mc.mc_base_hp  + (mc.mc_hp_growth  * (pi.item_level - 1))) AS base_hp,
             (mc.mc_base_atk + (mc.mc_atk_growth * (pi.item_level - 1))) AS base_atk,
+            (mc.mc_base_def + (mc.mc_def_growth * (pi.item_level - 1))) AS base_def,
             mc.mc_max_sa        AS max_sa,
             mc.mc_portrait_path AS portrait_path,
             mc.mc_sprite_path   AS sprite_path
@@ -61,8 +62,9 @@ exports.initBattle = async (req, res) => {
 
         SELECT 'Char Slot 1', pi.inv_id, pi.item_level, mc.mc_id,
             mc.mc_name, mc.mc_element,
-            (mc.mc_base_hp + (mc.mc_hp_growth * (pi.item_level - 1))),
+            (mc.mc_base_hp  + (mc.mc_hp_growth  * (pi.item_level - 1))),
             (mc.mc_base_atk + (mc.mc_atk_growth * (pi.item_level - 1))),
+            (mc.mc_base_def + (mc.mc_def_growth * (pi.item_level - 1))),
             mc.mc_max_sa, mc.mc_portrait_path, mc.mc_sprite_path
         FROM player_party_presets ppp
         JOIN player_inventories pi ON ppp.char_slot_1_inv_id = pi.inv_id
@@ -73,8 +75,9 @@ exports.initBattle = async (req, res) => {
 
         SELECT 'Char Slot 2', pi.inv_id, pi.item_level, mc.mc_id,
             mc.mc_name, mc.mc_element,
-            (mc.mc_base_hp + (mc.mc_hp_growth * (pi.item_level - 1))),
+            (mc.mc_base_hp  + (mc.mc_hp_growth  * (pi.item_level - 1))),
             (mc.mc_base_atk + (mc.mc_atk_growth * (pi.item_level - 1))),
+            (mc.mc_base_def + (mc.mc_def_growth * (pi.item_level - 1))),
             mc.mc_max_sa, mc.mc_portrait_path, mc.mc_sprite_path
         FROM player_party_presets ppp
         JOIN player_inventories pi ON ppp.char_slot_2_inv_id = pi.inv_id
@@ -85,8 +88,9 @@ exports.initBattle = async (req, res) => {
 
         SELECT 'Char Slot 3', pi.inv_id, pi.item_level, mc.mc_id,
             mc.mc_name, mc.mc_element,
-            (mc.mc_base_hp + (mc.mc_hp_growth * (pi.item_level - 1))),
+            (mc.mc_base_hp  + (mc.mc_hp_growth  * (pi.item_level - 1))),
             (mc.mc_base_atk + (mc.mc_atk_growth * (pi.item_level - 1))),
+            (mc.mc_base_def + (mc.mc_def_growth * (pi.item_level - 1))),
             mc.mc_max_sa, mc.mc_portrait_path, mc.mc_sprite_path
         FROM player_party_presets ppp
         JOIN player_inventories pi ON ppp.char_slot_3_inv_id = pi.inv_id
@@ -126,7 +130,8 @@ exports.initBattle = async (req, res) => {
             mse.modifier_target  AS target_stat,
             mse.modifier_value   AS effect_value,
             mse.mse_duration     AS effect_duration,
-            sse.effect_target    AS effect_target
+            sse.effect_target    AS effect_target,
+            mse.mse_id           AS mse_id
         FROM player_party_presets ppp
         JOIN player_inventories pi
             ON pi.inv_id IN (
@@ -144,7 +149,84 @@ exports.initBattle = async (req, res) => {
         LEFT JOIN master_status_effects mse
             ON sse.mse_id = mse.mse_id
         WHERE ppp.player_id = ? AND ppp.preset_slot = ?
-        ORDER BY pi.inv_id, ms.ms_id, mse.mse_id
+
+        UNION ALL
+
+        -- MC's Special Attack dari Senjata Utama di Grid
+        SELECT
+            pi_mc.inv_id,
+            ms.ms_id,
+            ms.ms_name           AS name,
+            ms.ms_category       AS category,
+            ms.ms_action_type    AS type,
+            ms.ms_target_type    AS target_type,
+            ms.ms_modifier_value AS modifier,
+            ms.ms_cooldown       AS cooldown,
+            ms.ms_element        AS element,
+            ms.ms_icon_path      AS icon_path,
+            ms.ms_vfx_path       AS vfx_path,
+            mse.mse_name         AS effect_name,
+            mse.mse_type         AS effect_type,
+            mse.modifier_target  AS target_stat,
+            mse.modifier_value   AS effect_value,
+            mse.mse_duration     AS effect_duration,
+            sse.effect_target    AS effect_target,
+            mse.mse_id           AS mse_id
+        FROM player_party_presets ppp
+        JOIN player_inventories pi_mc
+            ON ppp.main_char_inv_id = pi_mc.inv_id
+        JOIN player_inventories pi_w1
+            ON ppp.weap_grid_1_inv_id = pi_w1.inv_id
+        JOIN master_weapons mw
+            ON pi_w1.master_item_id = mw.mw_id AND pi_w1.item_type = 'Weapon'
+        JOIN master_skills ms
+            ON mw.mw_special_attack_id = ms.ms_id
+        LEFT JOIN skill_status_effects sse
+            ON ms.ms_id = sse.ms_id
+        LEFT JOIN master_status_effects mse
+            ON sse.mse_id = mse.mse_id
+        WHERE ppp.player_id = ? AND ppp.preset_slot = ?
+
+        UNION ALL
+
+        -- Special Attack Karakter Lain dari master_characters
+        SELECT
+            pi.inv_id,
+            ms.ms_id,
+            ms.ms_name           AS name,
+            ms.ms_category       AS category,
+            ms.ms_action_type    AS type,
+            ms.ms_target_type    AS target_type,
+            ms.ms_modifier_value AS modifier,
+            ms.ms_cooldown       AS cooldown,
+            ms.ms_element        AS element,
+            ms.ms_icon_path      AS icon_path,
+            ms.ms_vfx_path       AS vfx_path,
+            mse.mse_name         AS effect_name,
+            mse.mse_type         AS effect_type,
+            mse.modifier_target  AS target_stat,
+            mse.modifier_value   AS effect_value,
+            mse.mse_duration     AS effect_duration,
+            sse.effect_target    AS effect_target,
+            mse.mse_id           AS mse_id
+        FROM player_party_presets ppp
+        JOIN player_inventories pi
+            ON pi.inv_id IN (
+                ppp.char_slot_1_inv_id,
+                ppp.char_slot_2_inv_id,
+                ppp.char_slot_3_inv_id
+            )
+        JOIN master_characters mc
+            ON pi.master_item_id = mc.mc_id AND pi.item_type = 'Character'
+        JOIN master_skills ms
+            ON mc.mc_special_attack_id = ms.ms_id
+        LEFT JOIN skill_status_effects sse
+            ON ms.ms_id = sse.ms_id
+        LEFT JOIN master_status_effects mse
+            ON sse.mse_id = mse.mse_id
+        WHERE ppp.player_id = ? AND ppp.preset_slot = ?
+
+        ORDER BY inv_id, ms_id, mse_id
         `;
 
         // =========================================================
@@ -168,8 +250,11 @@ exports.initBattle = async (req, res) => {
             mon.mon_name,
             mon.mon_element,
             mon.mon_base_hp,
+            mon.mon_hp_growth,
             mon.mon_base_atk,
+            mon.mon_atk_growth,
             mon.mon_base_def,
+            mon.mon_def_growth,
             mon.mon_max_sa,
             mon.mon_icon_path,
             mon.mon_sprite_path,
@@ -216,7 +301,8 @@ exports.initBattle = async (req, res) => {
             mw.mw_name AS name,
             mw.mw_element AS element,
             (mw.mw_base_hp + (mw.mw_hp_growth * (pi.item_level - 1))) AS calculated_hp,
-            (mw.mw_base_atk + (mw.mw_atk_growth * (pi.item_level - 1))) AS calculated_atk
+            (mw.mw_base_atk + (mw.mw_atk_growth * (pi.item_level - 1))) AS calculated_atk,
+            (CASE WHEN pi.inv_id = ppp.weap_grid_1_inv_id THEN 1 ELSE 0 END) AS is_main_weapon
         FROM player_party_presets ppp
         JOIN player_inventories pi ON pi.inv_id IN (
             ppp.weap_grid_1_inv_id,
@@ -230,13 +316,44 @@ exports.initBattle = async (req, res) => {
         `;
 
         // =========================================================
+        // QUERY 5: Ambil passive skill senjata dari grid
+        //   JOIN Chain:
+        //     player_party_presets → player_inventories → master_weapons
+        //     → item_skills (Weapon) → master_skills
+        //     → skill_weapon_modifiers
+        //
+        //   Menghasilkan total persentase bonus pasif per stat_target
+        //   (ATK, HP, DEF, CRIT) dari seluruh senjata di grid.
+        // =========================================================
+        const queryWeaponPassives = `
+        SELECT
+            swm.stat_target,
+            swm.element_condition,
+            swm.modifier_value
+        FROM player_party_presets ppp
+        JOIN player_inventories pi ON pi.inv_id IN (
+            ppp.weap_grid_1_inv_id,
+            ppp.weap_grid_2_inv_id,
+            ppp.weap_grid_3_inv_id,
+            ppp.weap_grid_4_inv_id,
+            ppp.weap_grid_5_inv_id
+        )
+        JOIN master_weapons mw ON pi.master_item_id = mw.mw_id AND pi.item_type = 'Weapon'
+        JOIN item_skills its ON mw.mw_id = its.item_id AND its.item_type = 'Weapon'
+        JOIN master_skills ms ON its.ms_id = ms.ms_id
+        JOIN skill_weapon_modifiers swm ON ms.ms_id = swm.ms_id
+        WHERE ppp.player_id = ? AND ppp.preset_slot = ?
+        `;
+
+        // =========================================================
         // Jalankan semua query secara paralel (Promise.all)
         // =========================================================
         const [
             [charRows],
             [skillRows],
             [monsterRows],
-            [weaponRows]
+            [weaponRows],
+            [weaponPassiveRows]
         ] = await Promise.all([
             db.query(queryCharacters, [
                 playerId, presetSlot,
@@ -244,9 +361,14 @@ exports.initBattle = async (req, res) => {
                 playerId, presetSlot,
                 playerId, presetSlot
             ]),
-            db.query(querySkills, [playerId, presetSlot]),
+            db.query(querySkills, [
+                playerId, presetSlot,
+                playerId, presetSlot,
+                playerId, presetSlot
+            ]),
             db.query(queryMonsters, [questId]),
-            db.query(queryWeapons, [playerId, presetSlot])
+            db.query(queryWeapons, [playerId, presetSlot]),
+            db.query(queryWeaponPassives, [playerId, presetSlot])
         ]);
 
         // Validasi: minimal karakter MC harus ditemukan
@@ -296,7 +418,7 @@ exports.initBattle = async (req, res) => {
         });
 
         // =========================================================
-        // PROCESSING: Kalkulasi Grid Senjata
+        // PROCESSING: Kalkulasi Grid Senjata (Raw Stat)
         // =========================================================
         let totalGridHp = 0;
         let totalGridAtk = 0;
@@ -306,9 +428,26 @@ exports.initBattle = async (req, res) => {
         });
 
         // =========================================================
+        // PROCESSING: Kalkulasi Passive Bonus dari Weapon Skills
+        //   Akumulasi modifier_value per stat_target (ATK, HP, DEF, CRIT)
+        //   Rumus akhir: Final_Stat = Base_Stat * (1 + totalPassive%)
+        // =========================================================
+        const passiveTotals = { ATK: 0, HP: 0, DEF: 0, CRIT: 0 };
+        (weaponPassiveRows || []).forEach(row => {
+            const stat = row.stat_target; // 'ATK' | 'HP' | 'DEF' | 'CRIT'
+            if (passiveTotals.hasOwnProperty(stat)) {
+                passiveTotals[stat] += Number(row.modifier_value) || 0;
+            }
+        });
+
+        // Cari elemen dari senjata utama (Slot 1) untuk diwariskan ke karakter 'Any'
+        const mainWeapon = (weaponRows || []).find(w => w.is_main_weapon === 1);
+        const mainWeaponElement = mainWeapon ? mainWeapon.element : 'Fire';
+
+        // =========================================================
         // PROCESSING: Mapping Karakter
         //   - Filter skill dari skillMap berdasarkan inv_id karakter
-        //   - Tambahkan bonus stat dari weapon grid ke setiap karakter
+        //   - Hitung final stat: (base + gridSum) * (1 + passivePercent)
         //   - Hapus field internal _inv_id sebelum kirim ke response
         // =========================================================
         const characters = charRows.map(char => {
@@ -316,14 +455,23 @@ exports.initBattle = async (req, res) => {
                 .filter(s => s._inv_id === char.inv_id)
                 .map(({ _inv_id, ...skill }) => skill); // buang _inv_id
 
+            // Base stat setelah level growth + grid senjata
+            const rawHp  = (Number(char.base_hp)  || 0) + totalGridHp;
+            const rawAtk = (Number(char.base_atk) || 0) + totalGridAtk;
+            const rawDef = Number(char.base_def)   || 500;
+
+            // Karakter berelemen 'Any' (MC) mewarisi elemen Senjata Utama
+            const charElement = char.element === 'Any' ? mainWeaponElement : char.element;
+
             return {
                 slot:    char.role_slot,
                 name:    char.name,
-                element: char.element,
+                element: charElement,
                 level:   char.level,
                 final_stats: {
-                    hp:     (Number(char.base_hp) || 0) + totalGridHp,
-                    atk:    (Number(char.base_atk) || 0) + totalGridAtk,
+                    hp:     Math.floor(rawHp  * (1 + passiveTotals.HP)),
+                    atk:    Math.floor(rawAtk * (1 + passiveTotals.ATK)),
+                    def:    Math.floor(rawDef * (1 + passiveTotals.DEF)),
                     max_sa: Number(char.max_sa)   || 100
                 },
                 portrait_path: char.portrait_path,
@@ -355,12 +503,11 @@ exports.initBattle = async (req, res) => {
                     name:    row.mon_name,
                     element: row.mon_element,
                     level:   row.monster_level || 1,
-                    // HP musuh langsung dari mon_base_hp (sudah representasi
-                    // HP boss yang valid; scaling level diabaikan di iterasi ini)
+                    // Kalkulasi stat musuh dinamis berdasarkan level & growth rate
                     final_stats: {
-                        hp:  Number(row.mon_base_hp)  || 0,
-                        atk: Number(row.mon_base_atk) || 0,
-                        def: Number(row.mon_base_def)  || 0
+                        hp:  (Number(row.mon_base_hp)  || 0) + (Number(row.mon_hp_growth)  || 0) * ((row.monster_level || 1) - 1),
+                        atk: (Number(row.mon_base_atk) || 0) + (Number(row.mon_atk_growth) || 0) * ((row.monster_level || 1) - 1),
+                        def: (Number(row.mon_base_def)  || 0) + (Number(row.mon_def_growth) || 0) * ((row.monster_level || 1) - 1)
                     },
                     caMax:       Number(row.mon_max_sa) || 5,
                     icon_path:   row.mon_icon_path,

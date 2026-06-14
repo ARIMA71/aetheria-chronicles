@@ -20,13 +20,13 @@ export default class Enemy extends Phaser.GameObjects.Container {
         this.maxHp    = data.final_stats.hp;
         this.hp       = data.final_stats.hp;
         this.atk      = data.final_stats.atk;
-        this.def      = data.final_stats.def || 5;
+        this.def      = data.final_stats.def || 500;
         this.crit     = 0.2;
         this.critDamage = 2.0;
 
         // Base stats (untuk getStat())
         this._baseAtk = data.final_stats.atk;
-        this._baseDef = data.final_stats.def || 5;
+        this._baseDef = data.final_stats.def || 500;
 
         // ── Active Effects ────────────────────────────────────────────────────
         // Setiap entry: { effect_name, effect_type, target_stat, value, duration, effect_target }
@@ -112,7 +112,8 @@ export default class Enemy extends Phaser.GameObjects.Container {
 
     /**
      * Hitung nilai final dari satu stat secara dinamis berdasarkan activeEffects.
-     * Rumus: baseStat + (baseStat * totalMultiplier)
+     * Rumus: baseStat * (1 + clampedMultiplier)
+     * Hard Cap: multiplier dibatasi ±50% untuk mencegah stat inflation.
      * @param {string} statName - 'ATK' | 'DEF'
      * @returns {number}
      */
@@ -126,7 +127,10 @@ export default class Enemy extends Phaser.GameObjects.Container {
             .filter(e => e.target_stat === statName)
             .reduce((sum, e) => sum + (Number(e.value) || 0), 0);
 
-        return Math.max(0, base + (base * totalMult));
+        // Hard Cap: batasi multiplier antara -50% dan +50%
+        const clampedMult = Math.max(-0.5, Math.min(0.5, totalMult));
+
+        return Math.max(0, base * (1 + clampedMult));
     }
 
     /**

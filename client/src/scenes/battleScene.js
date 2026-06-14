@@ -324,11 +324,11 @@ export default class BattleScene extends Phaser.Scene {
         const basicAttackers = alive.filter(p => !p.isSAReady);
         for (const p of basicAttackers) {
             const pAtk = p.getStat('ATK');
-            const eDef = this.enemy.getStat('DEF') * (this.enemy.modeState === "exhausted" ? 0.7 : 1);
-            let dmg = Math.max(pAtk - eDef, 1);
+            const rawDmg = pAtk;
+            let dmg = this._calcMitigatedDmg(rawDmg, p, this.enemy);
             const crit = Math.random() < p.getStat('CRIT');
-            if (crit) dmg *= p.critDamage;
-            dmg = Math.floor(dmg);
+            if (crit) dmg = Math.floor(dmg * p.critDamage);
+            else dmg = Math.floor(dmg);
             this._applyEnemyDamage(dmg);
             p.specialBar = Math.min(p.specialBar + 20, p.specialMax);
             p.refreshVisual();
@@ -345,9 +345,9 @@ export default class BattleScene extends Phaser.Scene {
                 let bonus = 0;
                 for (const p of saUsers) {
                     const pAtk = p.getStat('ATK');
-                    const eDef = this.enemy.getStat('DEF') * (this.enemy.modeState === "exhausted" ? 0.7 : 1);
-                    const raw = (pAtk * p.specialAttack.modifier) - eDef;
-                    const add = Math.floor(Math.max(raw, 1) * (saUsers.length >= 2 ? mult[saUsers.length] : 1));
+                    const rawSA = pAtk * p.specialAttack.modifier;
+                    const mitigated = this._calcMitigatedDmg(rawSA, p, this.enemy);
+                    const add = Math.floor(Math.max(mitigated, 1) * (saUsers.length >= 2 ? mult[saUsers.length] : 1));
                     this._applyEnemyDamage(add); bonus += add;
                     // Terapkan status_effects dari SA skill
                     this._applyStatusEffects(p, p.specialAttack, p.specialAttack.status_effects);
@@ -377,10 +377,10 @@ export default class BattleScene extends Phaser.Scene {
         const type = (sk.type || '').toLowerCase();
 
         if (type === "damage") {
-            // Damage: kalkulasi dengan getStat(), lalu terapkan status_effects
+            // Damage: kalkulasi dengan getStat() + mitigasi DEF & elemen
             const pAtk = p.getStat('ATK');
-            const eDef = this.enemy.getStat('DEF') * (this.enemy.modeState === "exhausted" ? 0.7 : 1);
-            const dmg = Math.floor(Math.max((pAtk * sk.modifier) - eDef, 1));
+            const rawDmg = pAtk * sk.modifier;
+            const dmg = this._calcMitigatedDmg(rawDmg, p, this.enemy);
             this._applyEnemyDamage(dmg);
             this.showLog(p.charName + ": " + sk.name + " → " + dmg + " dmg");
             this._applyStatusEffects(p, sk, sk.status_effects);
@@ -430,12 +430,18 @@ export default class BattleScene extends Phaser.Scene {
     }
     aetherBurst() {
         if (this.aetherGauge < this.aetherGaugeMax) { this.showLog("Aether Burst not ready!"); return; }
-        const totalAtk = this.players.filter(p => p.hp > 0).reduce((s, p) => s + p.atk, 0);
-        const dmg = Math.floor(totalAtk * 2.5);
+        const totalAtk = this.players.filter(p => p.hp > 0).reduce((s, p) => s + p.getStat('ATK'), 0);
+        const rawDmg = totalAtk * 2.5;
+
+        // Cari elemen dari Main Character (MC)
+        const mc = this.players.find(p => p.charName.includes("MC") || p.charName.includes("Main Character")) || this.players[0];
+        const mcElement = mc ? mc.element : 'None';
+
+        const dmg = this._calcMitigatedDmg(rawDmg, { element: mcElement }, this.enemy);
         this._applyEnemyDamage(dmg);
         this.aetherGauge = 0;
         this._refreshAetherUI();
-        this.showLog("✦✦ AETHER BURST! → " + dmg + " DMG!");
+        this.showLog("✦✦ AETHER BURST (" + mcElement.toUpperCase() + ")! → " + dmg + " DMG!");
         if (this.enemy.hp <= 0) { this.turn = "none"; this.showLog("VICTORY! 🎉"); }
     }
     enemyAttack(attackCount = 1) {
@@ -443,11 +449,10 @@ export default class BattleScene extends Phaser.Scene {
         const t = this._randAlive(); if (!t) return;
         const modeMult = this.enemy.modeState === "exhausted" ? 0.7 : (this.enemy.modeState === "enraged" ? 1.5 : 1);
         const eAtk = this.enemy.getStat('ATK') * modeMult;
-        const tDef = t.getStat('DEF');
-        let dmg = Math.max(eAtk - tDef, 1);
+        const rawDmg = eAtk;
+        let dmg = this._calcMitigatedDmg(rawDmg, this.enemy, t);
         const crit = Math.random() < this.enemy.crit;
-        if (crit) dmg *= this.enemy.critDamage;
-        dmg = Math.floor(dmg);
+        if (crit) dmg = Math.floor(dmg * this.enemy.critDamage);
         t.hp = Math.max(0, t.hp - dmg); t.refreshVisual(); this.playSpriteHitAnim(t);
         const isLastAttack = (this.enemy.modeState !== "enraged" || attackCount === 2);
         if (this.enemy.modeState !== "exhausted" && isLastAttack) this.enemy.caBar = Math.min(this.enemy.caBar + 1, this.enemy.caMax);
@@ -471,15 +476,18 @@ export default class BattleScene extends Phaser.Scene {
 
         if (type === "damage") {
             const eAtk = this.enemy.getStat('ATK') * modeMult;
-            const tDef = t.getStat('DEF');
-            const dmg = Math.floor(Math.max((eAtk * sk.modifier) - tDef, 1));
+            const rawDmg = eAtk * sk.modifier;
+            const dmg = this._calcMitigatedDmg(rawDmg, this.enemy, t);
             t.hp = Math.max(0, t.hp - dmg); t.refreshVisual(); this.playSpriteHitAnim(t);
             this.showLog("⚡ " + this.enemy.charName + ": " + sk.name + "! → " + t.charName + " -" + dmg);
         } else if (type === "support") {
             this.showLog("⚡ " + this.enemy.charName + ": " + sk.name + "!");
         } else {
             // Fallback damage sederhana
-            const dmg = Math.floor(Math.max(this.enemy.getStat('ATK') * modeMult - t.getStat('DEF'), 1));
+            const eAtk = this.enemy.getStat('ATK') * modeMult;
+            const tDef = t.getStat('DEF');
+            const mitigation = tDef / (tDef + 500);
+            const dmg = Math.max(Math.floor(eAtk * (1 - mitigation)), 1);
             t.hp = Math.max(0, t.hp - dmg); t.refreshVisual(); this.playSpriteHitAnim(t);
             this.showLog("⚡ " + this.enemy.charName + ": " + sk.name + "! → -" + dmg);
         }
@@ -489,6 +497,59 @@ export default class BattleScene extends Phaser.Scene {
         this._refreshEnemyHUD();
         if (this.players.every(p => p.hp <= 0)) { this.turn = "none"; this.showLog("DEFEAT... 💀"); return; }
         this.turn = "player"; this.time.delayedCall(1500, () => this.processTurnEnd());
+    }
+    /**
+     * Hitung damage akhir ter-mitigasi dengan keunggulan elemen.
+     * Hierarchy: Fire > Wind > Earth > Fire
+     * Strong: +50% (+0.5)
+     * Weak: -25% (-0.25)
+     * @param {number} rawDmg - Damage mentah (ATK * modifier)
+     * @param {object} attacker - Entitas penyerang (player atau enemy)
+     * @param {object} target - Entitas target (player atau enemy)
+     * @returns {number}
+     */
+    _calcMitigatedDmg(rawDmg, attacker, target) {
+        const isTargetEnemy = (target === this.enemy);
+        const targetDef = target.getStat('DEF');
+
+        // Penskalaan DEF musuh jika dalam mode exhausted
+        const effectiveDef = (isTargetEnemy && this.enemy.modeState === 'exhausted')
+            ? targetDef * 0.7
+            : targetDef;
+
+        const mitigation = effectiveDef / (effectiveDef + 500);
+        let dmg = rawDmg * (1 - mitigation);
+
+        // Kalkulasi keunggulan elemen
+        const mult = this._getElementMultiplier(attacker.element, target.element);
+        dmg *= mult;
+
+        return Math.max(Math.floor(dmg), 1);
+    }
+    _getElementMultiplier(attackerElement, defenderElement) {
+        if (!attackerElement || !defenderElement) return 1.0;
+        const ae = attackerElement.trim().toLowerCase();
+        const de = defenderElement.trim().toLowerCase();
+
+        if (ae === de) return 1.0;
+
+        if (
+            (ae === 'fire' && de === 'wind') ||
+            (ae === 'wind' && de === 'earth') ||
+            (ae === 'earth' && de === 'fire')
+        ) {
+            return 1.5; // Keuntungan elemen (+50% damage)
+        }
+
+        if (
+            (ae === 'wind' && de === 'fire') ||
+            (ae === 'earth' && de === 'wind') ||
+            (ae === 'fire' && de === 'earth')
+        ) {
+            return 0.75; // Kerugian elemen (-25% damage)
+        }
+
+        return 1.0; // Netral
     }
     _applyStatusEffects(caster, skill, statusEffects) {
         if (!statusEffects || !statusEffects.length) return;
