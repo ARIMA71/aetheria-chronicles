@@ -17,7 +17,7 @@ export default class BattleScene extends Phaser.Scene {
     }
     async fetchBattleData() {
         try {
-            const r = await fetch("http://localhost:3000/api/battle/init", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ playerId: 1, presetSlot: 1, questId: 1 }) });
+            const r = await fetch("http://localhost:3000/api/battle/init", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ playerId: 1, presetSlot: 1, questId: 5 }) });
             if (!r.ok) throw new Error("HTTP " + r.status);
             const j = await r.json();
             if (j.status !== "success") throw new Error(j.message || "API error");
@@ -93,7 +93,7 @@ export default class BattleScene extends Phaser.Scene {
         const hr = Math.max(0, this.enemy.hp / this.enemy.maxHp);
         this._hpFill.setSize(336 * hr, 12);
         this._hpPct.setText(Math.ceil(hr * 100) + "%");
-        
+
         // Update Mode Bar Gauge
         const mr = Math.min(1, this.enemy.modeBar / this.enemy.modeMax);
         this._modeFill.setSize(340 * mr, 4);
@@ -107,7 +107,7 @@ export default class BattleScene extends Phaser.Scene {
     _updateEnrageHUD() {
         const state = this.enemy.modeState;
         const ratio = this.enemy.modeBar / this.enemy.modeMax;
-        
+
         let color = 0xffffff; // Default Putih
         let alpha = 0.5;
 
@@ -136,20 +136,20 @@ export default class BattleScene extends Phaser.Scene {
         const e = this.enemy;
         if (e.modeState === "normal") {
             e.modeBar += dmg;
-            if (e.modeBar >= e.modeMax) { 
-                e.modeState = "enraged"; 
-                e.modeBar = e.modeMax; 
-                this._enragedTurns = 3; 
-                this.showLog("ENEMY ENRAGED! (3 Turns)"); 
+            if (e.modeBar >= e.modeMax) {
+                e.modeState = "enraged";
+                e.modeBar = e.modeMax;
+                this._enragedTurns = 3;
+                this.showLog("ENEMY ENRAGED! (3 Turns)");
             }
         } else if (e.modeState === "enraged") {
             e.modeBar -= dmg;
-            if (e.modeBar <= 0) { 
-                e.modeState = "exhausted"; 
-                e.modeBar = 0; 
+            if (e.modeBar <= 0) {
+                e.modeState = "exhausted";
+                e.modeBar = 0;
                 this._enragedTurns = 0;
-                this._exhaustedTurns = 2; 
-                this.showLog("ENEMY BREAK! (Exhausted)"); 
+                this._exhaustedTurns = 2;
+                this.showLog("ENEMY BREAK! (Exhausted)");
             }
         }
         this._refreshEnemyHUD();
@@ -172,7 +172,7 @@ export default class BattleScene extends Phaser.Scene {
             p.spriteObj = this.add.container(px, 500, [b, t]);
         });
     }
-    
+
     _buildLayer4() {
         this._aethBarBg = this.add.rectangle(CX, 693, W - 40, 10, 0x0d1420);
         this._aethBarBg.setStrokeStyle(1, 0x7b68ee);
@@ -223,9 +223,9 @@ export default class BattleScene extends Phaser.Scene {
         if (!this.activePlayer) return;
         const p = this.activePlayer, skills = p.skills;
         const sy = -(H / 2) + 48, bH = 60, bG = 5;
-        const tC = { damage: "#ff8a80", buff: "#a5d6a7", heal: "#80deea", special: "#ce93d8" };
+        const tC = { Damage: "#ff8a80", Support: "#a5d6a7", Heal: "#80deea", Cleanse: "#80deea", Revive: "#b39ddb", special: "#ce93d8" };
         skills.forEach((sk, i) => {
-            const isSA = sk.type === "special";
+            const isSA = (sk.category || '').toLowerCase() === "special";
             const cd = isSA ? 0 : (p.cooldowns[sk.id] || 0);
             const saRdy = isSA && p.specialBar >= p.specialMax;
             const canUse = isSA ? saRdy : (cd === 0);
@@ -233,7 +233,7 @@ export default class BattleScene extends Phaser.Scene {
             const bgR = this.add.rectangle(0, by, 192, bH, canUse ? (isSA ? 0x1a1a4e : 0x1e3a5f) : 0x111111);
             bgR.setStrokeStyle(1, canUse ? (isSA ? 0x7b68ee : 0x4a90d9) : 0x333333);
             const nm = this.add.text(-88, by - 20, sk.name, { fontSize: "11px", color: canUse ? "#e0e0ff" : "#555", fontStyle: "bold" }).setOrigin(0, 0.5);
-            const tp = this.add.text(-88, by - 6, isSA ? "[SA]" : "[" + sk.type.toUpperCase() + "]", { fontSize: "9px", color: tC[sk.type] || "#aaa" }).setOrigin(0, 0.5);
+            const tp = this.add.text(-88, by - 6, isSA ? "[SA]" : "[" + (sk.type || 'SKILL') + "]", { fontSize: "9px", color: tC[sk.type] || "#aaa" }).setOrigin(0, 0.5);
             const items = [bgR, nm, tp];
             if (isSA) {
                 const bW = 140, bBg = this.add.rectangle(-88 + bW / 2, by + 10, bW, 6, 0x222222).setOrigin(0.5);
@@ -296,18 +296,20 @@ export default class BattleScene extends Phaser.Scene {
             }
         } else if (this.enemy.modeState === "exhausted") {
             this._exhaustedTurns--;
-            if (this._exhaustedTurns <= 0) { 
-                this.enemy.modeState = "normal"; 
-                this.enemy.modeBar = 0; 
-                this._refreshEnemyHUD(); 
+            if (this._exhaustedTurns <= 0) {
+                this.enemy.modeState = "normal";
+                this.enemy.modeBar = 0;
+                this._refreshEnemyHUD();
             }
         }
+        // Tick down cooldowns & active effects untuk semua player hidup
         this.players.forEach(p => {
             if (p.hp <= 0) return;
             for (let id in p.cooldowns) if (p.cooldowns[id] > 0) p.cooldowns[id]--;
-            p.activeBuffs = p.activeBuffs.filter(b => { b.duration--; if (b.duration <= 0) { p[b.stat] -= b.value; return false; } return true; });
-            p.refreshVisual();
+            p.updateEffectsTurn(); // tick efek status, hapus yang expired, refresh visual
         });
+        // Tick efek status pada musuh
+        this.enemy.updateEffectsTurn();
         this.currentTurn++;
         this.turnText.setText("TURN " + this.currentTurn);
         if (this._sidebarOpen) this._renderSidebar();
@@ -321,10 +323,10 @@ export default class BattleScene extends Phaser.Scene {
 
         const basicAttackers = alive.filter(p => !p.isSAReady);
         for (const p of basicAttackers) {
-            const eDef = this.enemy.def * (this.enemy.modeState === "exhausted" ? 0.7 : 1);
-            const pAtk = p.atk;
+            const pAtk = p.getStat('ATK');
+            const eDef = this.enemy.getStat('DEF') * (this.enemy.modeState === "exhausted" ? 0.7 : 1);
             let dmg = Math.max(pAtk - eDef, 1);
-            const crit = Math.random() < p.crit;
+            const crit = Math.random() < p.getStat('CRIT');
             if (crit) dmg *= p.critDamage;
             dmg = Math.floor(dmg);
             this._applyEnemyDamage(dmg);
@@ -342,19 +344,19 @@ export default class BattleScene extends Phaser.Scene {
                 const lNames = ["", "", "Small", "Medium", "Big"];
                 let bonus = 0;
                 for (const p of saUsers) {
-                    const eDef = this.enemy.def * (this.enemy.modeState === "exhausted" ? 0.7 : 1);
-                    const pAtk = p.atk;
-                    const raw = (pAtk * p.specialAttack.power) - eDef;
+                    const pAtk = p.getStat('ATK');
+                    const eDef = this.enemy.getStat('DEF') * (this.enemy.modeState === "exhausted" ? 0.7 : 1);
+                    const raw = (pAtk * p.specialAttack.modifier) - eDef;
                     const add = Math.floor(Math.max(raw, 1) * (saUsers.length >= 2 ? mult[saUsers.length] : 1));
                     this._applyEnemyDamage(add); bonus += add;
+                    // Terapkan status_effects dari SA skill
+                    this._applyStatusEffects(p, p.specialAttack, p.specialAttack.status_effects);
                     p.specialBar = 0; p.setSAReady(false); p.refreshVisual();
                     this.aetherGauge = Math.min(this.aetherGaugeMax, this.aetherGauge + 10);
-
                     this.showLog(`✦ ${p.charName} casts SA! ${add} dmg`);
                     await new Promise(resolve => this.time.delayedCall(800, resolve));
                     if (this.enemy.hp <= 0) { dead = true; break; }
                 }
-
                 if (!dead && saUsers.length >= 2) {
                     this.showLog(`⚡AETHER LINK (${lNames[saUsers.length] || "Boost"})! Bonus Dmg: ${bonus}`);
                     await new Promise(resolve => this.time.delayedCall(800, resolve));
@@ -369,23 +371,58 @@ export default class BattleScene extends Phaser.Scene {
     useSkill(idx) {
         const p = this.activePlayer, sk = p ? p.skills[idx] : null;
         if (!sk || this.turn !== "player" || !p || p.hp <= 0) return;
-        if (sk.type === "special") { p.setSAReady(!p.isSAReady); this._renderSidebar(); return; }
+        if (sk.category.toLowerCase() === "special") { p.setSAReady(!p.isSAReady); this._renderSidebar(); return; }
         if (p.cooldowns[sk.id] > 0) { this.showLog(sk.name + " on cooldown!"); return; }
-        if (sk.type === "damage") {
-            const eDef = this.enemy.def * (this.enemy.modeState === "exhausted" ? 0.7 : 1);
-            const pAtk = p.atk;
-            const dmg = Math.floor(Math.max((pAtk * sk.power) - eDef, 1));
+
+        const type = (sk.type || '').toLowerCase();
+
+        if (type === "damage") {
+            // Damage: kalkulasi dengan getStat(), lalu terapkan status_effects
+            const pAtk = p.getStat('ATK');
+            const eDef = this.enemy.getStat('DEF') * (this.enemy.modeState === "exhausted" ? 0.7 : 1);
+            const dmg = Math.floor(Math.max((pAtk * sk.modifier) - eDef, 1));
             this._applyEnemyDamage(dmg);
             this.showLog(p.charName + ": " + sk.name + " → " + dmg + " dmg");
-        } else if (sk.type === "buff") {
-            p.activeBuffs.push({ stat: sk.stat, value: sk.value, duration: sk.duration });
-            p[sk.stat] += sk.value;
-            this.showLog(p.charName + ": " + sk.name + " → " + sk.stat + " +" + sk.value);
-        } else if (sk.type === "heal") {
-            const h = Math.min(sk.value, p.maxHp - p.hp);
-            p.hp = Math.min(p.hp + sk.value, p.maxHp);
-            this.showLog(p.charName + ": " + sk.name + " → healed " + h);
+            this._applyStatusEffects(p, sk, sk.status_effects);
+
+        } else if (type === "support") {
+            // Support: tidak ada damage, langsung terapkan status_effects
+            this._applyStatusEffects(p, sk, sk.status_effects);
+
+        } else if (type === "heal") {
+            // Heal: pulihkan HP berdasarkan modifier * maxHp
+            const healAmt = Math.floor(p.maxHp * (sk.modifier || 0.2));
+            p.hp = Math.min(p.hp + healAmt, p.maxHp);
+            this.showLog(p.charName + ": " + sk.name + " → healed " + healAmt);
+            this._applyStatusEffects(p, sk, sk.status_effects);
+
+        } else if (type === "cleanse") {
+            // Cleanse: hapus semua debuff dari target (all_allies biasanya)
+            const targets = sk.target_type === 'All_Allies'
+                ? this.players.filter(pl => pl.hp > 0)
+                : [p];
+            targets.forEach(tgt => {
+                tgt.activeEffects = tgt.activeEffects.filter(e => e.effect_type !== 'Debuff');
+                // Heal bonus jika modifier > 0
+                if (sk.modifier > 0) {
+                    tgt.hp = Math.min(tgt.hp + Math.floor(tgt.maxHp * sk.modifier), tgt.maxHp);
+                }
+                tgt.refreshVisual();
+            });
+            this.showLog(p.charName + ": " + sk.name + " → Debuffs cleared!");
+
+        } else if (type === "revive") {
+            // Revive: hidupkan kembali karakter KO dengan HP sebagian
+            const koChar = this.players.find(pl => pl.hp <= 0);
+            if (koChar) {
+                koChar.hp = Math.floor(koChar.maxHp * (sk.modifier || 0.2));
+                koChar.refreshVisual();
+                this.showLog(p.charName + ": " + sk.name + " → " + koChar.charName + " revived!");
+            } else {
+                this.showLog("No KO ally to revive!"); return;
+            }
         }
+
         if (sk.cooldown) p.cooldowns[sk.id] = sk.cooldown;
         p.refreshVisual();
         if (this.enemy.hp <= 0) { this.turn = "none"; this.showLog("VICTORY! 🎉"); }
@@ -404,8 +441,10 @@ export default class BattleScene extends Phaser.Scene {
     enemyAttack(attackCount = 1) {
         if (this.enemy.caBar >= this.enemy.caMax && this.enemy.modeState !== "exhausted") { this.enemyChargeAttack(); return; }
         const t = this._randAlive(); if (!t) return;
-        const eAtk = this.enemy.atk * (this.enemy.modeState === "exhausted" ? 0.7 : (this.enemy.modeState === "enraged" ? 1.5 : 1));
-        let dmg = Math.max(eAtk - t.def, 1);
+        const modeMult = this.enemy.modeState === "exhausted" ? 0.7 : (this.enemy.modeState === "enraged" ? 1.5 : 1);
+        const eAtk = this.enemy.getStat('ATK') * modeMult;
+        const tDef = t.getStat('DEF');
+        let dmg = Math.max(eAtk - tDef, 1);
         const crit = Math.random() < this.enemy.crit;
         if (crit) dmg *= this.enemy.critDamage;
         dmg = Math.floor(dmg);
@@ -422,16 +461,71 @@ export default class BattleScene extends Phaser.Scene {
         }
     }
     enemyChargeAttack() {
-        const ca = this.enemy.skills[0], t = this._randAlive();
-        if (!t || !ca) { this.turn = "player"; return; }
-        const eAtk = this.enemy.atk * (this.enemy.modeState === "exhausted" ? 0.7 : (this.enemy.modeState === "enraged" ? 1.5 : 1));
-        const dmg = Math.floor(Math.max((eAtk * ca.power) - t.def, 1));
-        t.hp = Math.max(0, t.hp - dmg); t.refreshVisual(); this.playSpriteHitAnim(t);
+        // Gunakan pickBehavior() agar AI memilih skill sesuai fase & utility
+        const behavior = this.enemy.pickBehavior();
+        const t = this._randAlive();
+        if (!t || !behavior) { this.turn = "player"; return; }
+        const sk = behavior.skill;
+        const type = (sk.type || '').toLowerCase();
+        const modeMult = this.enemy.modeState === "exhausted" ? 0.7 : (this.enemy.modeState === "enraged" ? 1.5 : 1);
+
+        if (type === "damage") {
+            const eAtk = this.enemy.getStat('ATK') * modeMult;
+            const tDef = t.getStat('DEF');
+            const dmg = Math.floor(Math.max((eAtk * sk.modifier) - tDef, 1));
+            t.hp = Math.max(0, t.hp - dmg); t.refreshVisual(); this.playSpriteHitAnim(t);
+            this.showLog("⚡ " + this.enemy.charName + ": " + sk.name + "! → " + t.charName + " -" + dmg);
+        } else if (type === "support") {
+            this.showLog("⚡ " + this.enemy.charName + ": " + sk.name + "!");
+        } else {
+            // Fallback damage sederhana
+            const dmg = Math.floor(Math.max(this.enemy.getStat('ATK') * modeMult - t.getStat('DEF'), 1));
+            t.hp = Math.max(0, t.hp - dmg); t.refreshVisual(); this.playSpriteHitAnim(t);
+            this.showLog("⚡ " + this.enemy.charName + ": " + sk.name + "! → -" + dmg);
+        }
+        // Terapkan status_effects dari skill AI
+        this._applyStatusEffects(this.enemy, sk, sk.status_effects);
         this.enemy.caBar = 0;
         this._refreshEnemyHUD();
-        this.showLog("⚡ " + this.enemy.charName + ": " + ca.name + "! → " + t.charName + " -" + dmg);
         if (this.players.every(p => p.hp <= 0)) { this.turn = "none"; this.showLog("DEFEAT... 💀"); return; }
         this.turn = "player"; this.time.delayedCall(1500, () => this.processTurnEnd());
+    }
+    _applyStatusEffects(caster, skill, statusEffects) {
+        if (!statusEffects || !statusEffects.length) return;
+
+        statusEffects.forEach(eff => {
+            let targets = [];
+            if (eff.effect_target === 'Self') {
+                targets = [caster];
+            } else {
+                const targetType = (skill.target_type || '').toLowerCase();
+                const isCasterPlayer = (caster !== this.enemy);
+
+                if (isCasterPlayer) {
+                    if (targetType === 'all_allies') {
+                        targets = this.players.filter(pl => pl.hp > 0);
+                    } else if (targetType === 'self') {
+                        targets = [caster];
+                    } else {
+                        targets = [this.enemy];
+                    }
+                } else {
+                    if (targetType === 'all_allies' || targetType === 'self') {
+                        targets = [this.enemy];
+                    } else {
+                        targets = this.players.filter(pl => pl.hp > 0);
+                    }
+                }
+            }
+
+            targets.forEach(tgt => {
+                tgt.addEffect(eff);
+                tgt.refreshVisual();
+                if (eff.effect_name) {
+                    this.showLog(`${skill.name} inflicts ${eff.effect_name} on ${tgt.charName}`);
+                }
+            });
+        });
     }
     _randAlive() { const l = this.players.filter(p => p.hp > 0); return l.length ? l[Math.floor(Math.random() * l.length)] : null; }
     _elemColor(el) { return { Fire: 0xe74c3c, Wind: 0x2ecc71, Earth: 0xe67e22, Water: 0x3498db, Light: 0xf1c40f, Dark: 0x9b59b6 }[el] || 0xff5555; }
