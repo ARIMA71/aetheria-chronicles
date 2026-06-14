@@ -112,6 +112,43 @@ exports.initBattle = async (req, res) => {
         //   di Node.js menggunakan Map dengan key "inv_id:ms_id".
         // =========================================================
         const querySkills = `
+        -- MC's Active Skills from player_mc_skills based on the selected party preset
+        SELECT
+            pi.inv_id,
+            ms.ms_id,
+            ms.ms_name           AS name,
+            ms.ms_category       AS category,
+            ms.ms_action_type    AS type,
+            ms.ms_target_type    AS target_type,
+            ms.ms_modifier_value AS modifier,
+            ms.ms_cooldown       AS cooldown,
+            ms.ms_element        AS element,
+            ms.ms_icon_path      AS icon_path,
+            ms.ms_vfx_path       AS vfx_path,
+            -- Status Effect columns (NULL jika tidak ada)
+            mse.mse_name         AS effect_name,
+            mse.mse_type         AS effect_type,
+            mse.modifier_target  AS target_stat,
+            mse.modifier_value   AS effect_value,
+            mse.mse_duration     AS effect_duration,
+            sse.effect_target    AS effect_target,
+            mse.mse_id           AS mse_id
+        FROM player_party_presets ppp
+        JOIN player_inventories pi
+            ON ppp.main_char_inv_id = pi.inv_id
+        JOIN player_mc_skills pmcs
+            ON ppp.ppp_id = pmcs.ppp_id
+        JOIN master_skills ms
+            ON pmcs.ms_id = ms.ms_id
+        LEFT JOIN skill_status_effects sse
+            ON ms.ms_id = sse.ms_id
+        LEFT JOIN master_status_effects mse
+            ON sse.mse_id = mse.mse_id
+        WHERE ppp.player_id = ? AND ppp.preset_slot = ?
+
+        UNION ALL
+
+        -- Other Characters' Active Skills from item_skills
         SELECT
             pi.inv_id,
             ms.ms_id,
@@ -135,7 +172,6 @@ exports.initBattle = async (req, res) => {
         FROM player_party_presets ppp
         JOIN player_inventories pi
             ON pi.inv_id IN (
-                ppp.main_char_inv_id,
                 ppp.char_slot_1_inv_id,
                 ppp.char_slot_2_inv_id,
                 ppp.char_slot_3_inv_id
@@ -362,6 +398,7 @@ exports.initBattle = async (req, res) => {
                 playerId, presetSlot
             ]),
             db.query(querySkills, [
+                playerId, presetSlot,
                 playerId, presetSlot,
                 playerId, presetSlot,
                 playerId, presetSlot

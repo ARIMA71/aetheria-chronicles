@@ -509,11 +509,11 @@ CREATE TABLE `player_inventories` (
 /*Data for the table `player_inventories` */
 
 insert  into `player_inventories`(`inv_id`,`player_id`,`master_item_id`,`item_type`,`item_level`,`limit_break_level`,`item_exp`) values 
-(101,1,1,'Character',20,0,0),
-(102,1,2,'Character',40,0,0),
-(103,1,3,'Character',40,0,0),
-(104,1,4,'Character',40,0,0),
-(105,1,8,'Character',30,0,0),
+(101,1,1,'Character',15,0,0),
+(102,1,2,'Character',30,0,0),
+(103,1,3,'Character',30,0,0),
+(104,1,4,'Character',30,0,0),
+(105,1,8,'Character',20,0,0),
 (201,1,1,'Weapon',50,0,0),
 (202,1,2,'Weapon',50,0,0),
 (203,1,3,'Weapon',50,0,0),
@@ -548,16 +548,22 @@ insert  into `player_materials`(`player_id`,`mat_id`,`quantity`) values
 DROP TABLE IF EXISTS `player_mc_skills`;
 
 CREATE TABLE `player_mc_skills` (
-  `player_id` int NOT NULL,
+  `ppp_id` int NOT NULL,
   `slot_number` int NOT NULL,
   `ms_id` int NOT NULL,
-  PRIMARY KEY (`player_id`,`slot_number`),
+  PRIMARY KEY (`ppp_id`,`slot_number`),
   KEY `fk_pmcs_ms` (`ms_id`),
   CONSTRAINT `fk_pmcs_ms` FOREIGN KEY (`ms_id`) REFERENCES `master_skills` (`ms_id`),
-  CONSTRAINT `fk_pmcs_player` FOREIGN KEY (`player_id`) REFERENCES `players` (`player_id`)
+  CONSTRAINT `fk_pmcs_ppp` FOREIGN KEY (`ppp_id`) REFERENCES `player_party_presets` (`ppp_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 /*Data for the table `player_mc_skills` */
+
+insert  into `player_mc_skills`(`ppp_id`,`slot_number`,`ms_id`) values 
+(1,1,1),
+(1,2,2),
+(1,3,3),
+(1,4,4);
 
 /*Table structure for table `player_party_presets` */
 

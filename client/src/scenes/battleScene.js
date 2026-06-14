@@ -1,4 +1,4 @@
-import Player from "../entities/player";
+﻿import Player from "../entities/player";
 import Enemy from "../entities/enemy";
 const W = 450, H = 800, CX = 225;
 export default class BattleScene extends Phaser.Scene {
@@ -330,7 +330,7 @@ export default class BattleScene extends Phaser.Scene {
         const partyHealthy = avgHpRatio > 0.7;
 
         // Hitung buff aktif musuh (efek bertipe Buff pada enemy)
-        const enemyBuffCount  = this.enemy.activeEffects.filter(e => (e.effect_type || '').toLowerCase() === 'buff').length;
+        const enemyBuffCount = this.enemy.activeEffects.filter(e => (e.effect_type || '').toLowerCase() === 'buff').length;
         const enemyDebuffCount = this.enemy.activeEffects.filter(e => (e.effect_type || '').toLowerCase() === 'debuff').length;
 
         // Hitung total buff aktif di seluruh party
@@ -496,9 +496,9 @@ export default class BattleScene extends Phaser.Scene {
      */
     enemyAttack() {
         const knowledge = this._buildKnowledge();
-        const modeMult  = this.enemy.modeState.toLowerCase() === 'exhausted' ? 0.7
-                        : this.enemy.modeState.toLowerCase() === 'enraged'   ? 1.5
-                        : 1.0;
+        const modeMult = this.enemy.modeState.toLowerCase() === 'exhausted' ? 0.7
+            : this.enemy.modeState.toLowerCase() === 'enraged' ? 1.5
+                : 1.0;
         const isExhausted = this.enemy.modeState.toLowerCase() === 'exhausted';
 
         // ── 1. HP Trigger (Prioritas Utama) ───────────────────────────────────
@@ -519,26 +519,31 @@ export default class BattleScene extends Phaser.Scene {
             this.enemy.caBar = 0;
             this._refreshEnemyHUD();
 
+            let handledAsync = false;
             if (behavior) {
                 this._executeEnemySkill(behavior, modeMult);
             } else {
-                this._executeEnemyBasicAttack(modeMult, false);
+                handledAsync = this._executeEnemyBasicAttack(modeMult, false);
             }
 
-            if (this.players.every(p => p.hp <= 0)) { this.turn = 'none'; this.showLog('DEFEAT... 💀'); return; }
-            this.turn = 'player';
-            this.time.delayedCall(1500, () => this.processTurnEnd());
+            if (!handledAsync) {
+                if (this.players.every(p => p.hp <= 0)) { this.turn = 'none'; this.showLog('DEFEAT... 💀'); return; }
+                this.turn = 'player';
+                this.time.delayedCall(1500, () => this.processTurnEnd());
+            }
             return;
         }
 
         // ── 3. Penahanan CA ───────────────────────────────────────────────────
         if (this.enemy.caBar >= this.enemy.caMax && isExhausted) {
             // Musuh dilarang melakukan Charge Attack (tahan nilai caBar, jangan direset & jangan ditambah)
-            this._executeEnemyBasicAttack(modeMult, false);
+            const handledAsync = this._executeEnemyBasicAttack(modeMult, false);
 
-            if (this.players.every(p => p.hp <= 0)) { this.turn = 'none'; this.showLog('DEFEAT... 💀'); return; }
-            this.turn = 'player';
-            this.time.delayedCall(1500, () => this.processTurnEnd());
+            if (!handledAsync) {
+                if (this.players.every(p => p.hp <= 0)) { this.turn = 'none'; this.showLog('DEFEAT... 💀'); return; }
+                this.turn = 'player';
+                this.time.delayedCall(1500, () => this.processTurnEnd());
+            }
             return;
         }
 
@@ -554,14 +559,14 @@ export default class BattleScene extends Phaser.Scene {
     }
 
     _executeEnemySkill(behavior, modeMult) {
-        const sk   = behavior.skill;
+        const sk = behavior.skill;
         const type = (sk.type || '').toLowerCase();
         const targetType = (sk.target_type || '').toLowerCase();
         const aliveChars = this.players.filter(p => p.hp > 0);
 
         if (targetType === 'all_enemies' || targetType === 'all_allies') {
             if (type === 'damage') {
-                const eAtk   = this.enemy.getStat('ATK') * modeMult;
+                const eAtk = this.enemy.getStat('ATK') * modeMult;
                 const rawDmg = eAtk * (sk.modifier || 1);
                 let totalDmg = 0;
                 for (const t of aliveChars) {
@@ -587,9 +592,9 @@ export default class BattleScene extends Phaser.Scene {
 
             if (t) {
                 if (type === 'damage') {
-                    const eAtk   = this.enemy.getStat('ATK') * modeMult;
+                    const eAtk = this.enemy.getStat('ATK') * modeMult;
                     const rawDmg = eAtk * (sk.modifier || 1);
-                    const dmg    = this._calcMitigatedDmg(rawDmg, this.enemy, t);
+                    const dmg = this._calcMitigatedDmg(rawDmg, this.enemy, t);
                     t.hp = Math.max(0, t.hp - dmg);
                     t.refreshVisual(); this.playSpriteHitAnim(t);
                     this.showLog(`⚡ ${this.enemy.charName}: ${sk.name}! → ${t.charName} -${dmg}`);
@@ -606,9 +611,9 @@ export default class BattleScene extends Phaser.Scene {
         const t = this._randAlive();
         if (!t) return false;
 
-        const eAtk   = this.enemy.getStat('ATK') * modeMult;
-        let dmg      = this._calcMitigatedDmg(eAtk, this.enemy, t);
-        const crit   = Math.random() < this.enemy.crit;
+        const eAtk = this.enemy.getStat('ATK') * modeMult;
+        let dmg = this._calcMitigatedDmg(eAtk, this.enemy, t);
+        const crit = Math.random() < this.enemy.crit;
         if (crit) dmg = Math.floor(dmg * this.enemy.critDamage);
 
         t.hp = Math.max(0, t.hp - dmg);
@@ -622,8 +627,8 @@ export default class BattleScene extends Phaser.Scene {
             ? `${this.enemy.charName} CRIT ${t.charName}! 💥 ${dmg}`
             : `${this.enemy.charName} → ${t.charName}: ${dmg}`);
 
-        // Jika Enraged, serang 2 kali
-        if (this.enemy.modeState.toLowerCase() === 'enraged') {
+        // Jika Enraged, ada peluang 70% untuk menyerang 2 kali
+        if (this.enemy.modeState.toLowerCase() === 'enraged' && Math.random() < 0.7) {
             this.time.delayedCall(800, () => {
                 const t2 = this._randAlive();
                 if (!t2) {
