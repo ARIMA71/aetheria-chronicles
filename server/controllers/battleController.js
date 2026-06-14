@@ -604,6 +604,13 @@ exports.initBattle = async (req, res) => {
             });
         }
 
+        // Ambil jumlah Green Potion (mat_id = 6) dari player_materials
+        const [materialRow] = await db.query(
+            'SELECT quantity FROM player_materials WHERE player_id = ? AND mat_id = 6',
+            [playerId]
+        );
+        const potionCount = materialRow[0] ? materialRow[0].quantity : 0;
+
         // =========================================================
         // RESPONSE AKHIR — Standar JSON sesuai GEMINI.md
         // =========================================================
@@ -615,7 +622,8 @@ exports.initBattle = async (req, res) => {
                 player_party: {
                     characters
                 },
-                enemies
+                enemies,
+                potion_count: potionCount
             }
         });
 
@@ -630,10 +638,242 @@ exports.initBattle = async (req, res) => {
 };
 
 exports.saveBattleResult = async (req, res) => {
-    // TODO: Implementasi logika penyimpanan hasil battle (Fase 3)
-    return res.status(200).json({
-        status: 'success',
-        message: 'Hasil battle berhasil disimpan.',
-        data: null
-    });
+    const { playerId, questId, potionsUsed } = req.body;
+
+    if (!playerId || !questId) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'playerId dan questId wajib diisi!'
+        });
+    }
+
+    // =========================================================
+    // 2. Buka koneksi dari pool & mulai transaksi
+    // =========================================================
+    const conn = await db.getConnection();
+
+    try {
+        await conn.beginTransaction();
+
+        // Kurangi green potion yang telah digunakan selama pertempuran
+        if (potionsUsed && Number(potionsUsed) > 0) {
+            await conn.query(
+                'UPDATE player_materials SET quantity = GREATEST(0, quantity - ?) WHERE player_id = ? AND mat_id = 6',
+                [Number(potionsUsed), playerId]
+            );
+        }
+
+        // =========================================================
+        // 3. Ambil semua kemungkinan reward dari quest_rewards
+        // =========================================================
+        const [rewardRows] = await conn.query(
+            'SELECT * FROM quest_rewards WHERE mq_id = ?',
+            [questId]
+        );
+
+        if (rewardRows.length === 0) {
+            await conn.rollback();
+            conn.release();
+            return res.status(404).json({
+                status: 'error',
+                message: `Tidak ada reward yang ditemukan untuk questId: ${questId}`
+            });
+        }
+
+        // =========================================================
+        // 4. RNG Roll — tentukan item mana yang didapatkan
+        // =========================================================
+        const obtainedRaw = [];
+
+        for (const reward of rewardRows) {
+            const roll = Math.random();
+            if (roll <= reward.drop_chance) {
+                obtainedRaw.push(reward);
+            }
+        }
+
+        // =========================================================
+        // 5. Proses setiap reward yang didapatkan ke dalam DB
+        // =========================================================
+        const obtainedRewards = [];
+
+        for (const item of obtainedRaw) {
+            const type = item.reward_type; // 'Currency' | 'Material' | 'Weapon' | 'Character'
+
+            // --- Currency ---
+            if (type === 'Currency') {
+                await conn.query(
+                    'UPDATE players SET currency = currency + ? WHERE player_id = ?',
+                    [item.quantity, playerId]
+                );
+
+                obtainedRewards.push({
+                    reward_type:   'Currency',
+                    reward_item_id: 0,
+                    quantity:       item.quantity,
+                    name:           'Gold',
+                    description:    'Mata uang utama permainan.',
+                    rarity:         null,
+                    element:        null
+                });
+            }
+
+            // --- Material ---
+            else if (type === 'Material') {
+                await conn.query(
+                    `INSERT INTO player_materials (player_id, mat_id, quantity)
+                     VALUES (?, ?, ?)
+                     ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)`,
+                    [playerId, item.reward_item_id, item.quantity]
+                );
+
+                // Ambil detail dari master_materials
+                const [matDetail] = await conn.query(
+                    'SELECT mat_name AS name, mat_desc AS description FROM master_materials WHERE mat_id = ?',
+                    [item.reward_item_id]
+                );
+                const detail = matDetail[0] || { name: 'Unknown Material', description: null };
+
+                obtainedRewards.push({
+                    reward_type:    'Material',
+                    reward_item_id: item.reward_item_id,
+                    quantity:       item.quantity,
+                    name:           detail.name,
+                    description:    detail.description,
+                    rarity:         null,
+                    element:        null
+                });
+            }
+
+            // --- Weapon ---
+            else if (type === 'Weapon') {
+                await conn.query(
+                    `INSERT INTO player_inventories
+                        (player_id, master_item_id, item_type, item_level, limit_break_level, item_exp)
+                     VALUES (?, ?, 'Weapon', 1, 0, 0)`,
+                    [playerId, item.reward_item_id]
+                );
+
+                // Ambil detail dari master_weapons beserta unlocks_mc_id
+                const [weapDetail] = await conn.query(
+                    'SELECT mw_name AS name, mw_rarity AS rarity, mw_element AS element, unlocks_mc_id FROM master_weapons WHERE mw_id = ?',
+                    [item.reward_item_id]
+                );
+                const detail = weapDetail[0] || { name: 'Unknown Weapon', rarity: null, element: null, unlocks_mc_id: null };
+
+                obtainedRewards.push({
+                    reward_type:    'Weapon',
+                    reward_item_id: item.reward_item_id,
+                    quantity:       item.quantity,
+                    name:           detail.name,
+                    description:    null,
+                    rarity:         detail.rarity,
+                    element:        detail.element
+                });
+
+                // Cek apakah senjata ini membuka karakter
+                if (detail.unlocks_mc_id !== null) {
+                    // Cek kepemilikan karakter tersebut
+                    const [charExists] = await conn.query(
+                        `SELECT inv_id FROM player_inventories
+                         WHERE player_id = ? AND master_item_id = ? AND item_type = 'Character'`,
+                        [playerId, detail.unlocks_mc_id]
+                    );
+
+                    if (charExists.length === 0) {
+                        // Belum punya -> unlock karakternya!
+                        await conn.query(
+                            `INSERT INTO player_inventories
+                                (player_id, master_item_id, item_type, item_level, limit_break_level, item_exp)
+                             VALUES (?, ?, 'Character', 1, 0, 0)`,
+                            [playerId, detail.unlocks_mc_id]
+                        );
+
+                        // Ambil detail karakter yang di-unlock
+                        const [charDetail] = await conn.query(
+                            'SELECT mc_name AS name, mc_rarity AS rarity, mc_element AS element FROM master_characters WHERE mc_id = ?',
+                            [detail.unlocks_mc_id]
+                        );
+                        const cDetail = charDetail[0] || { name: 'Unknown Character', rarity: null, element: null };
+
+                        obtainedRewards.push({
+                            reward_type:    'Character',
+                            reward_item_id: detail.unlocks_mc_id,
+                            quantity:       1,
+                            name:           cDetail.name,
+                            description:    `Karakter terbuka via Senjata ${detail.name}!`,
+                            rarity:         cDetail.rarity,
+                            element:        cDetail.element
+                        });
+                    }
+                }
+            }
+
+            // --- Character ---
+            else if (type === 'Character') {
+                // Cek apakah karakter sudah dimiliki
+                const [exists] = await conn.query(
+                    `SELECT inv_id FROM player_inventories
+                     WHERE player_id = ? AND master_item_id = ? AND item_type = 'Character'`,
+                    [playerId, item.reward_item_id]
+                );
+
+                let isDuplicate = false;
+                if (exists.length === 0) {
+                    await conn.query(
+                        `INSERT INTO player_inventories
+                            (player_id, master_item_id, item_type, item_level, limit_break_level, item_exp)
+                         VALUES (?, ?, 'Character', 1, 0, 0)`,
+                        [playerId, item.reward_item_id]
+                    );
+                } else {
+                    isDuplicate = true;
+                }
+
+                // Ambil detail dari master_characters
+                const [charDetail] = await conn.query(
+                    'SELECT mc_name AS name, mc_rarity AS rarity, mc_element AS element FROM master_characters WHERE mc_id = ?',
+                    [item.reward_item_id]
+                );
+                const detail = charDetail[0] || { name: 'Unknown Character', rarity: null, element: null };
+
+                obtainedRewards.push({
+                    reward_type:    'Character',
+                    reward_item_id: item.reward_item_id,
+                    quantity:       item.quantity,
+                    name:           detail.name,
+                    description:    isDuplicate ? 'Sudah dimiliki (duplikat)' : null,
+                    rarity:         detail.rarity,
+                    element:        detail.element
+                });
+            }
+        }
+
+        // =========================================================
+        // 6. Commit transaksi
+        // =========================================================
+        await conn.commit();
+        conn.release();
+
+        // =========================================================
+        // 7. Kirim response standar
+        // =========================================================
+        return res.status(200).json({
+            status: 'success',
+            message: 'Hasil battle berhasil diproses!',
+            data: {
+                obtained_rewards: obtainedRewards
+            }
+        });
+
+    } catch (error) {
+        await conn.rollback();
+        conn.release();
+        console.error('[saveBattleResult] Error:', error);
+        return res.status(500).json({
+            status: 'error',
+            message: 'Terjadi kesalahan pada server saat memproses hasil battle.',
+            error_detail: error.message
+        });
+    }
 };

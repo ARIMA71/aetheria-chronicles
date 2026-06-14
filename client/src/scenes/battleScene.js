@@ -1,4 +1,4 @@
-﻿import Player from "../entities/player";
+import Player from "../entities/player";
 import Enemy from "../entities/enemy";
 const W = 450, H = 800, CX = 225;
 export default class BattleScene extends Phaser.Scene {
@@ -8,6 +8,11 @@ export default class BattleScene extends Phaser.Scene {
         this.players = []; this.activePlayer = null;
         this.aetherGauge = 0; this.aetherGaugeMax = 100;
         this._sidebarOpen = false; this._timerSec = 2699; this._exhaustedTurns = 0; this._enragedTurns = 0;
+        this.potionCount = 0;
+        this.potionsUsed = 0;
+        this.healsRemaining = 0;
+        this.playerId = 1;
+        this.questId = 5;
         this.add.rectangle(CX, H / 2, W, H, 0x1a1a2e);
         this.add.rectangle(CX, 26, W, 52, 0x0a0a17);
         this.add.rectangle(CX, 435, W, 2, 0x0f2040);
@@ -22,6 +27,8 @@ export default class BattleScene extends Phaser.Scene {
             const j = await r.json();
             if (j.status !== "success") throw new Error(j.message || "API error");
             this.loadingText.destroy();
+            this.potionCount = j.data.potion_count !== undefined ? j.data.potion_count : 0;
+            this.healsRemaining = Math.min(3, this.potionCount);
             const chars = j.data.player_party.characters.slice(0, 4);
             const cW = 85, gap = 15, total = chars.length, totalW = total * cW + (total - 1) * gap, sx = (W - totalW) / 2 + cW / 2;
             chars.forEach((d, i) => {
@@ -179,14 +186,21 @@ export default class BattleScene extends Phaser.Scene {
         this._aethFill = this.add.rectangle(20, 693, 0, 8, 0x7b68ee).setOrigin(0, 0.5);
         this._aethPct = this.add.text(W - 20, 683, "0%", { fontSize: "8px", color: "#9999cc" }).setOrigin(1, 1);
         this.add.text(20, 683, "AETHER", { fontSize: "8px", color: "#9999cc" }).setOrigin(0, 1);
-        const hb = this.add.rectangle(130, 735, 220, 44, 0x0d2a1a);
-        hb.setStrokeStyle(2, 0x2ecc71);
-        this.add.text(130, 735, "⊕  HEAL  (Fase 3)", { fontSize: "12px", color: "#a8e6cf" }).setOrigin(0.5);
+        
+        this._healBtn = this.add.rectangle(130, 735, 220, 44, 0x0d2a1a);
+        this._healBtn.setStrokeStyle(2, 0x2ecc71);
+        this._healText = this.add.text(130, 735, "⊕  HEAL  (x" + this.healsRemaining + ")", { fontSize: "12px", color: "#a8e6cf" }).setOrigin(0.5);
+        this._healBtn.setInteractive();
+        this._healBtn.on("pointerdown", () => {
+            if (this.turn === "player") this.useHealPotion();
+        });
+        
         this._abBg = this.add.rectangle(350, 735, 160, 44, 0x0d0d3a);
         this._abBg.setStrokeStyle(2, 0x5555bb);
         this._abText = this.add.text(350, 735, "✦ AETHER BURST", { fontSize: "11px", color: "#7777cc", align: "center" }).setOrigin(0.5);
         this._abBg.setInteractive(); this._abBg.on("pointerdown", () => { if (this.turn === "player") this.aetherBurst(); });
         this._refreshAetherUI();
+        this._refreshHealButtonUI();
     }
     _refreshAetherUI() {
         if (!this._aethFill) return;
@@ -406,7 +420,10 @@ export default class BattleScene extends Phaser.Scene {
             }
         }
         this._refreshAetherUI();
-        if (dead) { this.turn = "none"; this.showLog("VICTORY! 🎉"); return; }
+        if (dead) {
+            this.checkVictory();
+            return;
+        }
         this.turn = "enemy";
         this.time.delayedCall(800, () => this.enemyAttack());
     }
@@ -455,19 +472,30 @@ export default class BattleScene extends Phaser.Scene {
 
         } else if (type === "revive") {
             // Revive: hidupkan kembali karakter KO dengan HP sebagian
-            const koChar = this.players.find(pl => pl.hp <= 0);
-            if (koChar) {
-                koChar.hp = Math.floor(koChar.maxHp * (sk.modifier || 0.2));
-                koChar.refreshVisual();
-                this.showLog(p.charName + ": " + sk.name + " → " + koChar.charName + " revived!");
-            } else {
-                this.showLog("No KO ally to revive!"); return;
+            const deadPlayers = this.players.filter(pl => pl.hp <= 0);
+            if (deadPlayers.length === 0) {
+                this.showLog("No KO ally to revive!");
+                return;
             }
+
+            // Tampilkan modal pemilihan karakter untuk di-revive secara asinkron
+            this._showCharacterSelectionModal("REVIVE TARGET", false, (targetChar) => {
+                targetChar.hp = Math.floor(targetChar.maxHp * (sk.modifier || 0.2));
+                targetChar.refreshVisual();
+                this.showLog(p.charName + ": " + sk.name + " → " + targetChar.charName + " revived!");
+
+                this._applyStatusEffects(p, sk, sk.status_effects);
+                if (sk.cooldown) p.cooldowns[sk.id] = sk.cooldown;
+                p.refreshVisual();
+                if (this.checkVictory()) return;
+                if (this._sidebarOpen) this._renderSidebar();
+            });
+            return;
         }
 
         if (sk.cooldown) p.cooldowns[sk.id] = sk.cooldown;
         p.refreshVisual();
-        if (this.enemy.hp <= 0) { this.turn = "none"; this.showLog("VICTORY! 🎉"); }
+        if (this.checkVictory()) return;
         if (this._sidebarOpen) this._renderSidebar();
     }
     aetherBurst() {
@@ -484,7 +512,7 @@ export default class BattleScene extends Phaser.Scene {
         this.aetherGauge = 0;
         this._refreshAetherUI();
         this.showLog("✦✦ AETHER BURST (" + mcElement.toUpperCase() + ")! → " + dmg + " DMG!");
-        if (this.enemy.hp <= 0) { this.turn = "none"; this.showLog("VICTORY! 🎉"); }
+        this.checkVictory();
     }
     /**
      * Giliran musuh — Alur Keputusan:
@@ -746,4 +774,141 @@ export default class BattleScene extends Phaser.Scene {
     }
     _randAlive() { const l = this.players.filter(p => p.hp > 0); return l.length ? l[Math.floor(Math.random() * l.length)] : null; }
     _elemColor(el) { return { Fire: 0xe74c3c, Wind: 0x2ecc71, Earth: 0xe67e22, Water: 0x3498db, Light: 0xf1c40f, Dark: 0x9b59b6 }[el] || 0xff5555; }
+
+    useHealPotion() {
+        if (this.healsRemaining <= 0) {
+            this.showLog("No Green Potions left!");
+            return;
+        }
+
+        this._showCharacterSelectionModal("HEAL TARGET", true, (targetChar) => {
+            const healAmt = Math.floor(targetChar.maxHp * 0.25);
+            targetChar.hp = Math.min(targetChar.hp + healAmt, targetChar.maxHp);
+            targetChar.refreshVisual();
+
+            this.healsRemaining--;
+            this.potionsUsed++;
+            this._refreshHealButtonUI();
+
+            this.showLog(`Used Green Potion -> ${targetChar.charName} healed ${healAmt}!`);
+        });
+    }
+
+    _refreshHealButtonUI() {
+        if (this._healText) {
+            this._healText.setText("⊕  HEAL  (x" + this.healsRemaining + ")");
+            if (this.healsRemaining <= 0) {
+                this._healBtn.setStrokeStyle(2, 0x555555);
+                this._healText.setColor("#555555");
+            } else {
+                this._healBtn.setStrokeStyle(2, 0x2ecc71);
+                this._healText.setColor("#a8e6cf");
+            }
+        }
+    }
+
+    _showCharacterSelectionModal(titleText, requireAlive, onSelectedCallback) {
+        const modalContainer = this.add.container(0, 0).setDepth(100);
+
+        const cover = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.7).setInteractive();
+        cover.on("pointerdown", (pointer, x, y, event) => {
+            event.stopPropagation();
+        });
+        modalContainer.add(cover);
+
+        const windowBg = this.add.rectangle(CX, H / 2, 360, 260, 0x0d1b2a);
+        windowBg.setStrokeStyle(2, 0x4a90d9);
+        modalContainer.add(windowBg);
+
+        const title = this.add.text(CX, H / 2 - 105, titleText, { fontSize: "14px", color: "#7ec8e3", fontStyle: "bold" }).setOrigin(0.5);
+        modalContainer.add(title);
+
+        const positions = [
+            { x: CX - 80, y: H / 2 - 35 },
+            { x: CX + 80, y: H / 2 - 35 },
+            { x: CX - 80, y: H / 2 + 35 },
+            { x: CX + 80, y: H / 2 + 35 }
+        ];
+
+        this.players.forEach((p, idx) => {
+            const pos = positions[idx];
+            const isDead = p.hp <= 0;
+            const isValid = requireAlive ? !isDead : isDead;
+
+            const charBox = this.add.rectangle(pos.x, pos.y, 140, 52, isValid ? (requireAlive ? 0x112b1a : 0x24152e) : 0x111111);
+            charBox.setStrokeStyle(1.5, isValid ? (requireAlive ? 0x2ecc71 : 0xb39ddb) : 0x333333);
+            modalContainer.add(charBox);
+
+            const nameTxt = this.add.text(pos.x - 62, pos.y - 14, p.charName, { fontSize: "11px", color: isValid ? "#e0e0ff" : "#666", fontStyle: "bold" }).setOrigin(0, 0.5);
+            modalContainer.add(nameTxt);
+
+            const barW = 124;
+            const hpBarBg = this.add.rectangle(pos.x, pos.y + 4, barW, 6, 0x222222).setOrigin(0.5);
+            const ratio = Math.max(0, p.hp / p.maxHp);
+            
+            let barColor = 0x2ecc71; // Hijau
+            if (isDead) {
+                barColor = 0x000000;
+            } else if (ratio <= 0.25) {
+                barColor = 0xe74c3c; // Merah
+            } else if (ratio <= 0.50) {
+                barColor = 0xe67e22; // Oren
+            }
+
+            const hpBarFill = this.add.rectangle(pos.x - barW / 2, pos.y + 4, barW * ratio, 6, barColor).setOrigin(0, 0.5);
+            modalContainer.add([hpBarBg, hpBarFill]);
+
+            const statusStr = isDead ? "KO 💀" : `${p.hp}/${p.maxHp}`;
+            const statusColor = isDead ? "#ff8a80" : "#a8e6cf";
+            const statusTxt = this.add.text(pos.x - 62, pos.y + 14, statusStr, { fontSize: "9px", color: statusColor }).setOrigin(0, 0.5);
+            modalContainer.add(statusTxt);
+
+            if (isValid) {
+                charBox.setInteractive();
+                charBox.on("pointerover", () => {
+                    charBox.setFillStyle(requireAlive ? 0x1c452a : 0x3b214c);
+                });
+                charBox.on("pointerout", () => {
+                    charBox.setFillStyle(requireAlive ? 0x112b1a : 0x24152e);
+                });
+                charBox.on("pointerdown", () => {
+                    modalContainer.destroy();
+                    onSelectedCallback(p);
+                });
+            } else {
+                charBox.setAlpha(0.65);
+                nameTxt.setAlpha(0.65);
+                statusTxt.setAlpha(0.65);
+            }
+        });
+
+        const cancelBtn = this.add.rectangle(CX, H / 2 + 95, 100, 30, 0x2a0d0d);
+        cancelBtn.setStrokeStyle(1.5, 0xe74c3c);
+        const cancelText = this.add.text(CX, H / 2 + 95, "CANCEL", { fontSize: "11px", color: "#ff8a80", fontStyle: "bold" }).setOrigin(0.5);
+        modalContainer.add([cancelBtn, cancelText]);
+
+        cancelBtn.setInteractive();
+        cancelBtn.on("pointerover", () => cancelBtn.setFillStyle(0x401515));
+        cancelBtn.on("pointerout", () => cancelBtn.setFillStyle(0x2a0d0d));
+        cancelBtn.on("pointerdown", () => {
+            modalContainer.destroy();
+        });
+    }
+
+    checkVictory() {
+        if (this.enemy.hp <= 0) {
+            this.turn = "none";
+            this.showLog("VICTORY! 🎉");
+            this.time.delayedCall(1500, () => {
+                this.scene.pause();
+                this.scene.launch('VictoryScene', {
+                    questId: this.questId,
+                    playerId: this.playerId,
+                    potionsUsed: this.potionsUsed
+                });
+            });
+            return true;
+        }
+        return false;
+    }
 }

@@ -243,6 +243,11 @@ export default class Player extends Phaser.GameObjects.Container {
             this._bg.setStrokeStyle(2, 0x444444);
             this._accent.setFillStyle(0x444444);
             this.setSAReady(false);
+        } else {
+            this._koOverlay.setAlpha(0);
+            this._koText.setAlpha(0);
+            this._bg.setStrokeStyle(2, this._elemColor);
+            this._accent.setFillStyle(this._elemColor);
         }
 
         // ── Status Effect Indicators ──
