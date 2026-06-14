@@ -172,34 +172,149 @@ export default class Enemy extends Phaser.GameObjects.Container {
     }
 
     /**
-     * Pilih AI behavior yang sesuai dengan fase musuh saat ini.
-     * Mengembalikan satu entry dari aiBehaviors, atau null jika kosong.
+     * Evaluasi dan pilih AI behavior terbaik menggunakan Utility Score.
+     *
+     * Alur:
+     *   1. Filter behaviors berdasarkan fase saat ini (Normal/Enraged/Exhausted)
+     *   2. Untuk setiap behavior, hitung totalScore = base_utility + bonus dari modifiers
+     *   3. Cek kondisi khusus (One_Time_Use, Trigger_HP_Threshold)
+     *   4. Kembalikan behavior dengan totalScore tertinggi, atau null jika tidak ada
+     *
+     * @param {object} knowledge - Knowledge Base dari BattleScene._buildKnowledge()
+     * @returns {object|null} - Satu entry behavior terpilih, atau null
+     */
+    /**
+     * Mengevaluasi skill khusus HP Trigger (base_utility = 0 dengan Trigger_HP_Threshold).
+     * Dapat dilepaskan kapan saja saat HP bos berkurang melewati threshold,
+     * mengabaikan status exhausted maupun kondisi CA bar.
      * @returns {object|null}
      */
-    pickBehavior() {
-        const phase = this.modeState === 'enraged'
+    evaluateHpTriggerAction() {
+        const hpTriggerBehaviors = this.aiBehaviors.filter(b => {
+            const mods = b.modifiers || {};
+            if (mods.Trigger_HP_Threshold === undefined) return false;
+
+            // Cek One_Time_Use
+            if (mods.One_Time_Use === true) {
+                if (this._usedOneTimeSkills && this._usedOneTimeSkills.has(b.skill.id)) {
+                    return false;
+                }
+            }
+
+            const threshold = Number(mods.Trigger_HP_Threshold);
+            const enemyHpRatio = this.hp / this.maxHp;
+            return enemyHpRatio <= threshold;
+        });
+
+        if (hpTriggerBehaviors.length === 0) return null;
+
+        // Cari dengan utility score tertinggi (jika ada modifiers tambahan) atau ambil yang pertama
+        let maxScore = -Infinity;
+        let candidates = [];
+        for (const b of hpTriggerBehaviors) {
+            let score = b.base_utility;
+            candidates.push({ behavior: b, score });
+            if (score > maxScore) maxScore = score;
+        }
+
+        const bestBehaviors = candidates.filter(c => c.score === maxScore).map(c => c.behavior);
+        const chosen = bestBehaviors[Math.floor(Math.random() * bestBehaviors.length)];
+
+        // Tandai One_Time_Use jika terpilih
+        if (chosen && chosen.modifiers && chosen.modifiers.One_Time_Use === true) {
+            if (!this._usedOneTimeSkills) this._usedOneTimeSkills = new Set();
+            this._usedOneTimeSkills.add(chosen.skill.id);
+        }
+
+        return chosen;
+    }
+
+    /**
+     * Evaluasi dan pilih AI behavior terbaik menggunakan Utility Score.
+     * Hanya mengevaluasi skill biasa (base_utility > 0) untuk Charge Attack normal.
+     *
+     * @param {object} knowledge - Knowledge Base dari BattleScene._buildKnowledge()
+     * @returns {object|null} - Satu entry behavior terpilih, atau null
+     */
+    evaluateAction(knowledge) {
+        if (!knowledge) return null;
+
+        // Tentukan fase berdasarkan modeState saat ini
+        const currentPhase = this.modeState === 'enraged'
             ? 'Enraged'
             : this.modeState === 'exhausted'
             ? 'Exhausted'
             : 'Normal';
 
-        // Filter berdasarkan fase; fallback ke Normal jika fase tidak ada
-        const candidates = this.aiBehaviors.filter(b => b.phase === phase);
-        const pool = candidates.length > 0 ? candidates : this.aiBehaviors;
-
+        // Filter: hanya behaviors yang cocok dengan fase sekarang DAN base_utility > 0 (skill biasa, bukan HP Trigger)
+        const candidates = this.aiBehaviors.filter(b => 
+            b.phase === currentPhase && 
+            b.base_utility > 0 &&
+            b.modifiers.Trigger_HP_Threshold === undefined
+        );
+        const pool = candidates.length > 0 ? candidates : this.aiBehaviors.filter(b => b.base_utility > 0 && b.modifiers.Trigger_HP_Threshold === undefined);
         if (!pool.length) return null;
 
-        // Pilih berdasarkan utility score (weighted random sederhana)
-        // Hitung total utility dari pool
-        const totalUtil = pool.reduce((s, b) => s + b.base_utility, 0);
-        if (totalUtil <= 0) return pool[0];
+        let candidatesWithScore = [];
+        let maxScore = -Infinity;
 
-        let rand = Math.random() * totalUtil;
-        for (const b of pool) {
-            rand -= b.base_utility;
-            if (rand <= 0) return b;
+        for (const behavior of pool) {
+            let totalScore = behavior.base_utility;
+            const mods    = behavior.modifiers || {};
+
+            // One_Time_Use: skill ini hanya boleh dipakai sekali sepanjang battle
+            if (mods.One_Time_Use === true) {
+                if (this._usedOneTimeSkills && this._usedOneTimeSkills.has(behavior.skill.id)) {
+                    continue; // sudah dipakai, skip
+                }
+            }
+
+            // ── Evaluasi Modifier Score ──────────────────────────────────────
+
+            // Party_Healthy: true jika rata-rata HP party di atas 70%
+            if (mods.Party_Healthy !== undefined && knowledge.partyHealthy === true) {
+                totalScore += Number(mods.Party_Healthy);
+            }
+
+            // Party_Low_HP_Count_gt_2: true jika ≥3 karakter HP di bawah 30%
+            if (mods.Party_Low_HP_Count_gt_2 !== undefined && knowledge.partyLowHpCount >= 3) {
+                totalScore += Number(mods.Party_Low_HP_Count_gt_2);
+            }
+
+            // P_Buff_gt_2: true jika total buff aktif party > 2
+            if (mods.P_Buff_gt_2 !== undefined && knowledge.playerBuffCount > 2) {
+                totalScore += Number(mods.P_Buff_gt_2);
+            }
+
+            // Target_Lowest_HP: bonus jika ada target dengan HP sangat rendah
+            if (mods.Target_Lowest_HP !== undefined && knowledge.partyLowHpCount > 0) {
+                totalScore += Number(mods.Target_Lowest_HP);
+            }
+
+            // Target_Healer_Alive: bonus jika ada healer/reviver masih hidup di party
+            if (mods.Target_Healer_Alive !== undefined && knowledge.healerAlive === true) {
+                totalScore += Number(mods.Target_Healer_Alive);
+            }
+
+            candidatesWithScore.push({ behavior, score: totalScore });
+            if (totalScore > maxScore) {
+                maxScore = totalScore;
+            }
         }
-        return pool[pool.length - 1];
+
+        if (candidatesWithScore.length === 0) return null;
+
+        // Ambil semua behavior yang memiliki skor sama dengan skor tertinggi
+        const bestBehaviors = candidatesWithScore.filter(c => c.score === maxScore).map(c => c.behavior);
+        const bestBehavior = bestBehaviors[Math.floor(Math.random() * bestBehaviors.length)];
+
+        // Tandai One_Time_Use jika behavior terpilih
+        if (bestBehavior && bestBehavior.modifiers && bestBehavior.modifiers.One_Time_Use === true) {
+            if (!this._usedOneTimeSkills) this._usedOneTimeSkills = new Set();
+            this._usedOneTimeSkills.add(bestBehavior.skill.id);
+        }
+
+        return bestBehavior;
     }
 
     // ─────────────────────────────────────────────────────────────────────────

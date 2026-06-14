@@ -314,6 +314,48 @@ export default class BattleScene extends Phaser.Scene {
         this.turnText.setText("TURN " + this.currentTurn);
         if (this._sidebarOpen) this._renderSidebar();
     }
+    /**
+     * Kumpulkan data keadaan arena (Knowledge Base) untuk AI musuh.
+     * Dipanggil sesaat sebelum giliran musuh agar data selalu up-to-date.
+     * @returns {object} knowledge
+     */
+    _buildKnowledge() {
+        const alive = this.players.filter(p => p.hp > 0);
+
+        const partyHpRatios = alive.map(p => p.hp / p.maxHp);
+        const partyLowHpCount = alive.filter(p => (p.hp / p.maxHp) < 0.3).length;
+        const avgHpRatio = partyHpRatios.length
+            ? partyHpRatios.reduce((s, r) => s + r, 0) / partyHpRatios.length
+            : 0;
+        const partyHealthy = avgHpRatio > 0.7;
+
+        // Hitung buff aktif musuh (efek bertipe Buff pada enemy)
+        const enemyBuffCount  = this.enemy.activeEffects.filter(e => (e.effect_type || '').toLowerCase() === 'buff').length;
+        const enemyDebuffCount = this.enemy.activeEffects.filter(e => (e.effect_type || '').toLowerCase() === 'debuff').length;
+
+        // Hitung total buff aktif di seluruh party
+        const playerBuffCount = alive.reduce((total, p) => {
+            return total + p.activeEffects.filter(e => (e.effect_type || '').toLowerCase() === 'buff').length;
+        }, 0);
+
+        // Deteksi apakah ada healer/reviver masih hidup di party
+        const healerAlive = alive.some(p =>
+            p.skills && p.skills.some(s => {
+                const t = (s.type || '').toLowerCase();
+                return t === 'heal' || t === 'revive' || t === 'cleanse';
+            })
+        );
+
+        return {
+            partyHpRatios,
+            partyLowHpCount,
+            partyHealthy,
+            enemyBuffCount,
+            enemyDebuffCount,
+            playerBuffCount,
+            healerAlive
+        };
+    }
     async playerAttack() {
         const alive = this.players.filter(p => p.hp > 0);
         if (!alive.length) return;
@@ -444,59 +486,168 @@ export default class BattleScene extends Phaser.Scene {
         this.showLog("✦✦ AETHER BURST (" + mcElement.toUpperCase() + ")! → " + dmg + " DMG!");
         if (this.enemy.hp <= 0) { this.turn = "none"; this.showLog("VICTORY! 🎉"); }
     }
-    enemyAttack(attackCount = 1) {
-        if (this.enemy.caBar >= this.enemy.caMax && this.enemy.modeState !== "exhausted") { this.enemyChargeAttack(); return; }
-        const t = this._randAlive(); if (!t) return;
-        const modeMult = this.enemy.modeState === "exhausted" ? 0.7 : (this.enemy.modeState === "enraged" ? 1.5 : 1);
-        const eAtk = this.enemy.getStat('ATK') * modeMult;
-        const rawDmg = eAtk;
-        let dmg = this._calcMitigatedDmg(rawDmg, this.enemy, t);
-        const crit = Math.random() < this.enemy.crit;
-        if (crit) dmg = Math.floor(dmg * this.enemy.critDamage);
-        t.hp = Math.max(0, t.hp - dmg); t.refreshVisual(); this.playSpriteHitAnim(t);
-        const isLastAttack = (this.enemy.modeState !== "enraged" || attackCount === 2);
-        if (this.enemy.modeState !== "exhausted" && isLastAttack) this.enemy.caBar = Math.min(this.enemy.caBar + 1, this.enemy.caMax);
-        this._refreshEnemyHUD();
-        this.showLog(crit ? this.enemy.charName + " CRIT " + t.charName + "! 💥 " + dmg : this.enemy.charName + " → " + t.charName + ": " + dmg);
-        if (this.players.every(p => p.hp <= 0)) { this.turn = "none"; this.showLog("DEFEAT... 💀"); return; }
-        if (this.enemy.modeState === "enraged" && attackCount === 1) {
-            this.time.delayedCall(800, () => this.enemyAttack(2));
-        } else {
-            this.turn = "player"; this.time.delayedCall(1500, () => this.processTurnEnd());
+    /**
+     * Giliran musuh — Alur Keputusan:
+     *   1. HP Trigger (Skala Prioritas Utama): Otomatis cast skill (utility=0) saat HP bos melewati threshold,
+     *      mengabaikan kondisi CA bar penuh/tidak dan status exhausted.
+     *   2. Charge Attack (Normal Skill): Jika CA bar penuh DAN tidak exhausted, gunakan skill biasa (utility > 0). Reset CA bar -> 0.
+     *   3. Penahanan CA (Exhausted): Jika CA bar penuh tapi exhausted, dilarang CA. Tahan CA bar (jangan reset/tambah), fallback ke Basic Attack.
+     *   4. Turn Biasa (Pengisian CA): Jika CA belum penuh, gunakan Basic Attack dan tambahkan CA bar +1 jika tidak exhausted.
+     */
+    enemyAttack() {
+        const knowledge = this._buildKnowledge();
+        const modeMult  = this.enemy.modeState.toLowerCase() === 'exhausted' ? 0.7
+                        : this.enemy.modeState.toLowerCase() === 'enraged'   ? 1.5
+                        : 1.0;
+        const isExhausted = this.enemy.modeState.toLowerCase() === 'exhausted';
+
+        // ── 1. HP Trigger (Prioritas Utama) ───────────────────────────────────
+        const hpTriggerAction = this.enemy.evaluateHpTriggerAction();
+        if (hpTriggerAction) {
+            this.enemy.caBar = 0;
+            this._refreshEnemyHUD();
+            this._executeEnemySkill(hpTriggerAction, modeMult);
+            if (this.players.every(p => p.hp <= 0)) { this.turn = 'none'; this.showLog('DEFEAT... 💀'); return; }
+            this.turn = 'player';
+            this.time.delayedCall(1500, () => this.processTurnEnd());
+            return;
+        }
+
+        // ── 2. Charge Attack (Validasi CA & Status) ───────────────────────────
+        if (this.enemy.caBar >= this.enemy.caMax && !isExhausted) {
+            const behavior = this.enemy.evaluateAction(knowledge);
+            this.enemy.caBar = 0;
+            this._refreshEnemyHUD();
+
+            if (behavior) {
+                this._executeEnemySkill(behavior, modeMult);
+            } else {
+                this._executeEnemyBasicAttack(modeMult, false);
+            }
+
+            if (this.players.every(p => p.hp <= 0)) { this.turn = 'none'; this.showLog('DEFEAT... 💀'); return; }
+            this.turn = 'player';
+            this.time.delayedCall(1500, () => this.processTurnEnd());
+            return;
+        }
+
+        // ── 3. Penahanan CA ───────────────────────────────────────────────────
+        if (this.enemy.caBar >= this.enemy.caMax && isExhausted) {
+            // Musuh dilarang melakukan Charge Attack (tahan nilai caBar, jangan direset & jangan ditambah)
+            this._executeEnemyBasicAttack(modeMult, false);
+
+            if (this.players.every(p => p.hp <= 0)) { this.turn = 'none'; this.showLog('DEFEAT... 💀'); return; }
+            this.turn = 'player';
+            this.time.delayedCall(1500, () => this.processTurnEnd());
+            return;
+        }
+
+        // ── 4. Turn Biasa (Basic Attack & Pengisian CA) ───────────────────────
+        const incrementCA = !isExhausted;
+        const handledAsync = this._executeEnemyBasicAttack(modeMult, incrementCA);
+
+        if (!handledAsync) {
+            if (this.players.every(p => p.hp <= 0)) { this.turn = 'none'; this.showLog('DEFEAT... 💀'); return; }
+            this.turn = 'player';
+            this.time.delayedCall(1500, () => this.processTurnEnd());
         }
     }
-    enemyChargeAttack() {
-        // Gunakan pickBehavior() agar AI memilih skill sesuai fase & utility
-        const behavior = this.enemy.pickBehavior();
-        const t = this._randAlive();
-        if (!t || !behavior) { this.turn = "player"; return; }
-        const sk = behavior.skill;
-        const type = (sk.type || '').toLowerCase();
-        const modeMult = this.enemy.modeState === "exhausted" ? 0.7 : (this.enemy.modeState === "enraged" ? 1.5 : 1);
 
-        if (type === "damage") {
-            const eAtk = this.enemy.getStat('ATK') * modeMult;
-            const rawDmg = eAtk * sk.modifier;
-            const dmg = this._calcMitigatedDmg(rawDmg, this.enemy, t);
-            t.hp = Math.max(0, t.hp - dmg); t.refreshVisual(); this.playSpriteHitAnim(t);
-            this.showLog("⚡ " + this.enemy.charName + ": " + sk.name + "! → " + t.charName + " -" + dmg);
-        } else if (type === "support") {
-            this.showLog("⚡ " + this.enemy.charName + ": " + sk.name + "!");
+    _executeEnemySkill(behavior, modeMult) {
+        const sk   = behavior.skill;
+        const type = (sk.type || '').toLowerCase();
+        const targetType = (sk.target_type || '').toLowerCase();
+        const aliveChars = this.players.filter(p => p.hp > 0);
+
+        if (targetType === 'all_enemies' || targetType === 'all_allies') {
+            if (type === 'damage') {
+                const eAtk   = this.enemy.getStat('ATK') * modeMult;
+                const rawDmg = eAtk * (sk.modifier || 1);
+                let totalDmg = 0;
+                for (const t of aliveChars) {
+                    const dmg = this._calcMitigatedDmg(rawDmg, this.enemy, t);
+                    t.hp = Math.max(0, t.hp - dmg);
+                    t.refreshVisual(); this.playSpriteHitAnim(t);
+                    totalDmg += dmg;
+                }
+                this.showLog(`⚡ ${this.enemy.charName}: ${sk.name}! → All party -${totalDmg} total`);
+            } else {
+                this.showLog(`⚡ ${this.enemy.charName}: ${sk.name}!`);
+            }
+            this._applyStatusEffects(this.enemy, sk, sk.status_effects);
         } else {
-            // Fallback damage sederhana
-            const eAtk = this.enemy.getStat('ATK') * modeMult;
-            const tDef = t.getStat('DEF');
-            const mitigation = tDef / (tDef + 500);
-            const dmg = Math.max(Math.floor(eAtk * (1 - mitigation)), 1);
-            t.hp = Math.max(0, t.hp - dmg); t.refreshVisual(); this.playSpriteHitAnim(t);
-            this.showLog("⚡ " + this.enemy.charName + ": " + sk.name + "! → -" + dmg);
+            let t;
+            if (behavior.modifiers && behavior.modifiers.Target_Lowest_HP && aliveChars.length > 0) {
+                t = aliveChars.reduce((lowest, p) =>
+                    (p.hp / p.maxHp) < (lowest.hp / lowest.maxHp) ? p : lowest
+                );
+            } else {
+                t = this._randAlive();
+            }
+
+            if (t) {
+                if (type === 'damage') {
+                    const eAtk   = this.enemy.getStat('ATK') * modeMult;
+                    const rawDmg = eAtk * (sk.modifier || 1);
+                    const dmg    = this._calcMitigatedDmg(rawDmg, this.enemy, t);
+                    t.hp = Math.max(0, t.hp - dmg);
+                    t.refreshVisual(); this.playSpriteHitAnim(t);
+                    this.showLog(`⚡ ${this.enemy.charName}: ${sk.name}! → ${t.charName} -${dmg}`);
+                } else {
+                    this.showLog(`⚡ ${this.enemy.charName}: ${sk.name}!`);
+                }
+                this._applyStatusEffects(this.enemy, sk, sk.status_effects);
+            }
         }
-        // Terapkan status_effects dari skill AI
-        this._applyStatusEffects(this.enemy, sk, sk.status_effects);
-        this.enemy.caBar = 0;
         this._refreshEnemyHUD();
-        if (this.players.every(p => p.hp <= 0)) { this.turn = "none"; this.showLog("DEFEAT... 💀"); return; }
-        this.turn = "player"; this.time.delayedCall(1500, () => this.processTurnEnd());
+    }
+
+    _executeEnemyBasicAttack(modeMult, incrementCA) {
+        const t = this._randAlive();
+        if (!t) return false;
+
+        const eAtk   = this.enemy.getStat('ATK') * modeMult;
+        let dmg      = this._calcMitigatedDmg(eAtk, this.enemy, t);
+        const crit   = Math.random() < this.enemy.crit;
+        if (crit) dmg = Math.floor(dmg * this.enemy.critDamage);
+
+        t.hp = Math.max(0, t.hp - dmg);
+        t.refreshVisual(); this.playSpriteHitAnim(t);
+
+        if (incrementCA) {
+            this.enemy.caBar = Math.min(this.enemy.caBar + 1, this.enemy.caMax);
+        }
+        this._refreshEnemyHUD();
+        this.showLog(crit
+            ? `${this.enemy.charName} CRIT ${t.charName}! 💥 ${dmg}`
+            : `${this.enemy.charName} → ${t.charName}: ${dmg}`);
+
+        // Jika Enraged, serang 2 kali
+        if (this.enemy.modeState.toLowerCase() === 'enraged') {
+            this.time.delayedCall(800, () => {
+                const t2 = this._randAlive();
+                if (!t2) {
+                    if (this.players.every(p => p.hp <= 0)) { this.turn = 'none'; this.showLog('DEFEAT... 💀'); return; }
+                    this.turn = 'player';
+                    this.time.delayedCall(1500, () => this.processTurnEnd());
+                    return;
+                }
+                let dmg2 = this._calcMitigatedDmg(eAtk, this.enemy, t2);
+                const crit2 = Math.random() < this.enemy.crit;
+                if (crit2) dmg2 = Math.floor(dmg2 * this.enemy.critDamage);
+                t2.hp = Math.max(0, t2.hp - dmg2);
+                t2.refreshVisual(); this.playSpriteHitAnim(t2);
+                this.showLog(crit2
+                    ? `${this.enemy.charName} CRIT ${t2.charName}! 💥 ${dmg2}`
+                    : `${this.enemy.charName} → ${t2.charName}: ${dmg2}`);
+
+                if (this.players.every(p => p.hp <= 0)) { this.turn = 'none'; this.showLog('DEFEAT... 💀'); return; }
+                this.turn = 'player';
+                this.time.delayedCall(1500, () => this.processTurnEnd());
+            });
+            return true;
+        }
+        return false;
     }
     /**
      * Hitung damage akhir ter-mitigasi dengan keunggulan elemen.
