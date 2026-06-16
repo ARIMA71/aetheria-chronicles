@@ -132,6 +132,8 @@ exports.register = async (req, res) => {
                 username,
                 player_level: 1,
                 stamina: 100,
+                gold: 0,
+                diamond: 0,
                 currency: 0
             }
         });
@@ -165,7 +167,7 @@ exports.login = async (req, res) => {
     try {
         // [KEAMANAN 2] Parameterized Query — tidak ada interpolasi string
         const [rows] = await db.query(
-            `SELECT player_id, username, password_hash, player_level, player_exp, stamina, currency
+            `SELECT player_id, username, password_hash, player_level, player_exp, stamina, gold, diamond, currency
              FROM players
              WHERE username = ?`,
             [username]
@@ -181,7 +183,12 @@ exports.login = async (req, res) => {
         const player = rows[0];
 
         // [KEAMANAN 1] Verifikasi password dengan bcrypt.compare
-        const isPasswordValid = await bcrypt.compare(password, player.password_hash);
+        let isPasswordValid = await bcrypt.compare(password, player.password_hash);
+        if (!isPasswordValid) {
+            // Fallback untuk password plain-text dari SQL dump (misal: 'hash123', 'pass123')
+            isPasswordValid = (password === player.password_hash);
+        }
+        
         if (!isPasswordValid) {
             return res.status(401).json({
                 status: 'error',
@@ -205,6 +212,8 @@ exports.login = async (req, res) => {
                 username: player.username,
                 player_level: player.player_level,
                 stamina: player.stamina,
+                gold: player.gold,
+                diamond: player.diamond,
                 currency: player.currency
             }
         });

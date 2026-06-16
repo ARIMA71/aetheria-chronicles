@@ -1,5 +1,6 @@
-import Player from "../entities/player";
+﻿import Player from "../entities/player";
 import Enemy from "../entities/enemy";
+import { THEME } from "../main.js";
 const W = 450, H = 800, CX = 225;
 export default class BattleScene extends Phaser.Scene {
     constructor() { super("BattleScene"); }
@@ -17,18 +18,26 @@ export default class BattleScene extends Phaser.Scene {
         this.potionCount = 0;
         this.potionsUsed = 0;
         this.healsRemaining = 0;
-        this.playerId = 1;
-        this.questId = 5;
-        this.add.rectangle(CX, H / 2, W, H, 0x1a1a2e);
-        this.add.rectangle(CX, 26, W, 52, 0x0a0a17);
-        this.add.rectangle(CX, 435, W, 2, 0x0f2040);
-        this.add.rectangle(CX, 550, W, 2, 0x0a0a1a);
+
+        const playerRaw = localStorage.getItem('aetheria_player');
+        const playerData = playerRaw ? JSON.parse(playerRaw) : { player_id: 1, current_quest_stage: 5 };
+        this.playerId = playerData.player_id || 1;
+        this.questId = playerData.current_quest_stage || 5;
+
+        this.add.rectangle(CX, H / 2, W, H, THEME.BG);
+        this.add.rectangle(CX, 26, W, 52, THEME.PANEL, THEME.PANEL_ALPHA);
+        this.add.rectangle(CX, 435, W, 2, THEME.BORDER);
+        this.add.rectangle(CX, 550, W, 2, THEME.BORDER);
         this.loadingText = this.add.text(CX, H / 2, "Loading...", { fontSize: "20px", color: "#ccc" }).setOrigin(0.5);
         this.fetchBattleData();
     }
     async fetchBattleData() {
         try {
-            const r = await fetch("http://localhost:3000/api/battle/init", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ playerId: 1, presetSlot: 1, questId: 5 }) });
+            const r = await fetch("http://localhost:3000/api/battle/init", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ playerId: this.playerId, presetSlot: 1, questId: this.questId })
+            });
             if (!r.ok) throw new Error("HTTP " + r.status);
             const j = await r.json();
             if (j.status !== "success") throw new Error(j.message || "API error");
@@ -70,27 +79,27 @@ export default class BattleScene extends Phaser.Scene {
         this._startTimer(); this._refreshEnemyHUD();
     }
     _buildLayer1() {
-        this.turnText = this.add.text(20, 15, "TURN 1", { fontSize: "13px", color: "#aaa", fontStyle: "bold" }).setOrigin(0, 0);
-        this.timerText = this.add.text(CX, 15, "44:59", { fontSize: "18px", color: "#fff", fontStyle: "bold" }).setOrigin(0.5, 0);
-        const mb = this.add.rectangle(420, 26, 50, 34, 0x1e3a5f).setInteractive();
-        mb.setStrokeStyle(1, 0x4a90d9);
-        this.add.text(420, 26, "☰", { fontSize: "18px", color: "#7ec8e3" }).setOrigin(0.5);
+        this.turnText = this.add.text(20, 15, "TURN 1", { fontSize: "13px", color: THEME.TEXT_SECONDARY, fontStyle: "bold" }).setOrigin(0, 0);
+        this.timerText = this.add.text(CX, 15, "44:59", { fontSize: "18px", color: THEME.TEXT_PRIMARY, fontStyle: "bold" }).setOrigin(0.5, 0);
+        const mb = this.add.rectangle(405, 26, 50, 34, THEME.PANEL).setInteractive();
+        mb.setStrokeStyle(1, THEME.BORDER);
+        this.add.text(405, 26, "☰", { fontSize: "18px", color: THEME.TEXT_SECONDARY }).setOrigin(0.5);
         mb.on("pointerdown", () => {
             if (this.turn === "none" || this.turn === "attacking") return;
             this.showMainMenu();
         });
     }
     _buildEnemyHUD() {
-        this.add.rectangle(CX, 96, W, 88, 0x0d1420);
-        this.add.rectangle(CX, 140, W, 1, 0x1e3a5f);
+        this.add.rectangle(CX, 96, W, 88, THEME.PANEL, THEME.PANEL_ALPHA);
+        this.add.rectangle(CX, 140, W, 1, THEME.BORDER);
         const ec = this._elemColor(this.enemy.element);
-        this._enemyIcon = this.add.rectangle(45, 96, 50, 50, 0x2c1810);
+        this._enemyIcon = this.add.rectangle(45, 96, 50, 50, THEME.PANEL);
         this._enemyIcon.setStrokeStyle(2, ec);
-        this.add.text(45, 96, this.enemy.element.substring(0, 2).toUpperCase(), { fontSize: "9px", color: "#fff" }).setOrigin(0.5);
-        this._hpPct = this.add.text(85, 80, "100%", { fontSize: "11px", color: "#ff8a80", fontStyle: "bold" }).setOrigin(0, 1);
-        this._hpBarBg = this.add.rectangle(85, 92, 340, 14, 0x2d2d2d).setOrigin(0, 0.5);
-        this._hpBarBg.setStrokeStyle(2, 0x555555);
-        this._hpFill = this.add.rectangle(85, 92, 336, 12, 0xe74c3c).setOrigin(0, 0.5);
+        this.add.text(45, 96, this.enemy.element.substring(0, 2).toUpperCase(), { fontSize: "9px", color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
+        this._hpPct = this.add.text(85, 80, "100%", { fontSize: "11px", color: "#CD5C5C", fontStyle: "bold" }).setOrigin(0, 1);
+        this._hpBarBg = this.add.rectangle(85, 92, 340, 14, THEME.BG).setOrigin(0, 0.5);
+        this._hpBarBg.setStrokeStyle(2, THEME.BORDER);
+        this._hpFill = this.add.rectangle(85, 92, 336, 12, THEME.DAMAGE).setOrigin(0, 0.5);
         this._hpEnrage = this.add.rectangle(85, 92, 340, 14, 0, 0).setOrigin(0, 0.5).setAlpha(1);
         this._hpEnrage.setStrokeStyle(2, 0xffffff);
         // Mode Gauge (Bar tipis di bawah HP)
@@ -98,12 +107,12 @@ export default class BattleScene extends Phaser.Scene {
         this.add.text(85, 115, "CA", { fontSize: "9px", color: "#ffaa00" }).setOrigin(0, 0.5);
         this._caSegments = [];
         for (let i = 0; i < this.enemy.caMax; i++) {
-            const bg = this.add.rectangle(105 + i * 16, 115, 12, 12, 0x1a1a1a).setOrigin(0, 0.5);
-            bg.setStrokeStyle(1, 0x555555);
-            const f = this.add.rectangle(105 + i * 16, 115, 10, 10, 0xffaa00).setOrigin(0, 0.5).setAlpha(0);
+            const bg = this.add.rectangle(105 + i * 16, 115, 12, 12, THEME.BG).setOrigin(0, 0.5);
+            bg.setStrokeStyle(1, THEME.BORDER);
+            const f = this.add.rectangle(105 + i * 16, 115, 10, 10, THEME.GOLD).setOrigin(0, 0.5).setAlpha(0);
             this._caSegments.push(f);
         }
-        this.add.text(CX, 338, this.enemy.charName + " \nLv." + this.enemy.level, { fontSize: "13px", color: "#ff8a80", fontStyle: "bold" }).setOrigin(0.5, 0);
+        this.add.text(CX, 338, this.enemy.charName + " \nLv." + this.enemy.level, { fontSize: "13px", color: "#CD5C5C", fontStyle: "bold" }).setOrigin(0.5, 0);
     }
     _refreshEnemyHUD() {
         if (!this._hpFill) return;
@@ -174,11 +183,10 @@ export default class BattleScene extends Phaser.Scene {
     }
     _buildArenaButtons() {
         this._attackBtnContainer = this.add.container(0, 0);
-        const ab = this.add.rectangle(380, 400, 100, 45, 0xc0392b).setDepth(10);
-        ab.setStrokeStyle(3, 0xff8a80);
-        const inner = this.add.rectangle(380, 400, 96, 41, 0xe74c3c).setDepth(10);
-        const text = this.add.text(380, 400, "ATTACK ⚔", { fontSize: "16px", color: "#fff", fontStyle: "bold", align: "center" }).setOrigin(0.5).setDepth(10);
-        this._attackBtnContainer.add([ab, inner, text]);
+        const ab = this.add.rectangle(380, 400, 100, 45, THEME.DAMAGE).setDepth(10);
+        ab.setStrokeStyle(1, THEME.BORDER);
+        const text = this.add.text(380, 400, "ATTACK ⚔", { fontSize: "16px", color: THEME.TEXT_PRIMARY, fontStyle: "bold", align: "center" }).setOrigin(0.5).setDepth(10);
+        this._attackBtnContainer.add([ab, text]);
         ab.setInteractive(); ab.on("pointerdown", () => { if (this.turn === "player") this.playerAttack(); });
         this._attackBtnContainer.setVisible(this.turn === "player");
     }
@@ -186,31 +194,31 @@ export default class BattleScene extends Phaser.Scene {
         const cW = 85, gap = 15, total = this.players.length, totalW = total * cW + (total - 1) * gap, sx = (W - totalW) / 2 + cW / 2;
         this.players.forEach((p, i) => {
             const px = sx + i * (cW + gap);
-            const b = this.add.rectangle(0, 0, 58, 58, 0x1e3a5f, 0.6);
-            b.setStrokeStyle(1, 0x4a90d9);
-            const t = this.add.text(0, 0, "?", { fontSize: "20px", color: "#4a90d9" }).setOrigin(0.5);
+            const b = this.add.rectangle(0, 0, 58, 58, THEME.PANEL, 0.7);
+            b.setStrokeStyle(1, THEME.BORDER);
+            const t = this.add.text(0, 0, "?", { fontSize: "20px", color: THEME.TEXT_SECONDARY }).setOrigin(0.5);
             p.spriteObj = this.add.container(px, 500, [b, t]);
         });
     }
 
     _buildLayer4() {
-        this._aethBarBg = this.add.rectangle(CX, 693, W - 40, 10, 0x0d1420);
-        this._aethBarBg.setStrokeStyle(1, 0x7b68ee);
-        this._aethFill = this.add.rectangle(20, 693, 0, 8, 0x7b68ee).setOrigin(0, 0.5);
-        this._aethPct = this.add.text(W - 20, 683, "0%", { fontSize: "8px", color: "#9999cc" }).setOrigin(1, 1);
-        this.add.text(20, 683, "AETHER", { fontSize: "8px", color: "#9999cc" }).setOrigin(0, 1);
-        
-        this._healBtn = this.add.rectangle(130, 735, 220, 44, 0x0d2a1a);
-        this._healBtn.setStrokeStyle(2, 0x2ecc71);
-        this._healText = this.add.text(130, 735, "⊕  HEAL  (x" + this.healsRemaining + ")", { fontSize: "12px", color: "#a8e6cf" }).setOrigin(0.5);
+        this._aethBarBg = this.add.rectangle(CX, 693, W - 40, 10, THEME.BG);
+        this._aethBarBg.setStrokeStyle(1, THEME.AETHER);
+        this._aethFill = this.add.rectangle(20, 693, 0, 8, THEME.AETHER).setOrigin(0, 0.5);
+        this._aethPct = this.add.text(W - 20, 683, "0%", { fontSize: "8px", color: THEME.TEXT_SECONDARY }).setOrigin(1, 1);
+        this.add.text(20, 683, "AETHER", { fontSize: "8px", color: THEME.TEXT_SECONDARY }).setOrigin(0, 1);
+
+        this._healBtn = this.add.rectangle(130, 735, 220, 44, THEME.PANEL);
+        this._healBtn.setStrokeStyle(1, THEME.HEALTH);
+        this._healText = this.add.text(130, 735, "⊕  HEAL  (x" + this.healsRemaining + ")", { fontSize: "12px", color: THEME.TEXT_SECONDARY }).setOrigin(0.5);
         this._healBtn.setInteractive();
         this._healBtn.on("pointerdown", () => {
             if (this.turn === "player") this.useHealPotion();
         });
-        
-        this._abBg = this.add.rectangle(350, 735, 160, 44, 0x0d0d3a);
-        this._abBg.setStrokeStyle(2, 0x5555bb);
-        this._abText = this.add.text(350, 735, "✦ AETHER BURST", { fontSize: "11px", color: "#7777cc", align: "center" }).setOrigin(0.5);
+
+        this._abBg = this.add.rectangle(350, 735, 160, 44, THEME.PANEL);
+        this._abBg.setStrokeStyle(1, THEME.BORDER);
+        this._abText = this.add.text(350, 735, "✦ AETHER BURST", { fontSize: "11px", color: THEME.TEXT_SECONDARY, align: "center" }).setOrigin(0.5);
         this._abBg.setInteractive(); this._abBg.on("pointerdown", () => { if (this.turn === "player") this.aetherBurst(); });
         this._refreshAetherUI();
         this._refreshHealButtonUI();
@@ -221,8 +229,8 @@ export default class BattleScene extends Phaser.Scene {
         this._aethFill.setSize((W - 40) * r, 8);
         this._aethPct.setText(Math.floor(r * 100) + "%");
         const rdy = this.aetherGauge >= this.aetherGaugeMax;
-        this._abBg.setStrokeStyle(2, rdy ? 0xaa88ff : 0x5555bb);
-        this._abText.setColor(rdy ? "#ccaaff" : "#7777cc");
+        this._abBg.setStrokeStyle(1, rdy ? THEME.AETHER : THEME.BORDER);
+        this._abText.setColor(rdy ? "#A5B4FC" : THEME.TEXT_SECONDARY);
     }
     _buildSidebar() {
         const SBW = 210, SHX = W + SBW / 2;
@@ -230,7 +238,7 @@ export default class BattleScene extends Phaser.Scene {
         this._overlay = this.add.rectangle(CX, H / 2, W, H, 0x000000).setAlpha(0).setInteractive().setDepth(19);
         this._overlay.on("pointerdown", () => this.closeSidebar());
         this._sbPanel = this.add.container(SHX, H / 2).setDepth(20);
-        const bg = this.add.rectangle(0, 0, SBW, H, 0x0d1b2a); bg.setStrokeStyle(1, 0x4a90d9);
+        const bg = this.add.rectangle(0, 0, SBW, H, THEME.PANEL); bg.setStrokeStyle(1, THEME.BORDER);
         this._sbPanel.add([bg]);
         this._sbBtns = this.add.container(SHX, H / 2).setDepth(20);
     }
@@ -259,41 +267,41 @@ export default class BattleScene extends Phaser.Scene {
         const p = this.activePlayer, skills = p.skills;
 
         // --- SECTION 1: Portrait & Stats ---
-        const portBg = this.add.rectangle(0, -260, 180, 180, 0x12192b);
+        const portBg = this.add.rectangle(0, -260, 180, 180, THEME.PANEL);
         portBg.setStrokeStyle(3, p._elemColor); // Border tebal berwarna elemen
 
-        const nameText = this.add.text(-75, -335, p.charName, { fontSize: "13px", fontStyle: "bold", color: "#ffffff" }).setOrigin(0, 0.5);
-        const lvlText = this.add.text(75, -335, "Lv." + p.level, { fontSize: "10px", fontStyle: "bold", color: "#aaaaaa" }).setOrigin(1, 0.5);
+        const nameText = this.add.text(-75, -335, p.charName, { fontSize: "13px", fontStyle: "bold", color: THEME.TEXT_PRIMARY }).setOrigin(0, 0.5);
+        const lvlText = this.add.text(75, -335, "Lv." + p.level, { fontSize: "10px", fontStyle: "bold", color: THEME.TEXT_SECONDARY }).setOrigin(1, 0.5);
 
         // Placeholder Area untuk Splash Art (Subtle Background)
-        const artPlaceholder = this.add.rectangle(0, -260, 168, 110, 0x0f1d32, 0.3).setOrigin(0.5);
+        const artPlaceholder = this.add.rectangle(0, -260, 168, 110, THEME.BG, 0.3).setOrigin(0.5);
 
         // HP Bar
         const hpRatio = Math.max(0, p.hp / p.maxHp);
-        const hpLbl = this.add.text(-75, -200, "HP", { fontSize: "10px", fontStyle: "bold", color: "#888" }).setOrigin(0, 0.5);
-        const hpBg = this.add.rectangle(10, -200, 110, 12, 0x222222).setOrigin(0.5);
-        const hpFill = this.add.rectangle(-45, -200, 110 * hpRatio, 12, hpRatio > 0.5 ? 0x27ae60 : hpRatio > 0.25 ? 0xe67e22 : 0xe74c3c).setOrigin(0, 0.5);
-        const hpText = this.add.text(10, -200, `${Math.floor(p.hp)}/${p.maxHp}`, { fontSize: "9px", fontStyle: "bold", color: "#ffffff" }).setOrigin(0.5);
+        const hpLbl = this.add.text(-75, -200, "HP", { fontSize: "10px", fontStyle: "bold", color: THEME.TEXT_MUTED }).setOrigin(0, 0.5);
+        const hpBg = this.add.rectangle(10, -200, 110, 12, THEME.BG).setOrigin(0.5);
+        const hpFill = this.add.rectangle(-45, -200, 110 * hpRatio, 12, hpRatio > 0.5 ? THEME.HEALTH : hpRatio > 0.25 ? THEME.GOLD : THEME.DAMAGE).setOrigin(0, 0.5);
+        const hpText = this.add.text(10, -200, `${Math.floor(p.hp)}/${p.maxHp}`, { fontSize: "9px", fontStyle: "bold", color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
 
         // SA Bar
         const saRatio = Math.min(1, p.specialBar / p.specialMax);
-        const saLbl = this.add.text(-75, -180, "SA", { fontSize: "10px", fontStyle: "bold", color: "#888" }).setOrigin(0, 0.5);
-        const saBg = this.add.rectangle(10, -180, 110, 10, 0x111111).setOrigin(0.5);
-        const saFill = this.add.rectangle(-45, -180, 110 * saRatio, 10, saRatio >= 1 ? 0xf39c12 : 0xf1c40f).setOrigin(0, 0.5);
-        const saText = this.add.text(10, -180, `${Math.floor(saRatio * 100)}%`, { fontSize: "8px", fontStyle: "bold", color: saRatio >= 1 ? "#fff" : "#f1c40f" }).setOrigin(0.5);
+        const saLbl = this.add.text(-75, -180, "SA", { fontSize: "10px", fontStyle: "bold", color: THEME.TEXT_MUTED }).setOrigin(0, 0.5);
+        const saBg = this.add.rectangle(10, -180, 110, 10, THEME.BG).setOrigin(0.5);
+        const saFill = this.add.rectangle(-45, -180, 110 * saRatio, 10, THEME.GOLD).setOrigin(0, 0.5);
+        const saText = this.add.text(10, -180, `${Math.floor(saRatio * 100)}%`, { fontSize: "8px", fontStyle: "bold", color: saRatio >= 1 ? THEME.TEXT_PRIMARY : THEME.TEXT_SECONDARY }).setOrigin(0.5);
 
         this._sbBtns.add([portBg, nameText, lvlText, artPlaceholder, hpLbl, hpBg, hpFill, hpText, saLbl, saBg, saFill, saText]);
 
         // Divider 1
-        const div1 = this.add.rectangle(0, -160, 180, 1, 0x1b2e4c);
+        const div1 = this.add.rectangle(0, -160, 180, 1, THEME.BORDER);
         this._sbBtns.add(div1);
 
         // --- SECTION 2: Active Effects ---
-        const effHeader = this.add.text(-75, -140, "ACTIVE EFFECTS", { fontSize: "10px", fontStyle: "bold", color: "#7ec8e3" }).setOrigin(0, 0.5);
-        
-        const effBg = this.add.rectangle(0, -105, 180, 40, 0x0f1d32).setStrokeStyle(1, 0x1b2e4c).setInteractive();
+        const effHeader = this.add.text(-75, -140, "ACTIVE EFFECTS", { fontSize: "10px", fontStyle: "bold", color: THEME.TEXT_SECONDARY }).setOrigin(0, 0.5);
+
+        const effBg = this.add.rectangle(0, -105, 180, 40, THEME.BG).setStrokeStyle(1, THEME.BORDER).setInteractive();
         effBg.on("pointerdown", () => this.showEffectDetailsModal(p));
-        
+
         this._sbBtns.add([effHeader, effBg]);
 
         // Draw emojis inside active effects box
@@ -302,14 +310,14 @@ export default class BattleScene extends Phaser.Scene {
         );
 
         if (visibleEffects.length === 0) {
-            const noEffText = this.add.text(0, -105, "No active effects", { fontSize: "9px", color: "#888" }).setOrigin(0.5);
+            const noEffText = this.add.text(0, -105, "No active effects", { fontSize: "9px", color: THEME.TEXT_MUTED }).setOrigin(0.5);
             this._sbBtns.add(noEffText);
         } else {
             const sups = { 0: '', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹' };
             visibleEffects.forEach((e, idx) => {
                 const isBuff = (e.effect_type || '').toLowerCase() === 'buff';
                 const color = isBuff ? '#f1c40f' : '#7ec8e3';
-                
+
                 let emoji = '❓';
                 if (e.target_stat === 'ATK') emoji = '⚔️';
                 else if (e.target_stat === 'DEF') emoji = '🛡️';
@@ -336,17 +344,17 @@ export default class BattleScene extends Phaser.Scene {
         }
 
         // Divider 2
-        const div2 = this.add.rectangle(0, -75, 180, 1, 0x1b2e4c);
+        const div2 = this.add.rectangle(0, -75, 180, 1, THEME.BORDER);
         this._sbBtns.add(div2);
 
         // --- SECTION 3: Skills List ---
         const sy = -92, bH = 50, bG = 8;
         const tC = {
-            damage: "#ff5555",
-            buff: "#f1c40f",
-            debuff: "#7ec8e3",
-            heal: "#2ecc71",
-            special: "#ce93d8"
+            damage: "#CD5C5C",
+            buff: THEME.TEXT_SECONDARY,
+            debuff: THEME.TEXT_SECONDARY,
+            heal: "#458B74",
+            special: "#A78BFA"
         };
 
         skills.forEach((sk, i) => {
@@ -354,7 +362,7 @@ export default class BattleScene extends Phaser.Scene {
             const cd = isSA ? 0 : (p.cooldowns[sk.id] || 0);
             const saRdy = isSA && p.specialBar >= p.specialMax;
             const canUse = isSA ? saRdy : (cd === 0);
-            
+
             // Evaluasi visualType
             let visualType = (sk.type || '').toLowerCase();
             if (visualType === 'support') {
@@ -366,14 +374,14 @@ export default class BattleScene extends Phaser.Scene {
 
             const labelColor = isSA ? tC.special : (tC[visualType] || "#aaaaaa");
             const by = sy + (i + 1) * (bH + bG);
-            
-            const bgR = this.add.rectangle(0, by, 180, bH, canUse ? (isSA ? 0x1a1a4e : 0x1e3a5f) : 0x111111);
-            bgR.setStrokeStyle(1, canUse ? (isSA ? 0x7b68ee : 0x4a90d9) : 0x333333);
-            
+
+            const bgR = this.add.rectangle(0, by, 180, bH, canUse ? (isSA ? THEME.PANEL : THEME.PANEL) : THEME.BG);
+            bgR.setStrokeStyle(1, canUse ? (isSA ? THEME.AETHER : THEME.BORDER) : THEME.BORDER);
+
             const displayName = sk.name.length > 22 ? sk.name.substring(0, 20) + "..." : sk.name;
             const nm = this.add.text(-78, by - 14, displayName, { fontSize: "11px", color: canUse ? "#e0e0ff" : "#555", fontStyle: "bold" }).setOrigin(0, 0.5);
             const tp = this.add.text(-78, by, isSA ? "[SA]" : "[" + visualType.toUpperCase() + "]", { fontSize: "9px", color: labelColor }).setOrigin(0, 0.5);
-            
+
             const items = [bgR, nm, tp];
             if (isSA) {
                 const bW = 130, bBg = this.add.rectangle(-78 + bW / 2, by + 13, bW, 6, 0x222222).setOrigin(0.5);
@@ -388,7 +396,7 @@ export default class BattleScene extends Phaser.Scene {
                 const cdT = this.add.text(78, by, cd > 0 ? "CD:" + cd : "CD:" + sk.cooldown + "T", { fontSize: "9px", color: cd > 0 ? "#f55" : "#777" }).setOrigin(1, 0.5);
                 items.push(cdT);
             }
-            
+
             this._sbBtns.add(items);
             if (canUse) {
                 bgR.setInteractive();
@@ -416,8 +424,8 @@ export default class BattleScene extends Phaser.Scene {
         const overlay = this.add.rectangle(0, 0, 210, H, 0x000000, 0.8).setInteractive();
         modalContainer.add(overlay);
 
-        const cardBg = this.add.rectangle(0, 0, 180, 320, 0x0d1b2a).setStrokeStyle(2, 0x4a90d9);
-        const cardTitle = this.add.text(0, -130, "STATUS DETAILS", { fontSize: "12px", fontStyle: "bold", color: "#7ec8e3" }).setOrigin(0.5);
+        const cardBg = this.add.rectangle(0, 0, 180, 320, THEME.PANEL).setStrokeStyle(1, THEME.BORDER);
+        const cardTitle = this.add.text(0, -130, "STATUS DETAILS", { fontSize: "12px", fontStyle: "bold", color: THEME.TEXT_SECONDARY }).setOrigin(0.5);
         modalContainer.add([cardBg, cardTitle]);
 
         const visibleEffects = p.activeEffects.filter(e =>
@@ -426,16 +434,16 @@ export default class BattleScene extends Phaser.Scene {
 
         let startY = -90;
         if (visibleEffects.length === 0) {
-            const noEff = this.add.text(0, 0, "No active effects", { fontSize: "11px", color: "#888" }).setOrigin(0.5);
+            const noEff = this.add.text(0, 0, "No active effects", { fontSize: "11px", color: THEME.TEXT_MUTED }).setOrigin(0.5);
             modalContainer.add(noEff);
         } else {
             visibleEffects.forEach((e, idx) => {
                 const y = startY + idx * 45;
                 if (y > 110) return; // limit card height
-                
+
                 const isBuff = (e.effect_type || '').toLowerCase() === 'buff';
                 const color = isBuff ? '#f1c40f' : '#7ec8e3';
-                
+
                 let emoji = '❓';
                 if (e.target_stat === 'ATK') emoji = '⚔️';
                 else if (e.target_stat === 'DEF') emoji = '🛡️';
@@ -444,7 +452,7 @@ export default class BattleScene extends Phaser.Scene {
                 else if (e.target_stat === 'POISON') emoji = '🤢';
 
                 const nameText = this.add.text(-70, y, `${emoji} ${e.effect_name || e.target_stat}`, { fontSize: "11px", fontStyle: "bold", color }).setOrigin(0, 0.5);
-                
+
                 let valStr = '';
                 if (e.target_stat === 'POISON') {
                     valStr = "-5% HP/Turn";
@@ -460,7 +468,7 @@ export default class BattleScene extends Phaser.Scene {
             });
         }
 
-        const closeHint = this.add.text(0, 130, "Click anywhere to close", { fontSize: "9px", color: "#55aaff" }).setOrigin(0.5);
+        const closeHint = this.add.text(0, 130, "Click anywhere to close", { fontSize: "9px", color: THEME.TEXT_MUTED }).setOrigin(0.5);
         modalContainer.add(closeHint);
 
         this._sbBtns.add(modalContainer);
@@ -693,7 +701,7 @@ export default class BattleScene extends Phaser.Scene {
     useSkill(idx) {
         const p = this.activePlayer, sk = p ? p.skills[idx] : null;
         if (!sk || this.turn !== "player" || !p || p.hp <= 0) return;
-        
+
         // Cek jika karakter ini stun
         if (p.activeEffects.some(e => e.target_stat === 'STUN')) {
             this.showLog(`⚡ ${p.charName} terkena STUN dan tidak bisa menggunakan skill!`);
@@ -1087,7 +1095,7 @@ export default class BattleScene extends Phaser.Scene {
         });
     }
     _randAlive() { const l = this.players.filter(p => p.hp > 0); return l.length ? l[Math.floor(Math.random() * l.length)] : null; }
-    _elemColor(el) { return { Fire: 0xe74c3c, Wind: 0x2ecc71, Earth: 0xe67e22, Water: 0x3498db, Light: 0xf1c40f, Dark: 0x9b59b6 }[el] || 0xff5555; }
+    _elemColor(el) { return { Fire: THEME.ELEM_FIRE, Wind: THEME.ELEM_WIND, Earth: THEME.ELEM_EARTH }[el] || THEME.BORDER; }
 
     useHealPotion() {
         if (this.healsRemaining <= 0) {
@@ -1159,7 +1167,7 @@ export default class BattleScene extends Phaser.Scene {
             const barW = 124;
             const hpBarBg = this.add.rectangle(pos.x, pos.y + 4, barW, 6, 0x222222).setOrigin(0.5);
             const ratio = Math.max(0, p.hp / p.maxHp);
-            
+
             let barColor = 0x2ecc71; // Hijau
             if (isDead) {
                 barColor = 0x000000;
@@ -1404,12 +1412,12 @@ export default class BattleScene extends Phaser.Scene {
 
                 // Card Box
                 const card = this.add.rectangle(px, py, cW, 114, 0x0d1b2a).setStrokeStyle(1.5, elemColor);
-                
+
                 // Character name
                 let nameStr = p.charName;
                 if (nameStr.length > 11) nameStr = nameStr.substring(0, 9) + "..";
                 const nameTxt = this.add.text(px, py - 44, nameStr, { fontSize: "9px", color: "#e0e0ff", fontStyle: "bold" }).setOrigin(0.5);
-                
+
                 // Level text
                 const lvlTxt = this.add.text(px, py - 28, `Lv.${p.level}`, { fontSize: "8px", color: "#8899aa" }).setOrigin(0.5);
 
@@ -1451,7 +1459,7 @@ export default class BattleScene extends Phaser.Scene {
             const bossNameTxt = this.add.text(-118, py - 28, bossNameStr, { fontSize: "8px", color: "#e0e0ff", fontStyle: "bold" }).setOrigin(0.5);
             const lvlTxt = this.add.text(-118, py - 12, `Lv.${this.enemy.level}`, { fontSize: "8px", color: "#8899aa" }).setOrigin(0.5);
             const elemTxt = this.add.text(-118, py + 12, this.enemy.element.toUpperCase(), { fontSize: "7px", color: "#fff", backgroundColor: "#0a0a1a", padding: { x: 3, y: 1 } }).setOrigin(0.5);
-            
+
             this._menuContentContainer.add([card, nameTxt, bossNameTxt, lvlTxt, elemTxt]);
 
             // Right: Info and Skill Carousel
@@ -1460,7 +1468,7 @@ export default class BattleScene extends Phaser.Scene {
             const maxHpStr = this.enemy.maxHp.toLocaleString();
             const hpInfoTxt = this.add.text(-50, py - 38, `MAX HP: ${maxHpStr}`, { fontSize: "9px", color: "#ff8a80", fontStyle: "bold" }).setOrigin(0, 0.5);
             const caMaxTxt = this.add.text(138, py - 38, `CA Bar: ${this.enemy.caMax}`, { fontSize: "9px", color: "#ffaa00" }).setOrigin(1, 0.5);
-            
+
             this._menuContentContainer.add([hpInfoBg, hpInfoTxt, caMaxTxt]);
 
             // Bottom: Skill carousel container box

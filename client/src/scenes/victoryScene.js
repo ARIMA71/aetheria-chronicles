@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { THEME } from '../main.js';
 
 const W = 450, H = 800, CX = 225, CY = 400;
 
@@ -21,13 +22,13 @@ export default class VictoryScene extends Phaser.Scene {
         });
 
         // Main Panel background
-        const panel = this.add.rectangle(CX, CY, 380, 520, 0x0a0f1d, 0.95);
-        panel.setStrokeStyle(3, 0xf1c40f);
+        const panel = this.add.rectangle(CX, CY, 380, 520, THEME.PANEL, 0.95);
+        panel.setStrokeStyle(1, THEME.GOLD);
 
         // Title text
         this.add.text(CX, CY - 210, "QUEST CLEARED", {
             fontSize: "26px",
-            color: "#f1c40f",
+            color: "#D4A017",
             fontStyle: "bold",
             fontFamily: "Outfit, Inter, sans-serif"
         }).setOrigin(0.5);
@@ -35,26 +36,26 @@ export default class VictoryScene extends Phaser.Scene {
         // Decorative sub-line
         this.add.text(CX, CY - 180, "★ VICTORY ★", {
             fontSize: "12px",
-            color: "#e6c229",
+            color: "#D4A017",
             fontStyle: "bold",
             letterSpacing: 4
         }).setOrigin(0.5);
 
         // Divider
         const divider = this.add.graphics();
-        divider.lineStyle(1, 0x3a4f66, 1);
+        divider.lineStyle(1, THEME.BORDER, 1);
         divider.lineBetween(CX - 150, CY - 155, CX + 150, CY - 155);
 
         // Loading message
         const loadingText = this.add.text(CX, CY - 40, "Menghitung hasil...", {
             fontSize: "16px",
-            color: "#8899aa",
+            color: THEME.TEXT_SECONDARY,
             fontStyle: "italic"
         }).setOrigin(0.5);
 
         // Spin animation placeholder using graphics
-        const spinCircle = this.add.circle(CX, CY + 20, 20, 0x1f4068, 0);
-        spinCircle.setStrokeStyle(3, 0xf1c40f);
+        const spinCircle = this.add.circle(CX, CY + 20, 20, THEME.PANEL, 0);
+        spinCircle.setStrokeStyle(2, THEME.GOLD);
         this.tweens.add({
             targets: spinCircle,
             angle: 360,
@@ -94,7 +95,7 @@ export default class VictoryScene extends Phaser.Scene {
         // Section Header
         this.add.text(CX, CY - 130, "OBTAINED LOOT", {
             fontSize: "13px",
-            color: "#8899aa",
+            color: THEME.TEXT_SECONDARY,
             fontStyle: "bold",
             letterSpacing: 2
         }).setOrigin(0.5);
@@ -102,7 +103,7 @@ export default class VictoryScene extends Phaser.Scene {
         if (rewards.length === 0) {
             this.add.text(CX, CY - 40, "No rewards dropped.", {
                 fontSize: "14px",
-                color: "#667788",
+                color: THEME.TEXT_MUTED,
                 fontStyle: "italic"
             }).setOrigin(0.5);
             this.showReturnButton();
@@ -115,23 +116,23 @@ export default class VictoryScene extends Phaser.Scene {
 
         rewards.forEach((item, index) => {
             const yPos = startY + index * spacing;
-            if (yPos > CY + 140) return; // Prevent overflowing outside panel
+            if (yPos > CY + 140) return;
 
             // Draw a subtle background for each item row
-            const rowBg = this.add.rectangle(CX, yPos, 330, 44, 0x131a2e, 0.6);
-            rowBg.setStrokeStyle(1, 0x1f2d44);
+            const rowBg = this.add.rectangle(CX, yPos, 330, 44, THEME.BG, 0.6);
+            rowBg.setStrokeStyle(1, THEME.BORDER);
 
-            let typeColor = "#a8e6cf"; // Greenish for Material
+            let typeColor = "#458B74"; // Muted Sea Green for Material
             let namePrefix = "";
 
             if (item.reward_type === 'Currency') {
-                typeColor = "#ffd54f"; // Yellow for Gold
+                typeColor = "#D4A017"; // Muted Gold
                 namePrefix = "🪙 ";
             } else if (item.reward_type === 'Weapon') {
-                typeColor = "#64b5f6"; // Blue for Weapon
+                typeColor = "#94A3B8"; // Cool Grey for Weapon
                 namePrefix = `⚔️ [${item.rarity || 'R'}] `;
             } else if (item.reward_type === 'Character') {
-                typeColor = "#ba68c8"; // Purple for Character
+                typeColor = "#A78BFA"; // Muted Purple for Character
                 namePrefix = `👤 [${item.rarity || 'R'}] `;
             }
 
@@ -142,7 +143,7 @@ export default class VictoryScene extends Phaser.Scene {
                 fontStyle: "bold"
             }).setOrigin(0, 0.5);
 
-            // Sub text or description (e.g. element / unlock status)
+            // Sub text or description
             let subInfo = "";
             if (item.reward_type === 'Weapon' || item.reward_type === 'Character') {
                 subInfo = `Element: ${item.element || 'Any'}`;
@@ -155,13 +156,13 @@ export default class VictoryScene extends Phaser.Scene {
 
             this.add.text(CX - 150, yPos + 10, subInfo, {
                 fontSize: "9px",
-                color: "#8899aa"
+                color: THEME.TEXT_SECONDARY
             }).setOrigin(0, 0.5);
 
             // Quantity
             this.add.text(CX + 150, yPos, `x${item.quantity}`, {
                 fontSize: "14px",
-                color: "#ffffff",
+                color: THEME.TEXT_PRIMARY,
                 fontStyle: "bold"
             }).setOrigin(1, 0.5);
         });
@@ -172,13 +173,13 @@ export default class VictoryScene extends Phaser.Scene {
     showError(msg) {
         this.add.text(CX, CY - 20, "ERROR OCCURRED", {
             fontSize: "16px",
-            color: "#e74c3c",
+            color: "#CD5C5C",
             fontStyle: "bold"
         }).setOrigin(0.5);
 
         this.add.text(CX, CY + 20, msg, {
             fontSize: "12px",
-            color: "#ff8a80",
+            color: "#CD5C5C",
             align: "center",
             wordWrap: { width: 320 }
         }).setOrigin(0.5);
@@ -190,30 +191,30 @@ export default class VictoryScene extends Phaser.Scene {
         const btnY = CY + 190;
 
         // Button background
-        const btn = this.add.rectangle(CX, btnY, 240, 44, 0x1f4068).setInteractive();
-        btn.setStrokeStyle(1.5, 0x3282b8);
+        const btn = this.add.rectangle(CX, btnY, 240, 44, THEME.PANEL).setInteractive();
+        btn.setStrokeStyle(1, THEME.BORDER);
 
         // Button label
         const btnText = this.add.text(CX, btnY, "RETURN TO MENU", {
             fontSize: "14px",
-            color: "#ffffff",
+            color: THEME.TEXT_PRIMARY,
             fontStyle: "bold",
             letterSpacing: 1
         }).setOrigin(0.5);
 
         // Hover events
         btn.on('pointerover', () => {
-            btn.setFillStyle(0x3282b8);
+            btn.setFillStyle(0x334155);
         });
         btn.on('pointerout', () => {
-            btn.setFillStyle(0x1f4068);
+            btn.setFillStyle(THEME.PANEL);
         });
 
-        // Click event to return to menu/restart scene
+        // Click event to return to menu
         btn.on('pointerdown', () => {
             this.scene.stop('BattleScene');
             this.scene.stop('VictoryScene');
-            this.scene.start('BattleScene');
+            this.scene.start('MainMenuScene');
         });
     }
 }

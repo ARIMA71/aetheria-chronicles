@@ -11,6 +11,7 @@ const router = express.Router()
 
 const playerController = require('../controllers/playerController')
 
+router.get('/:playerId', playerController.getPlayerProfile)
 router.get('/:playerId/party', playerController.getPlayerParty)
 
 module.exports = router

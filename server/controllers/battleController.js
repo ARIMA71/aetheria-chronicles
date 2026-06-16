@@ -881,6 +881,26 @@ exports.saveBattleResult = async (req, res) => {
         }
 
         // =========================================================
+        // 5.5. Catat progress quest player
+        // =========================================================
+        const [existingQuest] = await conn.query(
+            'SELECT pq_id FROM player_quests WHERE player_id = ? AND mq_id = ?',
+            [playerId, questId]
+        );
+
+        if (existingQuest.length === 0) {
+            await conn.query(
+                'INSERT INTO player_quests (player_id, mq_id, pq_status) VALUES (?, ?, \'Completed\')',
+                [playerId, questId]
+            );
+        } else {
+            await conn.query(
+                'UPDATE player_quests SET pq_status = \'Completed\' WHERE player_id = ? AND mq_id = ?',
+                [playerId, questId]
+            );
+        }
+
+        // =========================================================
         // 6. Commit transaksi
         // =========================================================
         await conn.commit();
