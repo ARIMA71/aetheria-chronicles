@@ -13,20 +13,21 @@ export default class Enemy extends Phaser.GameObjects.Container {
         scene.add.existing(this);
 
         // ── Data ──────────────────────────────────────────────────────────────
-        this.id       = data.id;
+        this.id = data.id;
         this.charName = data.name;
-        this.element  = data.element || 'None';
-        this.level    = data.level   || 1;
-        this.maxHp    = data.final_stats.hp;
-        this.hp       = data.final_stats.hp;
-        this.atk      = data.final_stats.atk;
-        this.def      = data.final_stats.def || 500;
-        this.crit     = 0.2;
+        this.element = data.element || 'None';
+        this.level = data.level || 1;
+        this.maxHp = data.final_stats.hp;
+        this.hp = data.final_stats.hp;
+        this.atk = data.final_stats.atk;
+        this.def = data.final_stats.def || 500;
+        this.crit = 0.1;
         this.critDamage = 2.0;
 
         // Base stats (untuk getStat())
         this._baseAtk = data.final_stats.atk;
         this._baseDef = data.final_stats.def || 500;
+        this._baseCrit = 0.1;
 
         // ── Active Effects ────────────────────────────────────────────────────
         // Setiap entry: { effect_name, effect_type, target_stat, value, duration, effect_target }
@@ -38,23 +39,23 @@ export default class Enemy extends Phaser.GameObjects.Container {
 
         // ── Mode State: 'normal' | 'enraged' | 'exhausted' ──────────────────
         this.modeState = 'normal';
-        this.modeBar   = 0;
-        this.modeMax   = this.maxHp * 0.2; // 20% HP threshold → Enraged
+        this.modeBar = 0;
+        this.modeMax = this.maxHp * 0.2; // 20% HP threshold → Enraged
 
         // ── AI Behaviors (raw dari API, digunakan oleh BattleScene) ──────────
         // Format setiap entry:
         //   { phase, base_utility, modifiers, skill: { id, name, type, modifier, status_effects[] } }
         this.aiBehaviors = (data.ai_behaviors || []).map(b => ({
-            phase:        b.phase        || 'Normal',
+            phase: b.phase || 'Normal',
             base_utility: b.base_utility || 1.0,
-            modifiers:    b.modifiers    || {},
+            modifiers: b.modifiers || {},
             skill: {
-                id:             b.skill.id,
-                name:           b.skill.name,
-                type:           b.skill.type     || 'Damage',   // ms_action_type dari API
-                category:       b.skill.category || 'Active',
-                target_type:    b.skill.target_type || 'Single_Enemy',
-                modifier:       parseFloat(b.skill.modifier ?? 1.0),
+                id: b.skill.id,
+                name: b.skill.name,
+                type: b.skill.type || 'Damage',   // ms_action_type dari API
+                category: b.skill.category || 'Active',
+                target_type: b.skill.target_type || 'Single_Enemy',
+                modifier: parseFloat(b.skill.modifier ?? 1.0),
                 status_effects: b.skill.status_effects || []
             }
         }));
@@ -71,7 +72,7 @@ export default class Enemy extends Phaser.GameObjects.Container {
         const elemColor = this._getElementColor(this.element);
 
         const shadow = scene.add.rectangle(5, 5, 130, 130, 0x000000).setAlpha(0.4);
-        this._body   = scene.add.rectangle(0, 0, 130, 130, 0x1c0a0a);
+        this._body = scene.add.rectangle(0, 0, 130, 130, 0x1c0a0a);
         this._body.setStrokeStyle(3, elemColor);
 
         const inner = scene.add.rectangle(0, 0, 110, 110, 0x000000, 0);
@@ -101,7 +102,7 @@ export default class Enemy extends Phaser.GameObjects.Container {
         const existing = this.activeEffects.find(e => e.effect_name === effectData.effect_name);
         if (existing) {
             existing.duration = effectData.duration;
-            existing.value    = effectData.value;
+            existing.value = effectData.value;
             this.refreshVisual();
             return;
         }
@@ -118,8 +119,21 @@ export default class Enemy extends Phaser.GameObjects.Container {
      * @returns {number}
      */
     getStat(statName) {
-        const statMap = { 'ATK': this._baseAtk, 'DEF': this._baseDef };
+        const statMap = { 'ATK': this._baseAtk, 'DEF': this._baseDef, 'CRIT': this._baseCrit };
         const base = statMap[statName] ?? 0;
+
+        if (statName === 'CRIT') {
+            const hasGuarantee = this.activeEffects.some(e => (e.effect_name || '').toLowerCase().includes('guarantee'));
+            if (hasGuarantee) return 1.0;
+
+            const totalMult = this.activeEffects
+                .filter(e => e.target_stat === 'CRIT' && !(e.effect_name || '').toLowerCase().includes('damage'))
+                .reduce((sum, e) => sum + (Number(e.value) || 0), 0);
+
+            const clampedMult = Math.max(-0.5, Math.min(0.5, totalMult));
+            return Math.max(0, this._baseCrit + clampedMult);
+        }
+
         const numericStats = ['ATK', 'DEF'];
         if (!numericStats.includes(statName)) return base;
 
@@ -131,6 +145,15 @@ export default class Enemy extends Phaser.GameObjects.Container {
         const clampedMult = Math.max(-0.5, Math.min(0.5, totalMult));
 
         return Math.max(0, base * (1 + clampedMult));
+    }
+
+    getCritDamage() {
+        const totalBuff = this.activeEffects
+            .filter(e => e.target_stat === 'CRIDMG' || (e.target_stat === 'CRIT' && (e.effect_name || '').toLowerCase().includes('damage')))
+            .reduce((sum, e) => sum + (Number(e.value) || 0), 0);
+
+        const clampedBuff = Math.max(0, Math.min(0.5, totalBuff));
+        return 2.0 + clampedBuff;
     }
 
     /**
@@ -150,21 +173,29 @@ export default class Enemy extends Phaser.GameObjects.Container {
     refreshVisual() {
         this._effectIndicators.removeAll(true);
         const visibleEffects = this.activeEffects.filter(e =>
-            ['ATK', 'DEF', 'CRIT'].includes(e.target_stat)
+            ['ATK', 'DEF', 'CRIT', 'STUN', 'POISON'].includes(e.target_stat)
         );
 
+        const sups = { 0: '', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹' };
         visibleEffects.forEach((e, idx) => {
-            const isBuff   = (e.effect_type || '').toLowerCase() === 'buff';
-            const arrow    = isBuff ? '⇧' : '⇩';
-            const color    = isBuff ? '#55ff88' : '#ff5555';
-            const shortStat = e.target_stat;
-            const label    = `[${shortStat}${arrow}]`;
+            const isBuff = (e.effect_type || '').toLowerCase() === 'buff';
+            const color = isBuff ? '#f1c40f' : '#7ec8e3'; // Kuning untuk Buff, Biru Muda untuk Debuff
+
+            let emoji = '❓';
+            if (e.target_stat === 'ATK') emoji = '⚔️';
+            else if (e.target_stat === 'DEF') emoji = '🛡️';
+            else if (e.target_stat === 'CRIT') emoji = '✨';
+            else if (e.target_stat === 'STUN') emoji = '💫';
+            else if (e.target_stat === 'POISON') emoji = '🤢';
+
+            const durSup = sups[e.duration] || e.duration || '';
+            const label = `${emoji}${durSup}`;
 
             const txt = this.scene.add.text(
                 (idx - Math.floor(visibleEffects.length / 2)) * 32,
                 0,
                 label,
-                { fontSize: '9px', color, fontStyle: 'bold', stroke: '#000', strokeThickness: 2 }
+                { fontSize: '10px', color, fontStyle: 'bold', stroke: '#000', strokeThickness: 2 }
             ).setOrigin(0.5, 0.5);
 
             this._effectIndicators.add(txt);
@@ -243,12 +274,12 @@ export default class Enemy extends Phaser.GameObjects.Container {
         const currentPhase = this.modeState === 'enraged'
             ? 'Enraged'
             : this.modeState === 'exhausted'
-            ? 'Exhausted'
-            : 'Normal';
+                ? 'Exhausted'
+                : 'Normal';
 
         // Filter: hanya behaviors yang cocok dengan fase sekarang DAN base_utility > 0 (skill biasa, bukan HP Trigger)
-        const candidates = this.aiBehaviors.filter(b => 
-            b.phase === currentPhase && 
+        const candidates = this.aiBehaviors.filter(b =>
+            b.phase === currentPhase &&
             b.base_utility > 0 &&
             b.modifiers.Trigger_HP_Threshold === undefined
         );
@@ -260,7 +291,7 @@ export default class Enemy extends Phaser.GameObjects.Container {
 
         for (const behavior of pool) {
             let totalScore = behavior.base_utility;
-            const mods    = behavior.modifiers || {};
+            const mods = behavior.modifiers || {};
 
             // One_Time_Use: skill ini hanya boleh dipakai sekali sepanjang battle
             if (mods.One_Time_Use === true) {

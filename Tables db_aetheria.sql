@@ -279,42 +279,42 @@ CREATE TABLE `master_skills` (
 insert  into `master_skills`(`ms_id`,`ms_name`,`ms_desc`,`ms_element`,`ms_category`,`ms_target_type`,`ms_action_type`,`ms_cooldown`,`ms_modifier_value`,`ms_sa_cost`,`ms_sa_gain`,`ms_icon_path`,`ms_vfx_path`) values 
 (1,'Inspire','Big boost to allies ATK','Any','Active','All_Allies','Support',5,0,0,0,NULL,NULL),
 (2,'Dark Haze','Medium Hit to ATK and DEF for All enemies','Any','Active','All_Enemies','Support',6,0,0,0,NULL,NULL),
-(3,'Armor Break','Medium damage to enemy / Hit to Def','Any','Active','Single_Enemy','Damage',4,3,0,0,NULL,NULL),
-(4,'Slash','300% elemental damage to enemy','Any','Active','Single_Enemy','Damage',4,3,0,0,NULL,NULL),
+(3,'Armor Break','Medium damage to enemy / Hit to Def','Any','Active','Single_Enemy','Damage',4,1.8,0,0,NULL,NULL),
+(4,'Slash','150% elemental damage to enemy','Any','Active','Single_Enemy','Damage',4,1.5,0,0,NULL,NULL),
 (5,'Dispel','Remove 1 buff enemy effect','Any','Active','Single_Enemy','Support',5,0,0,0,NULL,NULL),
 (6,'Refresh','Clear All debuff on team and heal 20% of max HP','Any','Active','All_Allies','Cleanse',5,0.2,0,0,NULL,NULL),
-(7,'Surge','Big elemental damage to enemy','Any','Active','Single_Enemy','Damage',6,4,0,0,NULL,NULL),
+(7,'Surge','Big elemental damage to enemy','Any','Active','Single_Enemy','Damage',6,2.5,0,0,NULL,NULL),
 (8,'Revive','Revive an ally with 20% from Max HP','Any','Active','Single_Ally','Revive',11,0.2,0,0,NULL,NULL),
 (9,'Zerreissen','250% Fire damage to single enemy','Fire','Active','Single_Enemy','Damage',4,2.5,0,0,NULL,NULL),
-(10,'Scheneiden','Big Fire damage to single enemy','Fire','Active','Single_Enemy','Damage',6,4,0,0,NULL,NULL),
+(10,'Scheneiden','Big Fire damage to single enemy','Fire','Active','Single_Enemy','Damage',6,2.5,0,0,NULL,NULL),
 (11,'Roter Wirbel','300% Fire damage to all enemy / Boost fire allies ATK','Fire','Active','All_Enemies','Damage',6,3,0,0,NULL,NULL),
-(12,'Percival Special Attack','Massive fire damage / Inflict stun for 1 turn','Fire','Special','Single_Enemy','Damage',0,5,100,0,NULL,NULL),
+(12,'Percival Special Attack','Massive fire damage / Inflict stun for 1 turn','Fire','Special','Single_Enemy','Damage',0,4,100,0,NULL,NULL),
 (13,'Free Rein','Medium boost to all allies DEF','Fire','Active','All_Allies','Support',6,0,0,0,NULL,NULL),
 (14,'Fortitude','Big boost to Fire allies ATK','Fire','Active','All_Allies','Support',6,0,0,0,NULL,NULL),
-(15,'Salvator','Small Fire damage to single enemy / Drain 1 enemy Charge Bar','Fire','Active','Single_Enemy','Damage',5,2,0,0,NULL,NULL),
-(16,'Lowenheigh Special Attack','Massive fire damage / Drain 1 enemy Charge Bar','Fire','Special','Single_Enemy','Damage',0,5,100,0,NULL,NULL),
-(17,'Manigance','Medium Earth Damage to single enemy','Earth','Active','Single_Enemy','Damage',4,3,0,0,NULL,NULL),
-(18,'Verdrangen','450% Earth Damage to single enemy / Consume 10% HP from self','Earth','Active','Single_Enemy','Damage',6,4.5,0,0,NULL,NULL),
-(19,'Tetradachm','Big earth damage to single enemy','Earth','Active','Single_Enemy','Damage',6,4,0,0,NULL,NULL),
-(20,'Siegfried Special Attack','Ultra earth damage','Earth','Special','Single_Enemy','Damage',0,6,100,0,NULL,NULL),
+(15,'Salvator','Small Fire damage to single enemy / Drain 1 enemy Charge Bar','Fire','Active','Single_Enemy','Damage',5,1,0,0,NULL,NULL),
+(16,'Lowenheigh Special Attack','Massive fire damage / Drain 1 enemy Charge Bar','Fire','Special','Single_Enemy','Damage',0,4,100,0,NULL,NULL),
+(17,'Manigance','Medium Earth Damage to single enemy','Earth','Active','Single_Enemy','Damage',4,1.8,0,0,NULL,NULL),
+(18,'Verdrangen','300% Earth Damage to single enemy / Consume 10% HP from self','Earth','Active','Single_Enemy','Damage',6,3,0,0,NULL,NULL),
+(19,'Tetradachm','Big earth damage to single enemy','Earth','Active','Single_Enemy','Damage',6,2.5,0,0,NULL,NULL),
+(20,'Siegfried Special Attack','Ultra earth damage','Earth','Special','Single_Enemy','Damage',0,5,100,0,NULL,NULL),
 (21,'Sharp Reflexes','Medium Hit to ATK and DEF for All enemies','Earth','Active','All_Enemies','Support',5,0,0,10,NULL,NULL),
-(22,'Renewed Vigor','Small Earth damage / inflict Poison and Delay','Earth','Active','Single_Enemy','Damage',6,2,0,10,NULL,NULL),
+(22,'Renewed Vigor','Small Earth damage / inflict Poison and Delay','Earth','Active','Single_Enemy','Damage',6,1,0,10,NULL,NULL),
 (23,'Soldier Swiftness','SA bar gain up / Medium boost to Critical hit and DEF','Earth','Active','All_Allies','Support',5,0,0,10,NULL,NULL),
-(24,'Lowein Special Attack','Massive earth damage / remove 1 enemy buff effect','Earth','Special','Single_Enemy','Damage',0,5,100,0,NULL,NULL),
+(24,'Lowein Special Attack','Massive earth damage / remove 1 enemy buff effect','Earth','Special','Single_Enemy','Damage',0,4,100,0,NULL,NULL),
 (25,'Noble Moon','20% boost to allies SA bar / Medium boost to ATK and DEF','Wind','Active','All_Allies','Support',5,0,0,10,NULL,NULL),
-(26,'Oath of Lumiel','Medium wind damage to all enemies','Wind','Active','All_Enemies','Damage',5,3,0,10,NULL,NULL),
+(26,'Oath of Lumiel','Medium wind damage to all enemies','Wind','Active','All_Enemies','Damage',5,1.8,0,10,NULL,NULL),
 (27,'Assimilation','350% Wind damage to single enemy / Drain 1 enemy Charge Bar','Wind','Active','Single_Enemy','Damage',7,3.5,0,10,NULL,NULL),
-(28,'Ereshkigal Special Attack','Massive wind damage / Boost Wind allies ATK','Wind','Special','Single_Enemy','Damage',0,5,100,0,NULL,NULL),
+(28,'Ereshkigal Special Attack','Massive wind damage / Boost Wind allies ATK','Wind','Special','Single_Enemy','Damage',0,4,100,0,NULL,NULL),
 (29,'Butterfly Effect','Boost to ATK / Critical hit','Wind','Active','Self','Support',6,0,0,10,NULL,NULL),
 (30,'Transient','Boost to DEF / Counter upon getting hit','Wind','Active','Self','Support',5,0,0,10,NULL,NULL),
 (31,'Kyokasuigetsu','Guarantee Critical Hit / Critical damage up to all allies','Wind','Active','All_Allies','Support',7,0,0,10,NULL,NULL),
-(32,'Narmaya Special Attack','Ultra Wind damage / inflict stun for 1 turn','Wind','Special','Single_Enemy','Damage',0,6,100,0,NULL,NULL),
+(32,'Narmaya Special Attack','Ultra Wind damage / inflict stun for 1 turn','Wind','Special','Single_Enemy','Damage',0,5,100,0,NULL,NULL),
 (33,'Vermilion Majesty I','Big boost to Fire allies ATK and HP','Fire','Passive','All_Allies','Support',0,0,0,0,NULL,NULL),
 (34,'Vermilion Majesty II','Big boost to Fire allies Critical Hit','Fire','Passive','All_Allies','Support',0,0,0,0,NULL,NULL),
-(35,'Lord of Vermilion Special Attack','Ultra Fire damage','Fire','Special','Single_Enemy','Damage',0,6,100,0,NULL,NULL),
+(35,'Lord of Vermilion Special Attack','Ultra Fire damage','Fire','Special','Single_Enemy','Damage',0,5,100,0,NULL,NULL),
 (36,'Lohengrin Majesty I','Big boost to Fire allies DEF','Fire','Passive','All_Allies','Support',0,0,0,0,NULL,NULL),
 (37,'Lohengrin Majesty II','Big boost to Fire allies ATK','Fire','Passive','All_Allies','Support',0,0,0,0,NULL,NULL),
-(38,'Lohengrin Special Attack','Massive Fire damage / Medium ATK Buff to Fire allies (3 Turns)','Fire','Special','Single_Enemy','Damage',0,5,100,0,NULL,NULL),
+(38,'Lohengrin Special Attack','Massive Fire damage / Medium ATK Buff to Fire allies (3 Turns)','Fire','Special','Single_Enemy','Damage',0,4,100,0,NULL,NULL),
 (39,'Flamebound Might','Medium boost to Fire allies ATK','Fire','Passive','All_Allies','Support',0,0,0,0,NULL,NULL),
 (40,'Flamebound Fowl','Small boost to Fire allies HP','Fire','Passive','All_Allies','Support',0,0,0,0,NULL,NULL),
 (41,'Flamebound Saber Special Attack','Big Fire damage','Fire','Special','Single_Enemy','Damage',0,4,100,0,NULL,NULL),
@@ -328,9 +328,9 @@ insert  into `master_skills`(`ms_id`,`ms_name`,`ms_desc`,`ms_element`,`ms_catego
 (49,'Typhoon','Medium Wind damage and DEF Down to all enemies','Wind','Active','All_Enemies','Damage',0,2,0,0,NULL,NULL),
 (50,'Slingshot','Big Wind damage and Dispel to single enemy','Wind','Active','Single_Enemy','Damage',0,3,0,0,NULL,NULL),
 (51,'Siren\'s Requiem','Massive Wind damage to all enemies (Activates at 50% HP)','Wind','Active','All_Enemies','Damage',0,4,0,0,NULL,NULL),
-(52,'Crimson Slash','Medium Fire damage to single enemy','Fire','Active','Single_Enemy','Damage',4,2.5,0,10,NULL,NULL),
+(52,'Crimson Slash','Medium Fire damage to single enemy','Fire','Active','Single_Enemy','Damage',4,1.8,0,10,NULL,NULL),
 (53,'Ignition Aura','Medium boost to Fire allies ATK','Fire','Active','All_Allies','Support',6,0,0,10,NULL,NULL),
-(54,'Ember Blast','Small Fire damage / Inflict Poison (Burn)','Fire','Active','Single_Enemy','Damage',5,1.5,0,10,NULL,NULL),
+(54,'Ember Blast','Small Fire damage / Inflict Poison (Burn)','Fire','Active','Single_Enemy','Damage',5,1,0,10,NULL,NULL),
 (55,'Agris Special Attack','Big Fire damage to single enemy','Fire','Special','Single_Enemy','Damage',0,4,100,0,NULL,NULL);
 
 /*Table structure for table `master_status_effects` */
@@ -341,7 +341,7 @@ CREATE TABLE `master_status_effects` (
   `mse_id` int NOT NULL AUTO_INCREMENT,
   `mse_name` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
   `mse_type` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `modifier_target` enum('ATK','DEF','ULT','STUN','POISON','HP','DISPEL','CRIT') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `modifier_target` enum('ATK','DEF','ULT','STUN','POISON','HP','DISPEL','CRIT','CRIDMG') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
   `modifier_value` float NOT NULL DEFAULT '0',
   `mse_duration` int DEFAULT NULL,
   `is_dispellable` tinyint(1) NOT NULL DEFAULT '1',
@@ -373,7 +373,7 @@ insert  into `master_status_effects`(`mse_id`,`mse_name`,`mse_type`,`modifier_ta
 (21,'DEF Up (Big self)','Buff','DEF',0.25,2,1),
 (22,'Counter Stance','Buff','ATK',0,2,1),
 (23,'Guarantee Critical','Buff','CRIT',1,1,1),
-(24,'Critical Damage Up','Buff','CRIT',0.3,1,1);
+(24,'Critical Damage Up','Buff','CRIDMG',0.3,1,1);
 
 /*Table structure for table `master_weapons` */
 
@@ -504,16 +504,16 @@ CREATE TABLE `player_inventories` (
   PRIMARY KEY (`inv_id`),
   KEY `player_id` (`player_id`),
   CONSTRAINT `fk_inv_player` FOREIGN KEY (`player_id`) REFERENCES `players` (`player_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=209 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=217 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 /*Data for the table `player_inventories` */
 
 insert  into `player_inventories`(`inv_id`,`player_id`,`master_item_id`,`item_type`,`item_level`,`limit_break_level`,`item_exp`) values 
-(101,1,1,'Character',15,0,0),
-(102,1,2,'Character',30,0,0),
-(103,1,3,'Character',30,0,0),
-(104,1,4,'Character',30,0,0),
-(105,1,8,'Character',20,0,0),
+(101,1,1,'Character',20,0,0),
+(102,1,2,'Character',40,0,0),
+(103,1,3,'Character',40,0,0),
+(104,1,4,'Character',40,0,0),
+(105,1,8,'Character',60,0,0),
 (201,1,1,'Weapon',50,0,0),
 (202,1,2,'Weapon',50,0,0),
 (203,1,3,'Weapon',50,0,0),
@@ -521,7 +521,14 @@ insert  into `player_inventories`(`inv_id`,`player_id`,`master_item_id`,`item_ty
 (205,1,5,'Weapon',50,0,0),
 (206,1,7,'Weapon',50,0,0),
 (207,1,8,'Weapon',50,0,0),
-(208,1,9,'Weapon',50,0,0);
+(208,1,9,'Weapon',50,0,0),
+(209,1,17,'Weapon',1,0,0),
+(211,2,1,'Character',1,0,0),
+(212,2,8,'Character',1,0,0),
+(213,2,22,'Weapon',1,0,0),
+(214,3,1,'Character',1,0,0),
+(215,3,8,'Character',1,0,0),
+(216,3,22,'Weapon',1,0,0);
 
 /*Table structure for table `player_materials` */
 
@@ -540,8 +547,11 @@ CREATE TABLE `player_materials` (
 /*Data for the table `player_materials` */
 
 insert  into `player_materials`(`player_id`,`mat_id`,`quantity`) values 
-(1,6,10),
-(1,7,10);
+(1,2,3),
+(1,6,6),
+(1,7,10),
+(2,6,3),
+(3,6,3);
 
 /*Table structure for table `player_mc_skills` */
 
@@ -561,9 +571,17 @@ CREATE TABLE `player_mc_skills` (
 
 insert  into `player_mc_skills`(`ppp_id`,`slot_number`,`ms_id`) values 
 (1,1,1),
-(1,2,2),
+(2,1,1),
+(3,1,1),
+(2,2,2),
+(3,2,2),
 (1,3,3),
-(1,4,4);
+(2,3,3),
+(3,3,3),
+(1,4,4),
+(2,4,4),
+(3,4,4),
+(1,2,8);
 
 /*Table structure for table `player_party_presets` */
 
@@ -591,12 +609,14 @@ CREATE TABLE `player_party_presets` (
   CONSTRAINT `fk_ppp_mc` FOREIGN KEY (`main_char_inv_id`) REFERENCES `player_inventories` (`inv_id`),
   CONSTRAINT `fk_ppp_player` FOREIGN KEY (`player_id`) REFERENCES `players` (`player_id`),
   CONSTRAINT `fk_ppp_w1` FOREIGN KEY (`weap_grid_1_inv_id`) REFERENCES `player_inventories` (`inv_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 /*Data for the table `player_party_presets` */
 
 insert  into `player_party_presets`(`ppp_id`,`player_id`,`preset_slot`,`main_char_inv_id`,`char_slot_1_inv_id`,`char_slot_2_inv_id`,`char_slot_3_inv_id`,`weap_grid_1_inv_id`,`weap_grid_2_inv_id`,`weap_grid_3_inv_id`,`weap_grid_4_inv_id`,`weap_grid_5_inv_id`) values 
-(1,1,1,101,102,103,105,201,202,206,207,208);
+(1,1,1,101,102,103,105,201,202,206,207,208),
+(2,2,1,211,212,NULL,NULL,213,NULL,NULL,NULL,NULL),
+(3,3,1,214,215,NULL,NULL,216,NULL,NULL,NULL,NULL);
 
 /*Table structure for table `player_quests` */
 
@@ -630,14 +650,18 @@ CREATE TABLE `players` (
   `player_level` int DEFAULT '1',
   `player_exp` int DEFAULT '0',
   `stamina` int NOT NULL DEFAULT '100',
+  `gold` int NOT NULL DEFAULT '0',
+  `diamond` int NOT NULL DEFAULT '0',
   `currency` int DEFAULT '0',
   PRIMARY KEY (`player_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 /*Data for the table `players` */
 
-insert  into `players`(`player_id`,`username`,`password_hash`,`player_level`,`player_exp`,`stamina`,`currency`) values 
-(1,'Gran','hash123',80,0,100,0);
+insert  into `players`(`player_id`,`username`,`password_hash`,`player_level`,`player_exp`,`stamina`,`gold`,`diamond`,`currency`) values 
+(1,'Gran','hash123',80,0,60,100000,3000,7500),
+(2,'player_1781438464120','pass123',1,0,100,0,0,0),
+(3,'player_1781512001282','$2b$10$9qbWv3RYKO6f0P8imVEn7.E7a/fe3ndbYemtbi5ors26yh6ArbfDe',1,0,100,0,0,0);
 
 /*Table structure for table `quest_enemies` */
 

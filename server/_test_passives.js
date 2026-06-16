@@ -20,7 +20,7 @@ const req = http.request({
         if (json.status === 'success') {
             console.log('=== CHARACTERS ===');
             json.data.player_party.characters.forEach(c => {
-                console.log(`${c.name} (Lv${c.level}): HP=${c.final_stats.hp} ATK=${c.final_stats.atk} DEF=${c.final_stats.def} SA=${c.final_stats.max_sa}`);
+                console.log(`${c.name} (Lv${c.level}): HP=${c.final_stats.hp} ATK=${c.final_stats.atk} DEF=${c.final_stats.def} CRIT=${c.final_stats.crit} SA=${c.final_stats.max_sa}`);
             });
             console.log('\n=== ENEMIES ===');
             json.data.enemies.forEach(e => {

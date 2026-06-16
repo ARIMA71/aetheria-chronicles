@@ -465,18 +465,6 @@ exports.initBattle = async (req, res) => {
         });
 
         // =========================================================
-        // PROCESSING: Kalkulasi Passive Bonus dari Weapon Skills
-        //   Akumulasi modifier_value per stat_target (ATK, HP, DEF, CRIT)
-        //   Rumus akhir: Final_Stat = Base_Stat * (1 + totalPassive%)
-        // =========================================================
-        const passiveTotals = { ATK: 0, HP: 0, DEF: 0, CRIT: 0 };
-        (weaponPassiveRows || []).forEach(row => {
-            const stat = row.stat_target; // 'ATK' | 'HP' | 'DEF' | 'CRIT'
-            if (passiveTotals.hasOwnProperty(stat)) {
-                passiveTotals[stat] += Number(row.modifier_value) || 0;
-            }
-        });
-
         // Cari elemen dari senjata utama (Slot 1) untuk diwariskan ke karakter 'Any'
         const mainWeapon = (weaponRows || []).find(w => w.is_main_weapon === 1);
         const mainWeaponElement = mainWeapon ? mainWeapon.element : 'Fire';
@@ -500,15 +488,28 @@ exports.initBattle = async (req, res) => {
             // Karakter berelemen 'Any' (MC) mewarisi elemen Senjata Utama
             const charElement = char.element === 'Any' ? mainWeaponElement : char.element;
 
+            // Kalkulasi Passive Bonus dari Weapon Skills per Karakter (sesuai Element)
+            const personalPassive = { ATK: 0, HP: 0, DEF: 0, CRIT: 0 };
+            (weaponPassiveRows || []).forEach(row => {
+                const cond = (row.element_condition || 'Any').trim().toLowerCase();
+                if (cond === 'any' || cond === charElement.toLowerCase()) {
+                    const stat = row.stat_target; // 'ATK' | 'HP' | 'DEF' | 'CRIT'
+                    if (personalPassive.hasOwnProperty(stat)) {
+                        personalPassive[stat] += Number(row.modifier_value) || 0;
+                    }
+                }
+            });
+
             return {
                 slot:    char.role_slot,
                 name:    char.name,
                 element: charElement,
                 level:   char.level,
                 final_stats: {
-                    hp:     Math.floor(rawHp  * (1 + passiveTotals.HP)),
-                    atk:    Math.floor(rawAtk * (1 + passiveTotals.ATK)),
-                    def:    Math.floor(rawDef * (1 + passiveTotals.DEF)),
+                    hp:     Math.floor(rawHp  * (1 + personalPassive.HP)),
+                    atk:    Math.floor(rawAtk * (1 + personalPassive.ATK)),
+                    def:    Math.floor(rawDef * (1 + personalPassive.DEF)),
+                    crit:   Number((0.1 + (personalPassive.CRIT || 0)).toFixed(4)),
                     max_sa: Number(char.max_sa)   || 100
                 },
                 portrait_path: char.portrait_path,
@@ -662,6 +663,36 @@ exports.saveBattleResult = async (req, res) => {
                 [Number(potionsUsed), playerId]
             );
         }
+
+        // Ambil data stamina cost dari quest
+        const [questRows] = await conn.query(
+            'SELECT mq_stamina_cost FROM master_quests WHERE mq_id = ?',
+            [questId]
+        );
+        const staminaCost = questRows[0] ? questRows[0].mq_stamina_cost : 10;
+
+        // Ambil data stamina player
+        const [playerRows] = await conn.query(
+            'SELECT stamina FROM players WHERE player_id = ?',
+            [playerId]
+        );
+        const playerStamina = playerRows[0] ? playerRows[0].stamina : 0;
+
+        if (playerStamina < staminaCost) {
+            await conn.rollback();
+            conn.release();
+            return res.status(400).json({
+                status: 'error',
+                message: 'Stamina tidak cukup untuk menyelesaikan quest!'
+            });
+        }
+
+        // Kurangi stamina player
+        await conn.query(
+            'UPDATE players SET stamina = GREATEST(0, stamina - ?) WHERE player_id = ?',
+            [staminaCost, playerId]
+        );
+        const remainingStamina = Math.max(0, playerStamina - staminaCost);
 
         // =========================================================
         // 3. Ambil semua kemungkinan reward dari quest_rewards
@@ -862,7 +893,8 @@ exports.saveBattleResult = async (req, res) => {
             status: 'success',
             message: 'Hasil battle berhasil diproses!',
             data: {
-                obtained_rewards: obtainedRewards
+                obtained_rewards: obtainedRewards,
+                remaining_stamina: remainingStamina
             }
         });
 

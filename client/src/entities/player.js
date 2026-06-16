@@ -18,19 +18,19 @@ export default class Player extends Phaser.GameObjects.Container {
 
         // ── Data Mapping ──────────────────────────────────────────────────────
         this.charName = data.name;
-        this.element  = data.element || 'None';
-        this.level    = data.level   || 1;
-        this.maxHp    = data.final_stats.hp;
-        this.hp       = data.final_stats.hp;
-        this.atk      = data.final_stats.atk;
+        this.element = data.element || 'None';
+        this.level = data.level || 1;
+        this.maxHp = data.final_stats.hp;
+        this.hp = data.final_stats.hp;
+        this.atk = data.final_stats.atk;
 
         // Base stats (disimpan untuk referensi getStat())
-        this._baseAtk  = data.final_stats.atk;
-        this._baseDef  = data.final_stats.def || 500;
-        this._baseCrit = 0.1;
+        this._baseAtk = data.final_stats.atk;
+        this._baseDef = data.final_stats.def || 500;
+        this._baseCrit = data.final_stats.crit !== undefined ? data.final_stats.crit : 0.1;
 
-        this.def        = this._baseDef;
-        this.crit       = this._baseCrit;
+        this.def = this._baseDef;
+        this.crit = this._baseCrit;
         this.critDamage = 2.0;
 
         // ── Active Effects (menggantikan activeBuffs lama) ────────────────────
@@ -40,8 +40,8 @@ export default class Player extends Phaser.GameObjects.Container {
         // ── Combat State ──────────────────────────────────────────────────────
         this.specialBar = 0;
         this.specialMax = data.final_stats.max_sa || 100;
-        this.cooldowns  = {};
-        this.isSAReady  = false;
+        this.cooldowns = {};
+        this.isSAReady = false;
 
         // ── Normalisasi Skills dari API ───────────────────────────────────────
         // API sudah mengirim ms_action_type sebagai 'type' dan status_effects[]
@@ -52,13 +52,13 @@ export default class Player extends Phaser.GameObjects.Container {
                 return cat !== 'passive';
             })
             .map(s => ({
-                id:             s.id,
-                name:           s.name,
-                category:       s.category || 'Active',   // 'Active' | 'Special' | 'Passive'
-                type:           s.type     || 'Damage',   // 'Damage' | 'Support' | 'Heal' | 'Cleanse' | 'Revive'
-                target_type:    s.target_type || 'Single_Enemy',
-                modifier:       parseFloat(s.modifier ?? 1.0),
-                cooldown:       (s.category || '').toLowerCase() === 'special' ? 0 : (s.cooldown || 0),
+                id: s.id,
+                name: s.name,
+                category: s.category || 'Active',   // 'Active' | 'Special' | 'Passive'
+                type: s.type || 'Damage',   // 'Damage' | 'Support' | 'Heal' | 'Cleanse' | 'Revive'
+                target_type: s.target_type || 'Single_Enemy',
+                modifier: parseFloat(s.modifier ?? 1.0),
+                cooldown: (s.category || '').toLowerCase() === 'special' ? 0 : (s.cooldown || 0),
                 status_effects: s.status_effects || []    // array efek dari API
             }));
 
@@ -69,10 +69,10 @@ export default class Player extends Phaser.GameObjects.Container {
             : { id: 'limit_break', name: 'Limit Break', modifier: 3.5, target_type: 'Single_Enemy', status_effects: [] };
 
         // ── Dimensi & Warna ───────────────────────────────────────────────────
-        this._W         = 85;
-        this._H         = 120;
+        this._W = 85;
+        this._H = 120;
         this._elemColor = this._getElementColor(this.element);
-        this._baseX     = x;
+        this._baseX = x;
         this._isHighlight = false;
 
         // ── Visual Elements ───────────────────────────────────────────────────
@@ -87,15 +87,15 @@ export default class Player extends Phaser.GameObjects.Container {
 
         // HP Bar
         this._hpBarBg = scene.add.rectangle(0, 32, 60, 10, 0x222222);
-        this._hpFill  = scene.add.rectangle(-30, 32, 60, 10, 0x27ae60).setOrigin(0, 0.5);
-        this._hpText  = scene.add.text(0, 32, `${this.hp}`, {
+        this._hpFill = scene.add.rectangle(-30, 32, 60, 10, 0x27ae60).setOrigin(0, 0.5);
+        this._hpText = scene.add.text(0, 32, `${this.hp}`, {
             fontSize: '11px', color: '#ffffff', fontStyle: 'bold',
             stroke: '#000000', strokeThickness: 3
         }).setOrigin(0.5, 0.5);
 
         // SA Bar
-        this._saBarBg   = scene.add.rectangle(-8, 44, 42, 4, 0x111111);
-        this._saFill    = scene.add.rectangle(-29, 44, 0, 4, 0xf1c40f).setOrigin(0, 0.5);
+        this._saBarBg = scene.add.rectangle(-8, 44, 42, 4, 0x111111);
+        this._saFill = scene.add.rectangle(-29, 44, 0, 4, 0xf1c40f).setOrigin(0, 0.5);
         this._saPctText = scene.add.text(15, 44, '0%', {
             fontSize: '8px', color: '#f1c40f', fontStyle: 'bold'
         }).setOrigin(0, 0.5);
@@ -106,7 +106,7 @@ export default class Player extends Phaser.GameObjects.Container {
 
         // KO Overlay
         this._koOverlay = scene.add.rectangle(0, 0, this._W, this._H, 0x000000).setAlpha(0);
-        this._koText    = scene.add.text(0, 0, 'KO', {
+        this._koText = scene.add.text(0, 0, 'KO', {
             fontSize: '18px', color: '#ff4444', fontStyle: 'bold'
         }).setOrigin(0.5).setAlpha(0);
 
@@ -139,7 +139,7 @@ export default class Player extends Phaser.GameObjects.Container {
         const existing = this.activeEffects.find(e => e.effect_name === effectData.effect_name);
         if (existing) {
             existing.duration = effectData.duration;
-            existing.value    = effectData.value;
+            existing.value = effectData.value;
             return;
         }
 
@@ -155,15 +155,25 @@ export default class Player extends Phaser.GameObjects.Container {
      */
     getStat(statName) {
         const statMap = {
-            'ATK':  this._baseAtk,
-            'DEF':  this._baseDef,
+            'ATK': this._baseAtk,
+            'DEF': this._baseDef,
             'CRIT': this._baseCrit
         };
         const base = statMap[statName] ?? 0;
 
-        // Jumlahkan semua multiplier dari efek yang target_stat-nya cocok
-        // Hanya proses efek Buff/Debuff dengan target_stat biasa (bukan STUN, POISON, dll)
-        const numericStats = ['ATK', 'DEF', 'CRIT'];
+        if (statName === 'CRIT') {
+            const hasGuarantee = this.activeEffects.some(e => (e.effect_name || '').toLowerCase().includes('guarantee'));
+            if (hasGuarantee) return 1.0;
+
+            const totalMult = this.activeEffects
+                .filter(e => e.target_stat === 'CRIT' && !(e.effect_name || '').toLowerCase().includes('damage'))
+                .reduce((sum, e) => sum + (Number(e.value) || 0), 0);
+
+            const clampedMult = Math.max(-0.5, Math.min(0.5, totalMult));
+            return Math.max(0, this._baseCrit + clampedMult);
+        }
+
+        const numericStats = ['ATK', 'DEF'];
         if (!numericStats.includes(statName)) return base;
 
         const totalMult = this.activeEffects
@@ -174,6 +184,15 @@ export default class Player extends Phaser.GameObjects.Container {
         const clampedMult = Math.max(-0.5, Math.min(0.5, totalMult));
 
         return Math.max(0, base * (1 + clampedMult));
+    }
+
+    getCritDamage() {
+        const totalBuff = this.activeEffects
+            .filter(e => e.target_stat === 'CRIDMG' || (e.target_stat === 'CRIT' && (e.effect_name || '').toLowerCase().includes('damage')))
+            .reduce((sum, e) => sum + (Number(e.value) || 0), 0);
+
+        const clampedBuff = Math.max(0, Math.min(0.5, totalBuff));
+        return 2.0 + clampedBuff;
     }
 
     /**
@@ -254,21 +273,29 @@ export default class Player extends Phaser.GameObjects.Container {
         // Rebuild teks indikator kecil di atas HP bar setiap refresh
         this._effectIndicators.removeAll(true);
         const visibleEffects = this.activeEffects.filter(e =>
-            ['ATK', 'DEF', 'CRIT'].includes(e.target_stat)
+            ['ATK', 'DEF', 'CRIT', 'STUN', 'POISON'].includes(e.target_stat)
         );
 
+        const sups = { 0: '', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹' };
         visibleEffects.forEach((e, idx) => {
-            const isBuff   = (e.effect_type || '').toLowerCase() === 'buff';
-            const arrow    = isBuff ? '⇧' : '⇩';
-            const color    = isBuff ? '#55ff88' : '#ff5555';
-            const shortStat = e.target_stat; // 'ATK', 'DEF', 'CRIT'
-            const label    = `[${shortStat}${arrow}]`;
+            const isBuff = (e.effect_type || '').toLowerCase() === 'buff';
+            const color = isBuff ? '#f1c40f' : '#7ec8e3'; // Kuning untuk Buff, Biru Muda untuk Debuff
+
+            let emoji = '❓';
+            if (e.target_stat === 'ATK') emoji = '⚔️';
+            else if (e.target_stat === 'DEF') emoji = '🛡️';
+            else if (e.target_stat === 'CRIT') emoji = '✨';
+            else if (e.target_stat === 'STUN') emoji = '💫';
+            else if (e.target_stat === 'POISON') emoji = '🤢';
+
+            const durSup = sups[e.duration] || e.duration || '';
+            const label = `${emoji}${durSup}`;
 
             const txt = this.scene.add.text(
                 (idx - Math.floor(visibleEffects.length / 2)) * 24,
                 0,
                 label,
-                { fontSize: '7px', color, fontStyle: 'bold', stroke: '#000', strokeThickness: 2 }
+                { fontSize: '10px', color, fontStyle: 'bold', stroke: '#000', strokeThickness: 2 }
             ).setOrigin(0.5, 0.5);
 
             this._effectIndicators.add(txt);
