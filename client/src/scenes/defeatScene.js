@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { THEME } from '../main.js';
+import { checkSession } from '../utils/auth.js';
 
 const W = 450, H = 800, CX = 225, CY = 400;
 
@@ -15,6 +16,8 @@ export default class DefeatScene extends Phaser.Scene {
     }
 
     create() {
+        if (!checkSession(this)) return;
+
         // Dim the background battle scene
         const overlay = this.add.rectangle(CX, CY, W, H, 0x000000, 0.75).setInteractive();
         overlay.on('pointerdown', (pointer, x, y, event) => {

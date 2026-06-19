@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { THEME } from '../main.js';
+import { checkSession } from '../utils/auth.js';
 
 const W = 450, H = 800, CX = 225;
 
@@ -9,6 +10,8 @@ export default class AuthScene extends Phaser.Scene {
     }
 
     create() {
+        if (checkSession(this)) return;
+
         // ── Background ──
         this.add.rectangle(CX, H / 2, W, H, THEME.BG);
 
@@ -380,6 +383,7 @@ export default class AuthScene extends Phaser.Scene {
     _saveAndProceed(loginData) {
         localStorage.setItem('aetheria_token', loginData.token);
         localStorage.setItem('aetheria_player', JSON.stringify(loginData.data));
+        localStorage.setItem('aetheria_last_activity', Date.now().toString());
         this._hideForm();
         this.scene.start('MainMenuScene');
     }

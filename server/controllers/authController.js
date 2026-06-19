@@ -227,3 +227,34 @@ exports.login = async (req, res) => {
         });
     }
 };
+
+// ============================================================
+// GET /api/auth/verify
+// Headers: { Authorization: Bearer <token> }
+// ============================================================
+exports.verifyToken = async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({
+            status: 'error',
+            message: 'Token tidak disediakan atau format salah.'
+        });
+    }
+
+    const token = authHeader.split(' ')[1];
+
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        return res.status(200).json({
+            status: 'success',
+            message: 'Token valid.',
+            data: decoded
+        });
+    } catch (error) {
+        return res.status(401).json({
+            status: 'error',
+            message: 'Token tidak valid atau telah kedaluwarsa.',
+            error_detail: error.message
+        });
+    }
+};

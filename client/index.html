@@ -12,16 +12,21 @@
         * {
             box-sizing: border-box;
         }
+        html {
+            overflow-y: auto;
+            overflow-x: hidden;
+            background-color: #0F172A;
+            scrollbar-width: thin;
+            scrollbar-color: #1e293b #0f141d;
+        }
         body {
             margin: 0;
             padding: 0;
             background-color: #0F172A;
             color: #ffffff;
             font-family: 'Outfit', sans-serif;
-            overflow-x: hidden;
-            overflow-y: auto; /* Allow vertical scrolling when zoomed or on small screens */
             min-height: 100vh;
-            width: 100vw;
+            width: 100%;
             display: flex;
             flex-direction: row;
         }
@@ -37,8 +42,9 @@
         /* Area Game (GBF Style: Stick to Left di PC, Fullscreen di Mobile) */
         #game-wrapper {
             width: 100%;
-            height: 100vh;
-            min-height: 800px; /* Locked to design base height to prevent scaling down/blurriness under zoom */
+            height: auto;
+            min-height: 100vh;
+            overflow: visible; /* No scrollbar here; scroll occurs at page level */
             max-width: 450px;
             position: relative;
             background: #0F172A;
@@ -46,19 +52,51 @@
             z-index: 10;
         }
 
+        /* Container untuk canvas game dengan aspect-ratio 9:16 */
+        #game-content {
+            width: 100%;
+            max-width: 450px;
+            aspect-ratio: 450 / 800;
+            position: relative;
+            margin: 0 auto;
+        }
+
         /* Area Panel Kanan khusus Desktop (GBF Style sidebar) */
         #desktop-sidebar {
             display: flex;
             flex-direction: column;
             flex: 1;
-            height: 100%;
+            height: 100vh;
+            position: -webkit-sticky;
+            position: sticky;
+            top: 0; /* Sticky to top of window */
             background: linear-gradient(135deg, #0f141d 0%, #070b12 100%);
             border-left: 2px solid #1a2230;
             padding: 40px;
             justify-content: center;
             align-items: center;
-            position: relative;
-            overflow: hidden;
+            overflow-y: auto; /* Fallback scroll if sidebar content overflows */
+            overflow-x: hidden;
+        }
+
+        /* Custom scrollbar styling (Webkit) */
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #0f141d;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 5px;
+            border: 2px solid #0f141d;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #334155;
         }
 
         /* Ambient light effect */
@@ -149,7 +187,9 @@
 </head>
 <body>
     <div id="app-container">
-        <div id="game-wrapper"></div>
+        <div id="game-wrapper">
+            <div id="game-content"></div>
+        </div>
 
         <div id="desktop-sidebar">
             <div class="sidebar-content">

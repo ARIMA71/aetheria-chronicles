@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { THEME } from '../main.js';
+import { checkSession, clearSession } from '../utils/auth.js';
 
 const W = 450, H = 800, CX = 225;
 
@@ -9,6 +10,8 @@ export default class MainMenuScene extends Phaser.Scene {
     }
 
     create() {
+        if (!checkSession(this)) return;
+
         // Read player data from localStorage as immediate fallback
         const raw = localStorage.getItem('aetheria_player');
         this.playerData = raw ? JSON.parse(raw) : {
@@ -445,9 +448,7 @@ export default class MainMenuScene extends Phaser.Scene {
 
         // YES Button
         const btnYesObj = this._createModalRectBtn(CX - 65, H / 2 + 30, 100, 32, 'LOGOUT', () => {
-            localStorage.removeItem('aetheria_token');
-            localStorage.removeItem('aetheria_player');
-            this.scene.start('AuthScene');
+            clearSession(this);
         }, 0x7f1d1d, 0xef4444);
 
         // CANCEL Button

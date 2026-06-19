@@ -1,6 +1,7 @@
-﻿import Player from "../entities/player";
+import Player from "../entities/player";
 import Enemy from "../entities/enemy";
 import { THEME } from "../main.js";
+import { checkSession } from "../utils/auth.js";
 const W = 450, H = 800, CX = 225;
 export default class BattleScene extends Phaser.Scene {
     constructor() { super("BattleScene"); }
@@ -11,6 +12,7 @@ export default class BattleScene extends Phaser.Scene {
         }
     }
     create() {
+        if (!checkSession(this)) return;
         this.setTurn("player"); this.currentTurn = 1;
         this.players = []; this.activePlayer = null;
         this.aetherGauge = 0; this.aetherGaugeMax = 100;

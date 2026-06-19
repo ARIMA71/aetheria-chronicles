@@ -40,16 +40,23 @@ export const THEME = {
 
 const config = {
     type: Phaser.AUTO,
-    parent: 'game-wrapper',
+    parent: 'game-content',
     width: 450,
     height: 800,
     backgroundColor: '#0F172A',
+    resolution: Math.min(window.devicePixelRatio || 1, 2),
+    roundPixels: true,
     dom: {
         createContainer: true
     },
+    input: {
+        mouse: {
+            preventDefaultWheel: false
+        }
+    },
     scale: {
         mode: Phaser.Scale.FIT,
-        autoCenter: Phaser.Scale.CENTER_BOTH,
+        autoCenter: Phaser.Scale.CENTER_HORIZONTALLY,
         width: 450,
         height: 800
     },
