@@ -13,6 +13,7 @@ export default class VictoryScene extends Phaser.Scene {
         this.questId = data.questId || 5;
         this.playerId = data.playerId || 1;
         this.potionsUsed = data.potionsUsed || 0;
+        this.bsId = data.bsId || null;
     }
 
     create() {
@@ -71,6 +72,7 @@ export default class VictoryScene extends Phaser.Scene {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
+                bsId: this.bsId,
                 playerId: this.playerId,
                 questId: this.questId,
                 potionsUsed: this.potionsUsed

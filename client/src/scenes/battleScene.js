@@ -44,6 +44,7 @@ export default class BattleScene extends Phaser.Scene {
             const j = await r.json();
             if (j.status !== "success") throw new Error(j.message || "API error");
             this.loadingText.destroy();
+            this.bsId = j.data.bs_id;
             this.potionCount = j.data.potion_count !== undefined ? j.data.potion_count : 0;
             this.healsRemaining = Math.min(3, this.potionCount);
             const chars = j.data.player_party.characters.slice(0, 4);
@@ -802,7 +803,7 @@ export default class BattleScene extends Phaser.Scene {
      *   3. Penahanan CA (Exhausted): Jika CA bar penuh tapi exhausted, dilarang CA. Tahan CA bar (jangan reset/tambah), fallback ke Basic Attack.
      *   4. Turn Biasa (Pengisian CA): Jika CA belum penuh, gunakan Basic Attack dan tambahkan CA bar +1 jika tidak exhausted.
      */
-    enemyAttack() {
+    async enemyAttack() {
         const isStunned = this.enemy.activeEffects.some(e => e.target_stat === 'STUN');
         if (isStunned) {
             this.showLog(`⚡ ${this.enemy.charName} is STUNNED and cannot move!`);
@@ -811,48 +812,92 @@ export default class BattleScene extends Phaser.Scene {
             return;
         }
 
-        const knowledge = this._buildKnowledge();
         const modeMult = this.enemy.modeState.toLowerCase() === 'exhausted' ? 0.7
             : this.enemy.modeState.toLowerCase() === 'enraged' ? 1.5
                 : 1.0;
         const isExhausted = this.enemy.modeState.toLowerCase() === 'exhausted';
 
-        // ── 1. HP Trigger (Prioritas Utama) ───────────────────────────────────
-        const hpTriggerAction = this.enemy.evaluateHpTriggerAction();
-        if (hpTriggerAction) {
+        // Prepare current battle state to send to backend
+        const battleState = {
+            player_party: {
+                characters: this.players.map(p => ({
+                    id: p.id,
+                    hp: p.hp,
+                    maxHp: p.maxHp,
+                    activeEffects: (p.activeEffects || []).map(e => ({
+                        effect_name: e.effect_name || e.name,
+                        effect_type: e.effect_type || e.type,
+                        target_stat: e.target_stat,
+                        value: e.value,
+                        duration: e.duration
+                    }))
+                }))
+            },
+            boss: {
+                hp: this.enemy.hp,
+                maxHp: this.enemy.maxHp,
+                phase: this.enemy.modeState,
+                isCaReady: this.enemy.caBar >= this.enemy.caMax && !isExhausted,
+                activeEffects: (this.enemy.activeEffects || []).map(e => ({
+                    effect_name: e.effect_name || e.name,
+                    effect_type: e.effect_type || e.type,
+                    target_stat: e.target_stat,
+                    value: e.value,
+                    duration: e.duration
+                }))
+            },
+            usedSkills: Array.from(this.enemy._usedOneTimeSkills || [])
+        };
+
+        const bossSkills = (this.enemy.aiBehaviors || []).map(b => ({
+            id: b.id,
+            phase: b.phase,
+            base_utility: b.base_utility,
+            score_modifiers: b.modifiers,
+            skill: b.skill
+        }));
+
+        let chosenBehavior = null;
+
+        try {
+            const r = await fetch("http://localhost:3000/api/battle/ai-decision", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ bsId: this.bsId, battleState, bossSkills })
+            });
+            if (r.ok) {
+                const j = await r.json();
+                if (j.status === "success" && j.data && j.data.selected_skill) {
+                    const selected = j.data.selected_skill;
+                    chosenBehavior = this.enemy.aiBehaviors.find(b => b.id === selected.id);
+                }
+            } else {
+                console.error("AI decision endpoint failed with status:", r.status);
+            }
+        } catch (e) {
+            console.error("Failed to fetch AI decision:", e);
+        }
+
+        if (chosenBehavior) {
             this.enemy.caBar = 0;
             this._refreshEnemyHUD();
-            this._executeEnemySkill(hpTriggerAction, modeMult);
+
+            // Track One_Time_Use if selected
+            if (chosenBehavior.modifiers && chosenBehavior.modifiers.One_Time_Use === true) {
+                if (!this.enemy._usedOneTimeSkills) this.enemy._usedOneTimeSkills = new Set();
+                this.enemy._usedOneTimeSkills.add(chosenBehavior.skill.id);
+            }
+
+            this._executeEnemySkill(chosenBehavior, modeMult);
+
             if (this.players.every(p => p.hp <= 0)) { this.triggerDefeat(false); return; }
             this.setTurn('player');
             this.time.delayedCall(1500, () => this.processTurnEnd());
             return;
         }
 
-        // ── 2. Charge Attack (Validasi CA & Status) ───────────────────────────
-        if (this.enemy.caBar >= this.enemy.caMax && !isExhausted) {
-            const behavior = this.enemy.evaluateAction(knowledge);
-            this.enemy.caBar = 0;
-            this._refreshEnemyHUD();
-
-            let handledAsync = false;
-            if (behavior) {
-                this._executeEnemySkill(behavior, modeMult);
-            } else {
-                handledAsync = this._executeEnemyBasicAttack(modeMult, false);
-            }
-
-            if (!handledAsync) {
-                if (this.players.every(p => p.hp <= 0)) { this.triggerDefeat(false); return; }
-                this.setTurn('player');
-                this.time.delayedCall(1500, () => this.processTurnEnd());
-            }
-            return;
-        }
-
-        // ── 3. Penahanan CA ───────────────────────────────────────────────────
+        // ── 3. Penahanan CA (jika exhausted dan CA penuh) ──────────────────────
         if (this.enemy.caBar >= this.enemy.caMax && isExhausted) {
-            // Musuh dilarang melakukan Charge Attack (tahan nilai caBar, jangan direset & jangan ditambah)
             const handledAsync = this._executeEnemyBasicAttack(modeMult, false);
 
             if (!handledAsync) {
@@ -1228,7 +1273,8 @@ export default class BattleScene extends Phaser.Scene {
                 this.scene.launch('VictoryScene', {
                     questId: this.questId,
                     playerId: this.playerId,
-                    potionsUsed: this.potionsUsed
+                    potionsUsed: this.potionsUsed,
+                    bsId: this.bsId
                 });
             });
             return true;
@@ -1244,7 +1290,8 @@ export default class BattleScene extends Phaser.Scene {
             this.scene.launch('DefeatScene', {
                 questId: this.questId,
                 playerId: this.playerId,
-                isRetreat: isRetreat
+                isRetreat: isRetreat,
+                bsId: this.bsId
             });
         });
     }
