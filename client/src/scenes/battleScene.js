@@ -2,6 +2,9 @@ import Player from "../entities/player";
 import Enemy from "../entities/enemy";
 import { THEME } from "../main.js";
 import { checkSession } from "../utils/auth.js";
+import BattleApi from "../services/BattleApi.js";
+import CombatManager from "../services/CombatManager.js";
+import BattleMenu from "../ui/BattleMenu.js";
 const W = 450, H = 800, CX = 225;
 export default class BattleScene extends Phaser.Scene {
     constructor() { super("BattleScene"); }
@@ -35,13 +38,7 @@ export default class BattleScene extends Phaser.Scene {
     }
     async fetchBattleData() {
         try {
-            const r = await fetch("http://localhost:3000/api/battle/init", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ playerId: this.playerId, presetSlot: 1, questId: this.questId })
-            });
-            if (!r.ok) throw new Error("HTTP " + r.status);
-            const j = await r.json();
+            const j = await BattleApi.initBattle(this.questId, this.playerId);
             if (j.status !== "success") throw new Error(j.message || "API error");
             this.loadingText.destroy();
             this.bsId = j.data.bs_id;
@@ -646,7 +643,7 @@ export default class BattleScene extends Phaser.Scene {
 
             const pAtk = p.getStat('ATK');
             const rawDmg = pAtk;
-            let dmg = this._calcMitigatedDmg(rawDmg, p, this.enemy);
+            let dmg = CombatManager.calcMitigatedDmg(rawDmg, p, this.enemy, this.enemy);
             const crit = Math.random() < p.getStat('CRIT');
             if (crit) dmg = Math.floor(dmg * p.getCritDamage());
             else dmg = Math.floor(dmg);
@@ -676,11 +673,11 @@ export default class BattleScene extends Phaser.Scene {
 
                     const pAtk = p.getStat('ATK');
                     const rawSA = pAtk * p.specialAttack.modifier;
-                    const mitigated = this._calcMitigatedDmg(rawSA, p, this.enemy);
+                    const mitigated = CombatManager.calcMitigatedDmg(rawSA, p, this.enemy, this.enemy);
                     const add = Math.floor(Math.max(mitigated, 1) * (saUsers.length >= 2 ? mult[saUsers.length] : 1));
                     this._applyEnemyDamage(add); bonus += add;
                     // Terapkan status_effects dari SA skill
-                    this._applyStatusEffects(p, p.specialAttack, p.specialAttack.status_effects);
+                    CombatManager.applyStatusEffects(p, p.specialAttack, p.specialAttack.status_effects, this.players, this.enemy, this.showLog.bind(this), this._refreshEnemyHUD.bind(this));
                     p.specialBar = 0; p.setSAReady(false); p.refreshVisual();
                     this.aetherGauge = Math.min(this.aetherGaugeMax, this.aetherGauge + 10);
                     this.showLog(`✦ ${p.charName} casts SA! ${add} dmg`);
@@ -720,21 +717,21 @@ export default class BattleScene extends Phaser.Scene {
             // Damage: kalkulasi dengan getStat() + mitigasi DEF & elemen
             const pAtk = p.getStat('ATK');
             const rawDmg = pAtk * sk.modifier;
-            const dmg = this._calcMitigatedDmg(rawDmg, p, this.enemy);
+            const dmg = CombatManager.calcMitigatedDmg(rawDmg, p, this.enemy, this.enemy);
             this._applyEnemyDamage(dmg);
             this.showLog(p.charName + ": " + sk.name + " → " + dmg + " dmg");
-            this._applyStatusEffects(p, sk, sk.status_effects);
+            CombatManager.applyStatusEffects(p, sk, sk.status_effects, this.players, this.enemy, this.showLog.bind(this), this._refreshEnemyHUD.bind(this));
 
         } else if (type === "support") {
             // Support: tidak ada damage, langsung terapkan status_effects
-            this._applyStatusEffects(p, sk, sk.status_effects);
+            CombatManager.applyStatusEffects(p, sk, sk.status_effects, this.players, this.enemy, this.showLog.bind(this), this._refreshEnemyHUD.bind(this));
 
         } else if (type === "heal") {
             // Heal: pulihkan HP berdasarkan modifier * maxHp
             const healAmt = Math.floor(p.maxHp * (sk.modifier || 0.2));
             p.hp = Math.min(p.hp + healAmt, p.maxHp);
             this.showLog(p.charName + ": " + sk.name + " → healed " + healAmt);
-            this._applyStatusEffects(p, sk, sk.status_effects);
+            CombatManager.applyStatusEffects(p, sk, sk.status_effects, this.players, this.enemy, this.showLog.bind(this), this._refreshEnemyHUD.bind(this));
 
         } else if (type === "cleanse") {
             // Cleanse: hapus semua debuff dari target (all_allies biasanya)
@@ -765,7 +762,7 @@ export default class BattleScene extends Phaser.Scene {
                 targetChar.refreshVisual();
                 this.showLog(p.charName + ": " + sk.name + " → " + targetChar.charName + " revived!");
 
-                this._applyStatusEffects(p, sk, sk.status_effects);
+                CombatManager.applyStatusEffects(p, sk, sk.status_effects, this.players, this.enemy, this.showLog.bind(this), this._refreshEnemyHUD.bind(this));
                 if (sk.cooldown) p.cooldowns[sk.id] = sk.cooldown;
                 p.refreshVisual();
                 if (this.checkVictory()) return;
@@ -788,7 +785,7 @@ export default class BattleScene extends Phaser.Scene {
         const mc = this.players.find(p => p.charName.includes("MC") || p.charName.includes("Main Character")) || this.players[0];
         const mcElement = mc ? mc.element : 'None';
 
-        const dmg = this._calcMitigatedDmg(rawDmg, { element: mcElement }, this.enemy);
+        const dmg = CombatManager.calcMitigatedDmg(rawDmg, { element: mcElement }, this.enemy, this.enemy);
         this._applyEnemyDamage(dmg);
         this.aetherGauge = 0;
         this._refreshAetherUI();
@@ -860,22 +857,31 @@ export default class BattleScene extends Phaser.Scene {
         let chosenBehavior = null;
 
         try {
-            const r = await fetch("http://localhost:3000/api/battle/ai-decision", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ bsId: this.bsId, battleState, bossSkills })
-            });
-            if (r.ok) {
-                const j = await r.json();
-                if (j.status === "success" && j.data && j.data.selected_skill) {
-                    const selected = j.data.selected_skill;
-                    chosenBehavior = this.enemy.aiBehaviors.find(b => b.id === selected.id);
-                }
-            } else {
-                console.error("AI decision endpoint failed with status:", r.status);
+            const j = await BattleApi.getAiDecision(this.bsId, battleState, bossSkills);
+            if (j.status === "success" && j.data && j.data.selected_skill) {
+                const selected = j.data.selected_skill;
+                chosenBehavior = this.enemy.aiBehaviors.find(b => b.id === selected.id);
             }
         } catch (e) {
-            console.error("Failed to fetch AI decision:", e);
+            console.error("AI decision failed, triggering fallback:", e);
+        }
+
+        // --- AI FALLBACK MECHANISM ---
+        if (!chosenBehavior) {
+            console.warn("[AI_FALLBACK_ENGAGED] Enemy AI decision failed or returned null. Using fallback heuristic.");
+            // Visual Toaster for User / QA
+            const toast = this.add.text(CX, H / 2 - 100, "⚠️ [System: Network Timeout - AI Heuristic Fallback Engaged]", {
+                fontSize: "10px", color: "#ff4757", backgroundColor: "#1e0b0b", padding: { x: 8, y: 4 }, fontStyle: "bold"
+            }).setOrigin(0.5).setDepth(100);
+            this.time.delayedCall(3000, () => toast.destroy());
+
+            // Retrieve heuristic fallback action locally
+            const isCaReady = this.enemy.caBar >= this.enemy.caMax && !isExhausted;
+            chosenBehavior = CombatManager.getAiFallbackAction(this.enemy, isCaReady);
+            
+            // Note: Snapshot Integrity is intrinsically maintained because chosenBehavior will be executed below,
+            // which internally modifies hp/caBar. The next time 'battleState' snapshot is constructed on the next turn,
+            // it captures these valid fallback results directly from the entity properties.
         }
 
         if (chosenBehavior) {
@@ -931,7 +937,7 @@ export default class BattleScene extends Phaser.Scene {
                 const rawDmg = eAtk * (sk.modifier || 1);
                 let totalDmg = 0;
                 for (const t of aliveChars) {
-                    const dmg = this._calcMitigatedDmg(rawDmg, this.enemy, t);
+                    const dmg = CombatManager.calcMitigatedDmg(rawDmg, this.enemy, t, this.enemy);
                     t.hp = Math.max(0, t.hp - dmg);
                     t.refreshVisual(); this.playSpriteHitAnim(t);
                     totalDmg += dmg;
@@ -955,14 +961,14 @@ export default class BattleScene extends Phaser.Scene {
                 if (type === 'damage') {
                     const eAtk = this.enemy.getStat('ATK') * modeMult;
                     const rawDmg = eAtk * (sk.modifier || 1);
-                    const dmg = this._calcMitigatedDmg(rawDmg, this.enemy, t);
+                    const dmg = CombatManager.calcMitigatedDmg(rawDmg, this.enemy, t, this.enemy);
                     t.hp = Math.max(0, t.hp - dmg);
                     t.refreshVisual(); this.playSpriteHitAnim(t);
                     this.showLog(`⚡ ${this.enemy.charName}: ${sk.name}! → ${t.charName} -${dmg}`);
                 } else {
                     this.showLog(`⚡ ${this.enemy.charName}: ${sk.name}!`);
                 }
-                this._applyStatusEffects(this.enemy, sk, sk.status_effects);
+                CombatManager.applyStatusEffects(this.enemy, sk, sk.status_effects, this.players, this.enemy, this.showLog.bind(this), this._refreshEnemyHUD.bind(this));
             }
         }
         this._refreshEnemyHUD();
@@ -973,7 +979,7 @@ export default class BattleScene extends Phaser.Scene {
         if (!t) return false;
 
         const eAtk = this.enemy.getStat('ATK') * modeMult;
-        let dmg = this._calcMitigatedDmg(eAtk, this.enemy, t);
+        let dmg = CombatManager.calcMitigatedDmg(eAtk, this.enemy, t, this.enemy);
         const crit = Math.random() < this.enemy.getStat('CRIT');
         if (crit) dmg = Math.floor(dmg * this.enemy.getCritDamage());
 
@@ -998,7 +1004,7 @@ export default class BattleScene extends Phaser.Scene {
                     this.time.delayedCall(1500, () => this.processTurnEnd());
                     return;
                 }
-                let dmg2 = this._calcMitigatedDmg(eAtk, this.enemy, t2);
+                let dmg2 = CombatManager.calcMitigatedDmg(eAtk, this.enemy, t2, this.enemy);
                 const crit2 = Math.random() < this.enemy.getStat('CRIT');
                 if (crit2) dmg2 = Math.floor(dmg2 * this.enemy.getCritDamage());
                 t2.hp = Math.max(0, t2.hp - dmg2);
@@ -1015,132 +1021,7 @@ export default class BattleScene extends Phaser.Scene {
         }
         return false;
     }
-    /**
-     * Hitung damage akhir ter-mitigasi dengan keunggulan elemen.
-     * Hierarchy: Fire > Wind > Earth > Fire
-     * Strong: +50% (+0.5)
-     * Weak: -25% (-0.25)
-     * @param {number} rawDmg - Damage mentah (ATK * modifier)
-     * @param {object} attacker - Entitas penyerang (player atau enemy)
-     * @param {object} target - Entitas target (player atau enemy)
-     * @returns {number}
-     */
-    _calcMitigatedDmg(rawDmg, attacker, target) {
-        const isTargetEnemy = (target === this.enemy);
-        const targetDef = target.getStat('DEF');
 
-        // Penskalaan DEF musuh jika dalam mode exhausted
-        const effectiveDef = (isTargetEnemy && this.enemy.modeState === 'exhausted')
-            ? targetDef * 0.7
-            : targetDef;
-
-        const mitigation = effectiveDef / (effectiveDef + 500);
-        let dmg = rawDmg * (1 - mitigation);
-
-        // Kalkulasi keunggulan elemen
-        const mult = this._getElementMultiplier(attacker.element, target.element);
-        dmg *= mult;
-
-        return Math.max(Math.floor(dmg), 1);
-    }
-    _getElementMultiplier(attackerElement, defenderElement) {
-        if (!attackerElement || !defenderElement) return 1.0;
-        const ae = attackerElement.trim().toLowerCase();
-        const de = defenderElement.trim().toLowerCase();
-
-        if (ae === de) return 1.0;
-
-        if (
-            (ae === 'fire' && de === 'wind') ||
-            (ae === 'wind' && de === 'earth') ||
-            (ae === 'earth' && de === 'fire')
-        ) {
-            return 1.5; // Keuntungan elemen (+50% damage)
-        }
-
-        if (
-            (ae === 'wind' && de === 'fire') ||
-            (ae === 'earth' && de === 'wind') ||
-            (ae === 'fire' && de === 'earth')
-        ) {
-            return 0.75; // Kerugian elemen (-25% damage)
-        }
-
-        return 1.0; // Netral
-    }
-    _applyStatusEffects(caster, skill, statusEffects) {
-        if (!statusEffects || !statusEffects.length) return;
-
-        statusEffects.forEach(eff => {
-            let targets = [];
-            if (eff.effect_target === 'Self') {
-                targets = [caster];
-            } else {
-                const targetType = (skill.target_type || '').toLowerCase();
-                const isCasterPlayer = (caster !== this.enemy);
-
-                if (isCasterPlayer) {
-                    if (targetType === 'all_allies') {
-                        targets = this.players.filter(pl => pl.hp > 0);
-                    } else if (targetType === 'self') {
-                        targets = [caster];
-                    } else {
-                        targets = [this.enemy];
-                    }
-                } else {
-                    if (targetType === 'all_allies' || targetType === 'self') {
-                        targets = [this.enemy];
-                    } else {
-                        targets = this.players.filter(pl => pl.hp > 0);
-                    }
-                }
-            }
-
-            targets.forEach(tgt => {
-                // --- CUSTOM HANDLING FOR DELAY & SA BOOST (target_stat = 'ULT') ---
-                if (eff.target_stat === 'ULT') {
-                    const value = Number(eff.value) || 0;
-                    if (tgt === this.enemy) {
-                        const oldBar = this.enemy.caBar;
-                        this.enemy.caBar = Math.max(0, Math.min(this.enemy.caMax, this.enemy.caBar + value));
-                        this._refreshEnemyHUD();
-                        if (value < 0) {
-                            this.showLog(`✨ ${skill.name}: Drained ${oldBar - this.enemy.caBar} Charge Bar segment(s) from ${tgt.charName}!`);
-                        } else if (value > 0) {
-                            this.showLog(`✨ ${skill.name}: Boosted ${tgt.charName}'s Charge Bar by ${this.enemy.caBar - oldBar} segment(s)!`);
-                        }
-                    } else {
-                        const oldBar = tgt.specialBar;
-                        const changeAmt = value * 100;
-                        tgt.specialBar = Math.max(0, Math.min(tgt.specialMax, tgt.specialBar + changeAmt));
-                        tgt.refreshVisual();
-                        if (value < 0) {
-                            this.showLog(`✨ ${skill.name}: Reduced ${tgt.charName}'s SA Bar by ${Math.abs(changeAmt)}%!`);
-                        } else if (value > 0) {
-                            this.showLog(`✨ ${skill.name}: Boosted ${tgt.charName}'s SA Bar by ${changeAmt}%!`);
-                        }
-                    }
-                    return;
-                }
-
-                // --- CUSTOM HANDLING FOR HP SACRIFICE (target_stat = 'HP' with negative value) ---
-                if (eff.target_stat === 'HP' && Number(eff.value) < 0) {
-                    const value = Number(eff.value);
-                    const sacrificeDmg = Math.floor(Math.abs(value) * tgt.maxHp);
-                    tgt.hp = Math.max(0, tgt.hp - sacrificeDmg);
-                    tgt.refreshVisual();
-                    this.showLog(`✨ ${skill.name}: ${tgt.charName} sacrificed ${sacrificeDmg} HP!`);
-                    return;
-                }
-
-                tgt.addEffect(eff);
-                tgt.refreshVisual();
-                if (eff.effect_name) {
-                    this.showLog(`${skill.name} inflicts ${eff.effect_name} on ${tgt.charName}`);
-                }
-            });
-        });
-    }
     _randAlive() { const l = this.players.filter(p => p.hp > 0); return l.length ? l[Math.floor(Math.random() * l.length)] : null; }
     _elemColor(el) { return { Fire: THEME.ELEM_FIRE, Wind: THEME.ELEM_WIND, Earth: THEME.ELEM_EARTH }[el] || THEME.BORDER; }
 
@@ -1297,368 +1178,8 @@ export default class BattleScene extends Phaser.Scene {
     }
 
     showMainMenu() {
-        if (this._menuContainer) return;
-
-        // Initialize settings state if not already done
-        if (this.musicOn === undefined) {
-            this.musicOn = localStorage.getItem('music_on') !== 'false';
-            this.sfxOn = localStorage.getItem('sfx_on') !== 'false';
-        }
-
-        // Overlay backdrop (depth 39)
-        this._menuOverlay = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.75).setDepth(39).setInteractive();
-        this._menuOverlay.on('pointerdown', (pointer, x, y, event) => {
-            event.stopPropagation();
-        });
-
-        // Main Menu Container (depth 40)
-        this._menuContainer = this.add.container(CX, H / 2).setDepth(40);
-
-        // Panel Box (380x540)
-        const panel = this.add.rectangle(0, 0, 380, 540, 0x0a0f1d).setStrokeStyle(3, 0xf1c40f);
-        this._menuContainer.add(panel);
-
-        // Header Title
-        const title = this.add.text(0, -240, "MAIN MENU", {
-            fontSize: "20px",
-            color: "#f1c40f",
-            fontStyle: "bold",
-            fontFamily: "Outfit, Inter, sans-serif"
-        }).setOrigin(0.5);
-        this._menuContainer.add(title);
-
-        // Close Button (✕)
-        const closeBtn = this.add.text(160, -240, "✕", {
-            fontSize: "20px",
-            color: "#8899aa",
-            fontStyle: "bold"
-        }).setOrigin(0.5).setInteractive();
-        closeBtn.on('pointerover', () => closeBtn.setColor('#ff4757'));
-        closeBtn.on('pointerout', () => closeBtn.setColor('#8899aa'));
-        closeBtn.on('pointerdown', () => this.closeMainMenu());
-        this._menuContainer.add(closeBtn);
-
-        // --- SECTION 1: TABS (PARTY & ENEMY) ---
-        this._menuTab = this._menuTab || "party"; // Default tab
-        this._enemyCarouselIdx = this._enemyCarouselIdx || 0;
-
-        // Tab Buttons
-        this._tabPartyBtn = this.add.rectangle(-90, -190, 160, 34, this._menuTab === "party" ? 0x1e3a5f : 0x0d1420).setInteractive();
-        this._tabPartyBtn.setStrokeStyle(1.5, this._menuTab === "party" ? 0x4a90d9 : 0x3a4f66);
-        this._tabPartyText = this.add.text(-90, -190, "PARTY", { fontSize: "12px", color: this._menuTab === "party" ? "#ffffff" : "#8899aa", fontStyle: "bold" }).setOrigin(0.5);
-
-        this._tabEnemyBtn = this.add.rectangle(90, -190, 160, 34, this._menuTab === "enemy" ? 0x1e3a5f : 0x0d1420).setInteractive();
-        this._tabEnemyBtn.setStrokeStyle(1.5, this._menuTab === "enemy" ? 0x4a90d9 : 0x3a4f66);
-        this._tabEnemyText = this.add.text(90, -190, "ENEMY INFO", { fontSize: "12px", color: this._menuTab === "enemy" ? "#ffffff" : "#8899aa", fontStyle: "bold" }).setOrigin(0.5);
-
-        this._tabPartyBtn.on('pointerdown', () => this.switchMenuTab("party"));
-        this._tabEnemyBtn.on('pointerdown', () => this.switchMenuTab("enemy"));
-
-        this._menuContainer.add([this._tabPartyBtn, this._tabPartyText, this._tabEnemyBtn, this._tabEnemyText]);
-
-        // Tab Content Container
-        this._menuContentContainer = this.add.container(0, 0);
-        this._menuContainer.add(this._menuContentContainer);
-        this.renderMenuTabContent();
-
-        // Divider between Section 1 and Section 2
-        const div1 = this.add.graphics();
-        div1.lineStyle(1, 0x1f2d44, 1);
-        div1.lineBetween(-170, 0, 170, 0);
-        this._menuContainer.add(div1);
-
-        // --- SECTION 2: AUDIO TOGGLES ---
-        const settingsText = this.add.text(-170, 20, "SETTINGS", { fontSize: "10px", color: "#8899aa", fontStyle: "bold", letterSpacing: 1 }).setOrigin(0, 0.5);
-        this._menuContainer.add(settingsText);
-
-        // Music toggle
-        this._musicBtn = this.add.rectangle(-85, 55, 160, 40, this.musicOn ? 0x0d2a1a : 0x2a0d0d).setInteractive();
-        this._musicBtn.setStrokeStyle(1.5, this.musicOn ? 0x2ecc71 : 0xe74c3c);
-        this._musicText = this.add.text(-85, 55, "MUSIC: " + (this.musicOn ? "ON" : "OFF"), { fontSize: "11px", color: this.musicOn ? "#a8e6cf" : "#ff8a80", fontStyle: "bold" }).setOrigin(0.5);
-        this._musicBtn.on('pointerdown', () => this.toggleMusicSetting());
-
-        // SFX toggle
-        this._sfxBtn = this.add.rectangle(85, 55, 160, 40, this.sfxOn ? 0x0d2a1a : 0x2a0d0d).setInteractive();
-        this._sfxBtn.setStrokeStyle(1.5, this.sfxOn ? 0x2ecc71 : 0xe74c3c);
-        this._sfxText = this.add.text(85, 55, "SFX: " + (this.sfxOn ? "ON" : "OFF"), { fontSize: "11px", color: this.sfxOn ? "#a8e6cf" : "#ff8a80", fontStyle: "bold" }).setOrigin(0.5);
-        this._sfxBtn.on('pointerdown', () => this.toggleSfxSetting());
-
-        this._menuContainer.add([this._musicBtn, this._musicText, this._sfxBtn, this._sfxText]);
-
-        // Divider between Section 2 and Section 3
-        const div2 = this.add.graphics();
-        div2.lineStyle(1, 0x1f2d44, 1);
-        div2.lineBetween(-170, 105, 170, 105);
-        this._menuContainer.add(div2);
-
-        // --- SECTION 3: ACTIONS ---
-        const actionsText = this.add.text(-170, 120, "ACTIONS", { fontSize: "10px", color: "#8899aa", fontStyle: "bold", letterSpacing: 1 }).setOrigin(0, 0.5);
-        this._menuContainer.add(actionsText);
-
-        // HOME button
-        const homeBtn = this.add.rectangle(-85, 155, 160, 44, 0x1f2d44).setInteractive();
-        homeBtn.setStrokeStyle(1.5, 0x3282b8);
-        const homeText = this.add.text(-85, 155, "HOME", { fontSize: "12px", color: "#ffffff", fontStyle: "bold", letterSpacing: 1 }).setOrigin(0.5);
-        homeBtn.on('pointerover', () => homeBtn.setFillStyle(0x3282b8));
-        homeBtn.on('pointerout', () => homeBtn.setFillStyle(0x1f2d44));
-        homeBtn.on('pointerdown', () => {
-            this.closeMainMenu();
-            this.scene.stop('BattleScene');
-            this.scene.start('BattleScene'); // Restarts battle scene as initial entry
-        });
-
-        // RETREAT button
-        const retreatBtn = this.add.rectangle(85, 155, 160, 44, 0x2a0d0d).setInteractive();
-        retreatBtn.setStrokeStyle(1.5, 0xe74c3c);
-        const retreatText = this.add.text(85, 155, "RETREAT", { fontSize: "12px", color: "#ff8a80", fontStyle: "bold", letterSpacing: 1 }).setOrigin(0.5);
-        retreatBtn.on('pointerover', () => retreatBtn.setFillStyle(0xe74c3c));
-        retreatBtn.on('pointerout', () => retreatBtn.setFillStyle(0x2a0d0d));
-        retreatBtn.on('pointerdown', () => this.showRetreatConfirmation());
-
-        this._menuContainer.add([homeBtn, homeText, retreatBtn, retreatText]);
-    }
-
-    closeMainMenu() {
-        if (this._menuContainer) {
-            this._menuContainer.destroy();
-            this._menuContainer = null;
-        }
-        if (this._menuOverlay) {
-            this._menuOverlay.destroy();
-            this._menuOverlay = null;
-        }
-    }
-
-    switchMenuTab(tab) {
-        if (this._menuTab === tab) return;
-        this._menuTab = tab;
-
-        // Update Tab visual
-        this._tabPartyBtn.setFillStyle(tab === "party" ? 0x1e3a5f : 0x0d1420);
-        this._tabPartyBtn.setStrokeStyle(1.5, tab === "party" ? 0x4a90d9 : 0x3a4f66);
-        this._tabPartyText.setColor(tab === "party" ? "#ffffff" : "#8899aa");
-
-        this._tabEnemyBtn.setFillStyle(tab === "enemy" ? 0x1e3a5f : 0x0d1420);
-        this._tabEnemyBtn.setStrokeStyle(1.5, tab === "enemy" ? 0x4a90d9 : 0x3a4f66);
-        this._tabEnemyText.setColor(tab === "enemy" ? "#ffffff" : "#8899aa");
-
-        this.renderMenuTabContent();
-    }
-
-    renderMenuTabContent() {
-        // Clear previous content
-        this._menuContentContainer.removeAll(true);
-
-        if (this._menuTab === "party") {
-            // Render party details
-            const py = -95;
-            const cW = 76, gap = 8, total = this.players.length, totalW = total * cW + (total - 1) * gap;
-            const sx = -totalW / 2 + cW / 2;
-
-            this.players.forEach((p, idx) => {
-                const px = sx + idx * (cW + gap);
-                const elemColor = this._elemColor(p.element);
-
-                // Card Box
-                const card = this.add.rectangle(px, py, cW, 114, 0x0d1b2a).setStrokeStyle(1.5, elemColor);
-
-                // Character name
-                let nameStr = p.charName;
-                if (nameStr.length > 11) nameStr = nameStr.substring(0, 9) + "..";
-                const nameTxt = this.add.text(px, py - 44, nameStr, { fontSize: "9px", color: "#e0e0ff", fontStyle: "bold" }).setOrigin(0.5);
-
-                // Level text
-                const lvlTxt = this.add.text(px, py - 28, `Lv.${p.level}`, { fontSize: "8px", color: "#8899aa" }).setOrigin(0.5);
-
-                // Element border badge text
-                const elemTxt = this.add.text(px, py - 12, p.element.toUpperCase(), { fontSize: "7px", color: "#fff", backgroundColor: "#0a0a1a", padding: { x: 3, y: 1 } }).setOrigin(0.5);
-
-                // Mini HP bar
-                const barW = cW - 12;
-                const hpBg = this.add.rectangle(px, py + 15, barW, 6, 0x222222);
-                const hr = Math.max(0, p.hp / p.maxHp);
-                let barColor = 0x2ecc71;
-                if (p.hp <= 0) barColor = 0x000000;
-                else if (hr <= 0.25) barColor = 0xe74c3c;
-                else if (hr <= 0.50) barColor = 0xe67e22;
-                const hpFill = this.add.rectangle(px - barW / 2, py + 15, barW * hr, 6, barColor).setOrigin(0, 0.5);
-
-                // HP percentage text
-                const hpPctTxt = this.add.text(px, py + 26, Math.ceil(hr * 100) + "%", { fontSize: "7px", color: "#a8e6cf", fontStyle: "bold" }).setOrigin(0.5);
-
-                // Special Attack Bar (SA Bar) percentage
-                const saW = barW;
-                const saBg = this.add.rectangle(px, py + 36, saW, 4, 0x222222);
-                const saRatio = p.specialBar / p.specialMax;
-                const saFill = this.add.rectangle(px - saW / 2, py + 36, saW * saRatio, 4, 0xffaa00).setOrigin(0, 0.5);
-                const saTxt = this.add.text(px, py + 45, "SA " + Math.floor(saRatio * 100) + "%", { fontSize: "7px", color: "#ffaa00" }).setOrigin(0.5);
-
-                this._menuContentContainer.add([card, nameTxt, lvlTxt, elemTxt, hpBg, hpFill, hpPctTxt, saBg, saFill, saTxt]);
-            });
-        } else {
-            // Render Enemy details & Skill Carousel
-            const py = -95;
-            const elemColor = this._elemColor(this.enemy.element);
-
-            // Left: Enemy Boss card
-            const card = this.add.rectangle(-118, py, 76, 114, 0x1c0a0a).setStrokeStyle(1.5, elemColor);
-            const nameTxt = this.add.text(-118, py - 44, "BOSS", { fontSize: "9px", color: "#ff8a80", fontStyle: "bold" }).setOrigin(0.5);
-            let bossNameStr = this.enemy.charName;
-            if (bossNameStr.length > 11) bossNameStr = bossNameStr.substring(0, 9) + "..";
-            const bossNameTxt = this.add.text(-118, py - 28, bossNameStr, { fontSize: "8px", color: "#e0e0ff", fontStyle: "bold" }).setOrigin(0.5);
-            const lvlTxt = this.add.text(-118, py - 12, `Lv.${this.enemy.level}`, { fontSize: "8px", color: "#8899aa" }).setOrigin(0.5);
-            const elemTxt = this.add.text(-118, py + 12, this.enemy.element.toUpperCase(), { fontSize: "7px", color: "#fff", backgroundColor: "#0a0a1a", padding: { x: 3, y: 1 } }).setOrigin(0.5);
-
-            this._menuContentContainer.add([card, nameTxt, bossNameTxt, lvlTxt, elemTxt]);
-
-            // Right: Info and Skill Carousel
-            // Top: Max HP info
-            const hpInfoBg = this.add.rectangle(42, py - 38, 206, 34, 0x0d1420).setStrokeStyle(1, 0x1f2d44);
-            const maxHpStr = this.enemy.maxHp.toLocaleString();
-            const hpInfoTxt = this.add.text(-50, py - 38, `MAX HP: ${maxHpStr}`, { fontSize: "9px", color: "#ff8a80", fontStyle: "bold" }).setOrigin(0, 0.5);
-            const caMaxTxt = this.add.text(138, py - 38, `CA Bar: ${this.enemy.caMax}`, { fontSize: "9px", color: "#ffaa00" }).setOrigin(1, 0.5);
-
-            this._menuContentContainer.add([hpInfoBg, hpInfoTxt, caMaxTxt]);
-
-            // Bottom: Skill carousel container box
-            const skillBox = this.add.rectangle(42, py + 18, 206, 78, 0x0d1420).setStrokeStyle(1, 0x1f2d44);
-            this._menuContentContainer.add(skillBox);
-
-            // Extract unique skills
-            const uniqueSkillsMap = {};
-            this.enemy.aiBehaviors.forEach(b => {
-                if (b.skill && b.skill.id) {
-                    uniqueSkillsMap[b.skill.id] = b.skill;
-                }
-            });
-            const enemySkills = Object.values(uniqueSkillsMap);
-
-            if (enemySkills.length > 0) {
-                // Ensure index is within range
-                if (this._enemyCarouselIdx >= enemySkills.length) this._enemyCarouselIdx = 0;
-                const skill = enemySkills[this._enemyCarouselIdx];
-
-                // Skill Name (upper/middle center)
-                let sName = skill.name || "Unknown Skill";
-                if (sName.length > 18) sName = sName.substring(0, 16) + "...";
-                const skillNameTxt = this.add.text(42, py - 12, sName, { fontSize: "10px", color: "#7ec8e3", fontStyle: "bold" }).setOrigin(0.5);
-
-                // Skill Type / Target info
-                const sType = (skill.type || "Damage").toUpperCase();
-                const sTarget = (skill.target_type || "Single_Enemy").replace('_', ' ').toUpperCase();
-                const skillMetaTxt = this.add.text(42, py + 4, `${sType} (${sTarget})`, { fontSize: "7px", color: "#8899aa" }).setOrigin(0.5);
-
-                // Description
-                let descStr = "";
-                if (skill.modifier) {
-                    descStr = `Deals ${Math.round(skill.modifier * 100)}% elemental damage.`;
-                } else {
-                    descStr = "Support action.";
-                }
-
-                if (skill.status_effects && skill.status_effects.length > 0) {
-                    const effNames = skill.status_effects.map(e => e.effect_name || e.target_stat).join(', ');
-                    descStr += ` Inflicts: ${effNames}.`;
-                }
-
-                if (descStr.length > 55) descStr = descStr.substring(0, 52) + "...";
-
-                const skillDescTxt = this.add.text(42, py + 22, descStr, { fontSize: "8px", color: "#e0e0ff", align: "center", wordWrap: { width: 150 } }).setOrigin(0.5);
-                this._menuContentContainer.add([skillNameTxt, skillMetaTxt, skillDescTxt]);
-
-                // Carousel controls (◀ and ▶)
-                if (enemySkills.length > 1) {
-                    const prevBtnText = this.add.text(-46, py + 18, "◀", { fontSize: "14px", color: "#7ec8e3", fontStyle: "bold" }).setOrigin(0.5).setInteractive();
-                    const nextBtnText = this.add.text(130, py + 18, "▶", { fontSize: "14px", color: "#7ec8e3", fontStyle: "bold" }).setOrigin(0.5).setInteractive();
-
-                    prevBtnText.on('pointerover', () => prevBtnText.setColor('#ffffff'));
-                    prevBtnText.on('pointerout', () => prevBtnText.setColor('#7ec8e3'));
-                    prevBtnText.on('pointerdown', () => {
-                        this._enemyCarouselIdx = (this._enemyCarouselIdx - 1 + enemySkills.length) % enemySkills.length;
-                        this.renderMenuTabContent();
-                    });
-
-                    nextBtnText.on('pointerover', () => nextBtnText.setColor('#ffffff'));
-                    nextBtnText.on('pointerout', () => nextBtnText.setColor('#7ec8e3'));
-                    nextBtnText.on('pointerdown', () => {
-                        this._enemyCarouselIdx = (this._enemyCarouselIdx + 1) % enemySkills.length;
-                        this.renderMenuTabContent();
-                    });
-
-                    this._menuContentContainer.add([prevBtnText, nextBtnText]);
-                }
-            } else {
-                const noSkillsTxt = this.add.text(42, py + 18, "No active skills data", { fontSize: "9px", color: "#888", fontStyle: "italic" }).setOrigin(0.5);
-                this._menuContentContainer.add(noSkillsTxt);
-            }
-        }
-    }
-
-    toggleMusicSetting() {
-        this.musicOn = !this.musicOn;
-        localStorage.setItem('music_on', this.musicOn);
-        this._musicBtn.setFillStyle(this.musicOn ? 0x0d2a1a : 0x2a0d0d);
-        this._musicBtn.setStrokeStyle(1.5, this.musicOn ? 0x2ecc71 : 0xe74c3c);
-        this._musicText.setText("MUSIC: " + (this.musicOn ? "ON" : "OFF")).setColor(this.musicOn ? "#a8e6cf" : "#ff8a80");
-        this.sound.mute = !this.musicOn && !this.sfxOn;
-    }
-
-    toggleSfxSetting() {
-        this.sfxOn = !this.sfxOn;
-        localStorage.setItem('sfx_on', this.sfxOn);
-        this._sfxBtn.setFillStyle(this.sfxOn ? 0x0d2a1a : 0x2a0d0d);
-        this._sfxBtn.setStrokeStyle(1.5, this.sfxOn ? 0x2ecc71 : 0xe74c3c);
-        this._sfxText.setText("SFX: " + (this.sfxOn ? "ON" : "OFF")).setColor(this.sfxOn ? "#a8e6cf" : "#ff8a80");
-        this.sound.mute = !this.musicOn && !this.sfxOn;
-    }
-
-    showRetreatConfirmation() {
-        // Confirmation Overlay Backdrop (depth 41)
-        this._confirmOverlay = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.8).setDepth(41).setInteractive();
-        this._confirmOverlay.on('pointerdown', (pointer, x, y, event) => {
-            event.stopPropagation();
-        });
-
-        // Confirmation Container (depth 42)
-        this._confirmContainer = this.add.container(CX, H / 2).setDepth(42);
-
-        // Panel Box
-        const panel = this.add.rectangle(0, 0, 300, 160, 0x0d1420).setStrokeStyle(2, 0xe74c3c);
-        this._confirmContainer.add(panel);
-
-        // Warning Text
-        const warnTitle = this.add.text(0, -40, "CONFIRM RETREAT?", { fontSize: "14px", color: "#ff8a80", fontStyle: "bold" }).setOrigin(0.5);
-        const warnDesc = this.add.text(0, -10, "Mundur sekarang?\nStamina Anda tidak akan berkurang.", { fontSize: "10px", color: "#ffffff", align: "center", lineSpacing: 2 }).setOrigin(0.5);
-        this._confirmContainer.add([warnTitle, warnDesc]);
-
-        // CANCEL button
-        const cancelBtn = this.add.rectangle(-65, 40, 110, 34, 0x1a2e3b).setInteractive();
-        cancelBtn.setStrokeStyle(1, 0x3282b8);
-        const cancelTxt = this.add.text(-65, 40, "NO, KEEP FIGHTING", { fontSize: "8px", color: "#ffffff", fontStyle: "bold" }).setOrigin(0.5);
-        cancelBtn.on('pointerover', () => cancelBtn.setFillStyle(0x3282b8));
-        cancelBtn.on('pointerout', () => cancelBtn.setFillStyle(0x1a2e3b));
-        cancelBtn.on('pointerdown', () => {
-            this._confirmContainer.destroy();
-            this._confirmContainer = null;
-            this._confirmOverlay.destroy();
-            this._confirmOverlay = null;
-        });
-
-        // CONFIRM button
-        const confirmBtn = this.add.rectangle(65, 40, 110, 34, 0x2a0d0d).setInteractive();
-        confirmBtn.setStrokeStyle(1, 0xe74c3c);
-        const confirmTxt = this.add.text(65, 40, "YES, RETREAT", { fontSize: "8px", color: "#ff8a80", fontStyle: "bold" }).setOrigin(0.5);
-        confirmBtn.on('pointerover', () => confirmBtn.setFillStyle(0xe74c3c));
-        confirmBtn.on('pointerout', () => confirmBtn.setFillStyle(0x2a0d0d));
-        confirmBtn.on('pointerdown', () => {
-            this._confirmContainer.destroy();
-            this._confirmContainer = null;
-            this._confirmOverlay.destroy();
-            this._confirmOverlay = null;
-            this.closeMainMenu();
-            this.triggerDefeat(true);
-        });
-
-        this._confirmContainer.add([cancelBtn, cancelTxt, confirmBtn, confirmTxt]);
+        if (this._menu && this._menu.active) return;
+        this._menu = new BattleMenu(this, CX, H / 2, W, H, THEME);
+        this._menu.on('destroy', () => { this._menu = null; });
     }
 }

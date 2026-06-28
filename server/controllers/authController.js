@@ -56,8 +56,8 @@ exports.register = async (req, res) => {
         // Langkah A: Insert ke tabel players — Parameterized Query
         // --------------------------------------------------
         const [playerResult] = await conn.query(
-            `INSERT INTO players (username, password_hash, player_level, player_exp, stamina, currency)
-             VALUES (?, ?, 1, 0, 100, 0)`,
+            `INSERT INTO players (username, password_hash, player_level, player_exp, stamina, gold, diamond)
+             VALUES (?, ?, 1, 0, 100, 0, 0)`,
             [username, passwordHash]
         );
         const newPlayerId = playerResult.insertId;
@@ -133,8 +133,7 @@ exports.register = async (req, res) => {
                 player_level: 1,
                 stamina: 100,
                 gold: 0,
-                diamond: 0,
-                currency: 0
+                diamond: 0
             }
         });
 
@@ -167,7 +166,7 @@ exports.login = async (req, res) => {
     try {
         // [KEAMANAN 2] Parameterized Query — tidak ada interpolasi string
         const [rows] = await db.query(
-            `SELECT player_id, username, password_hash, player_level, player_exp, stamina, gold, diamond, currency
+            `SELECT player_id, username, password_hash, player_level, player_exp, stamina, gold, diamond
              FROM players
              WHERE username = ?`,
             [username]
@@ -183,7 +182,14 @@ exports.login = async (req, res) => {
         const player = rows[0];
 
         // [KEAMANAN 1] Verifikasi password dengan bcrypt.compare
-        let isPasswordValid = await bcrypt.compare(password, player.password_hash);
+        let isPasswordValid = false;
+        try {
+            isPasswordValid = await bcrypt.compare(password, player.password_hash);
+        } catch (err) {
+            // Jika hash tidak valid (karena plain-text dari SQL dump), biarkan false dan masuk ke fallback
+            isPasswordValid = false;
+        }
+
         if (!isPasswordValid) {
             // Fallback untuk password plain-text dari SQL dump (misal: 'hash123', 'pass123')
             isPasswordValid = (password === player.password_hash);
@@ -213,8 +219,7 @@ exports.login = async (req, res) => {
                 player_level: player.player_level,
                 stamina: player.stamina,
                 gold: player.gold,
-                diamond: player.diamond,
-                currency: player.currency
+                diamond: player.diamond
             }
         });
 

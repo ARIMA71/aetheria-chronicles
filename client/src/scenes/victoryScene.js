@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { THEME } from '../main.js';
 import { checkSession } from '../utils/auth.js';
+import BattleApi from '../services/BattleApi.js';
 
 const W = 450, H = 800, CX = 225, CY = 400;
 
@@ -68,17 +69,14 @@ export default class VictoryScene extends Phaser.Scene {
         });
 
         // Trigger POST /api/battle/result
-        fetch("http://localhost:3000/api/battle/result", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                bsId: this.bsId,
-                playerId: this.playerId,
-                questId: this.questId,
-                potionsUsed: this.potionsUsed
-            })
-        })
-        .then(r => r.json())
+        const payload = {
+            bsId: this.bsId,
+            playerId: this.playerId,
+            questId: this.questId,
+            potionsUsed: this.potionsUsed
+        };
+        
+        BattleApi.saveBattleResult(payload)
         .then(res => {
             loadingText.destroy();
             spinCircle.destroy();

@@ -3,7 +3,7 @@
  * Validates calculateBossAction under various conditions.
  */
 
-const { calculateBossAction } = require('./utils/aiCalculator');
+const AiBehaviorService = require('./services/AiBehaviorService');
 
 function assert(condition, message) {
     if (!condition) {
@@ -56,7 +56,7 @@ function runTests() {
 
     // Skill 1 score: 1.0 + (0.5 * 0.5) = 1.25
     // Skill 2 score: 0.5 + (1 * 1.5) = 2.0
-    const choice1 = calculateBossAction(battleState1, skills1);
+    const choice1 = AiBehaviorService.calculateBossAction(battleState1, skills1);
     assert(choice1 !== null, 'Should return a skill choice.');
     assert(choice1.id === 2, `Should choose Skill 2 (Score: 2.0) over Skill 1 (Score: 1.25). Got Skill ${choice1 ? choice1.id : 'null'}`);
 
@@ -65,7 +65,7 @@ function runTests() {
     // -------------------------------------------------------------------------
     // Set Skill 2 on cooldown
     skills1[1].currentCooldown = 1;
-    const choice2 = calculateBossAction(battleState1, skills1);
+    const choice2 = AiBehaviorService.calculateBossAction(battleState1, skills1);
     assert(choice2 !== null, 'Should return a skill choice when one is on cooldown.');
     assert(choice2.id === 1, `Should fallback to Skill 1 since Skill 2 is on cooldown. Got Skill ${choice2 ? choice2.id : 'null'}`);
 
@@ -73,7 +73,7 @@ function runTests() {
     skills1[1].currentCooldown = 0;
     skills1[1].score_modifiers.One_Time_Use = true;
     skills1[1].used = true; // marked as used
-    const choice2b = calculateBossAction(battleState1, skills1);
+    const choice2b = AiBehaviorService.calculateBossAction(battleState1, skills1);
     assert(choice2b !== null, 'Should return a skill choice when one is marked as used.');
     assert(choice2b.id === 1, `Should exclude Skill 2 because it is one-time use and already used. Got Skill ${choice2b ? choice2b.id : 'null'}`);
 
@@ -114,7 +114,7 @@ function runTests() {
 
     // Skill 3 is ready and boss HP is at 40% (<= 50% override threshold).
     // It should trigger override, bypassing Skill 4 which has high base utility.
-    const choice3 = calculateBossAction(battleState3, skills3);
+    const choice3 = AiBehaviorService.calculateBossAction(battleState3, skills3);
     assert(choice3 !== null, 'Should choose override skill.');
     assert(choice3.id === 3, `Should execute Skill 3 via absolute override (HP Trigger). Got Skill ${choice3 ? choice3.id : 'null'}`);
 
@@ -154,7 +154,7 @@ function runTests() {
 
     // Both triggers are active (0.2 <= 0.3 and 0.2 <= 0.5).
     // The lowest threshold (0.3) should be prioritized.
-    const choice4 = calculateBossAction(battleState4, skills4);
+    const choice4 = AiBehaviorService.calculateBossAction(battleState4, skills4);
     assert(choice4 !== null, 'Should return a skill choice when multiple triggers are active.');
     assert(choice4.id === 5, `Should prioritize the more critical HP trigger threshold (Skill 5 over Skill 6). Got Skill ${choice4 ? choice4.id : 'null'}`);
 
@@ -173,7 +173,7 @@ function runTests() {
     const skills5 = [
         { id: 7, phase: 'Normal', base_utility: 1.0, score_modifiers: {} }
     ];
-    const choice5 = calculateBossAction(battleState5, skills5);
+    const choice5 = AiBehaviorService.calculateBossAction(battleState5, skills5);
     assert(choice5 === null, `Should return null when CA is not ready and no HP override is triggered. Got ${choice5}`);
 
     // -------------------------------------------------------------------------
@@ -192,7 +192,7 @@ function runTests() {
         { id: 8, phase: 'Normal', base_utility: 1.0, score_modifiers: {} }, // normal skill
         { id: 9, phase: 'Normal', base_utility: 0.0, score_modifiers: { override_hp_trigger: 0.5 } } // override
     ];
-    const choice6 = calculateBossAction(battleState6, skills6);
+    const choice6 = AiBehaviorService.calculateBossAction(battleState6, skills6);
     assert(choice6 !== null, 'Should execute override even if CA is not ready.');
     assert(choice6.id === 9, `Should execute Skill 9 via override. Got Skill ${choice6 ? choice6.id : 'null'}`);
 
