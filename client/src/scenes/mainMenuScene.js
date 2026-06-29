@@ -184,7 +184,7 @@ export default class MainMenuScene extends Phaser.Scene {
         // Floating Action Buttons dengan patokan Quest di kanan
         // Quest (Patokan Utama, nempel di kanan sejajar border stats)
         this._createFAB(395, 575, 40, 'Quest', THEME.TEXT_PRIMARY, () => {
-            this.scene.start('BattleScene');
+            this.scene.start('QuestScene');
         });
 
         // Party (Di atas Quest, sejajar kanan)
@@ -341,7 +341,7 @@ export default class MainMenuScene extends Phaser.Scene {
         });
         const btnQuest = this._createModalRoundBtn(CX, 125, 'QUEST', () => {
             this.toggleMenuModal(false);
-            this.scene.start('BattleScene');
+            this.scene.start('QuestScene');
         });
         const btnGacha = this._createModalRoundBtn(CX + 100, 125, 'GACHA', () => {
             this.toggleMenuModal(false);

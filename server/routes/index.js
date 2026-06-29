@@ -5,10 +5,12 @@ const testController = require('../controllers/testController');
 const authRoutes = require('./authRoutes')
 const playerRoutes = require('./playerRoutes')
 const battleRoutes = require('./battleRoutes')
+const questRoutes = require('./questRoutes')
 
 router.use('/auth', authRoutes)
 router.use('/player', playerRoutes)
 router.use('/battle', battleRoutes)
+router.use('/quests', questRoutes)
 
 router.get('/test', testController.test);
 

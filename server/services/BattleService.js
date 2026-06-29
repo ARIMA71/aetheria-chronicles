@@ -121,9 +121,9 @@ class BattleService {
 
         const queryMonsters = `
         SELECT mon.mon_id, mon.mon_name, mon.mon_element, mon.mon_base_hp, mon.mon_hp_growth,
-            mon.mon_base_atk, mon.mon_atk_growth, mon.mon_base_def, mon.mon_def_growth, mon.mon_max_sa,
+            mon.mon_base_atk, mon.mon_atk_growth, mon.mon_base_def, mon.mon_def_growth, mon.mon_max_ca,
             mon.mon_icon_path, mon.mon_sprite_path, qe.monster_level,
-            mai.mai_id, mai.boss_phase, mai.base_utility, mai.score_modifiers,
+            mb.mb_id, mb.boss_phase, mb.base_utility, mb.score_modifiers,
             ms.ms_id AS skill_id, ms.ms_name AS skill_name, ms.ms_category AS skill_category,
             ms.ms_action_type AS skill_type, ms.ms_target_type AS skill_target_type, ms.ms_modifier_value AS skill_modifier,
             ms.ms_cooldown AS skill_cooldown, ms.ms_icon_path AS skill_icon_path, ms.ms_vfx_path AS skill_vfx_path,
@@ -131,12 +131,12 @@ class BattleService {
             mse.modifier_value AS effect_value, mse.mse_duration AS effect_duration, sse.effect_target AS effect_target
         FROM quest_enemies qe
         JOIN master_monsters mon ON qe.mon_id = mon.mon_id
-        LEFT JOIN monster_ai_behavior mai ON mon.mon_id = mai.mon_id
-        LEFT JOIN master_skills ms ON mai.ms_id = ms.ms_id
+        LEFT JOIN monster_behavior mb ON mon.mon_id = mb.mon_id
+        LEFT JOIN master_skills ms ON mb.ms_id = ms.ms_id
         LEFT JOIN skill_status_effects sse ON ms.ms_id = sse.ms_id
         LEFT JOIN master_status_effects mse ON sse.mse_id = mse.mse_id
         WHERE qe.mq_id = ?
-        ORDER BY mon.mon_id, mai.mai_id, mse.mse_id
+        ORDER BY mon.mon_id, mb.mb_id, mse.mse_id
         `;
 
         const queryWeapons = `
@@ -208,13 +208,13 @@ class BattleService {
                         atk: (Number(row.mon_base_atk) || 0) + (Number(row.mon_atk_growth) || 0) * ((row.monster_level || 1) - 1),
                         def: (Number(row.mon_base_def) || 0) + (Number(row.mon_def_growth) || 0) * ((row.monster_level || 1) - 1)
                     },
-                    caMax: Number(row.mon_max_sa) || 5, icon_path: row.mon_icon_path, sprite_path: row.mon_sprite_path,
+                    caMax: Number(row.mon_max_ca) || 5, icon_path: row.mon_icon_path, sprite_path: row.mon_sprite_path,
                     ai_behaviors: []
                 };
             }
 
-            if (row.mai_id !== null && row.skill_id !== null) {
-                if (!behaviorMap[row.mai_id]) {
+            if (row.mb_id !== null && row.skill_id !== null) {
+                if (!behaviorMap[row.mb_id]) {
                     let parsedModifiers = row.score_modifiers;
                     if (typeof parsedModifiers === 'string') {
                         try { parsedModifiers = JSON.parse(parsedModifiers); } catch (e) { parsedModifiers = {}; }
@@ -230,26 +230,32 @@ class BattleService {
                             icon_path: row.skill_icon_path, vfx_path: row.skill_vfx_path, status_effects: []
                         }
                     };
-                    behaviorMap[row.mai_id] = behaviorEntry;
+                    behaviorMap[row.mb_id] = behaviorEntry;
                     monsterMap[row.mon_id].ai_behaviors.push(behaviorEntry);
                 }
                 const effect = formatStatusEffect(row);
-                if (effect) behaviorMap[row.mai_id].skill.status_effects.push(effect);
+                if (effect) behaviorMap[row.mb_id].skill.status_effects.push(effect);
             }
         });
         const enemies = Object.values(monsterMap);
         if (enemies.length === 0) throw new Error(`Tidak ada musuh yang ditemukan untuk questId: ${questId}`);
 
-        // Potion Count
-        const [materialRow] = await db.query('SELECT quantity FROM player_materials WHERE player_id = ? AND mat_id = 6', [playerId]);
-        const potionCount = materialRow[0] ? materialRow[0].quantity : 0;
+        // Potion Count (mat_id 6: Green Potion, mat_id 8: Full Potion)
+        const [materialRow] = await db.query('SELECT mat_id, quantity FROM player_materials WHERE player_id = ? AND mat_id IN (6, 8)', [playerId]);
+        let potionCount = 0;
+        let fullPotionCount = 0;
+        materialRow.forEach(mat => {
+            if (mat.mat_id === 6) potionCount = mat.quantity;
+            if (mat.mat_id === 8) fullPotionCount = mat.quantity;
+        });
 
         // Construct Initial State
         const initialState = {
             quest_id: parseInt(questId),
             player_party: { characters },
             enemies,
-            potion_count: potionCount
+            potion_count: potionCount,
+            full_potion_count: fullPotionCount
         };
 
         // Create Database Anchor Record

@@ -8,6 +8,10 @@ import BattleMenu from "../ui/BattleMenu.js";
 const W = 450, H = 800, CX = 225;
 export default class BattleScene extends Phaser.Scene {
     constructor() { super("BattleScene"); }
+    init(data) {
+        // Accept data from QuestScene if available
+        this._sceneData = data || {};
+    }
     setTurn(newTurn) {
         this.turn = newTurn;
         if (this._attackBtnContainer) {
@@ -23,47 +27,60 @@ export default class BattleScene extends Phaser.Scene {
         this.potionCount = 0;
         this.potionsUsed = 0;
         this.healsRemaining = 0;
+        this.fullPotionCount = 0;
+        this.fullPotionsUsed = 0;
 
         const playerRaw = localStorage.getItem('aetheria_player');
         const playerData = playerRaw ? JSON.parse(playerRaw) : { player_id: 1, current_quest_stage: 5 };
         this.playerId = playerData.player_id || 1;
-        this.questId = playerData.current_quest_stage || 5;
+        this.questId = this._sceneData.questId || playerData.current_quest_stage || 5;
+        this.presetSlot = this._sceneData.presetSlot || playerData.selected_preset_slot || 1;
 
         this.add.rectangle(CX, H / 2, W, H, THEME.BG);
         this.add.rectangle(CX, 26, W, 52, THEME.PANEL, THEME.PANEL_ALPHA);
         this.add.rectangle(CX, 435, W, 2, THEME.BORDER);
         this.add.rectangle(CX, 550, W, 2, THEME.BORDER);
-        this.loadingText = this.add.text(CX, H / 2, "Loading...", { fontSize: "20px", color: "#ccc" }).setOrigin(0.5);
-        this.fetchBattleData();
+
+        // If initData was passed from QuestScene (battle already initialized), use it directly
+        if (this._sceneData.initData && this._sceneData.initData.status === 'success') {
+            this._processBattleData(this._sceneData.initData);
+        } else {
+            this.loadingText = this.add.text(CX, H / 2, "Loading...", { fontSize: "20px", color: "#ccc" }).setOrigin(0.5);
+            this.fetchBattleData();
+        }
     }
     async fetchBattleData() {
         try {
-            const j = await BattleApi.initBattle(this.questId, this.playerId, 1);
+            const j = await BattleApi.initBattle(this.questId, this.playerId, this.presetSlot);
             if (j.status !== "success") throw new Error(j.message || "API error");
-            this.loadingText.destroy();
-            this.bsId = j.data.bs_id;
-            this.potionCount = j.data.potion_count !== undefined ? j.data.potion_count : 0;
-            this.healsRemaining = Math.min(3, this.potionCount);
-            const chars = j.data.player_party.characters.slice(0, 4);
-            const cW = 85, gap = 15, total = chars.length, totalW = total * cW + (total - 1) * gap, sx = (W - totalW) / 2 + cW / 2;
-            chars.forEach((d, i) => {
-                const px = sx + i * (cW + gap);
-                const p = new Player(this, px, 600, d);
-                p._baseX = px;
-                p.setInteractive(new Phaser.Geom.Rectangle(-42.5, -60, 85, 120), Phaser.Geom.Rectangle.Contains);
-                p.on("pointerdown", () => { if (this.turn !== "player") return; this._tapPortrait(p); });
-                this.players.push(p);
-            });
-            this.activePlayer = null;
-            this.enemy = new Enemy(this, CX, 270, j.data.enemies[0]);
-            this._setupUI();
+            this._processBattleData(j);
         } catch (e) {
             console.error(e);
             this.scene.start('FallbackScene', { 
                 message: 'Oops! Ada kesalahan kecil pada sistem, silakan coba lagi.\n\nDetail: ' + e.message,
-                previousScene: 'MainMenuScene'
+                previousScene: 'QuestScene'
             });
         }
+    }
+    _processBattleData(j) {
+        if (this.loadingText) this.loadingText.destroy();
+        this.bsId = j.data.bs_id;
+        this.potionCount = j.data.potion_count !== undefined ? j.data.potion_count : 0;
+        this.healsRemaining = Math.min(3, this.potionCount);
+        this.fullPotionCount = j.data.full_potion_count !== undefined ? j.data.full_potion_count : 0;
+        const chars = j.data.player_party.characters.slice(0, 4);
+        const cW = 85, gap = 15, total = chars.length, totalW = total * cW + (total - 1) * gap, sx = (W - totalW) / 2 + cW / 2;
+        chars.forEach((d, i) => {
+            const px = sx + i * (cW + gap);
+            const p = new Player(this, px, 600, d);
+            p._baseX = px;
+            p.setInteractive(new Phaser.Geom.Rectangle(-42.5, -60, 85, 120), Phaser.Geom.Rectangle.Contains);
+            p.on("pointerdown", () => { if (this.turn !== "player") return; this._tapPortrait(p); });
+            this.players.push(p);
+        });
+        this.activePlayer = null;
+        this.enemy = new Enemy(this, CX, 270, j.data.enemies[0]);
+        this._setupUI();
     }
     _setActive(p) {
         if (this.activePlayer && this.activePlayer !== p) this.activePlayer.setHighlight(false);
@@ -1158,6 +1175,7 @@ export default class BattleScene extends Phaser.Scene {
                     questId: this.questId,
                     playerId: this.playerId,
                     potionsUsed: this.potionsUsed,
+                    fullPotionsUsed: this.fullPotionsUsed,
                     bsId: this.bsId
                 });
             });
@@ -1167,6 +1185,11 @@ export default class BattleScene extends Phaser.Scene {
     }
 
     triggerDefeat(isRetreat = false) {
+        // Check if player has Full Potions for revive
+        if (!isRetreat && this.fullPotionCount > this.fullPotionsUsed) {
+            this._showReviveModal();
+            return;
+        }
         this.turn = "none";
         this.showLog(isRetreat ? "RETREATED" : "DEFEAT... 💀");
         this.time.delayedCall(1500, () => {
@@ -1178,6 +1201,55 @@ export default class BattleScene extends Phaser.Scene {
                 bsId: this.bsId
             });
         });
+    }
+
+    _showReviveModal() {
+        this.turn = "none";
+        const mc = this.add.container(0, 0).setDepth(100);
+        const ov = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.85).setInteractive();
+        ov.on('pointerdown', (p, x, y, e) => e.stopPropagation());
+
+        const pnl = this.add.rectangle(CX, H / 2, 360, 260, 0x0d1b2a).setStrokeStyle(2, 0xf39c12).setInteractive();
+        pnl.on('pointerdown', (p, x, y, e) => e.stopPropagation());
+
+        const remaining = this.fullPotionCount - this.fullPotionsUsed;
+        const items = [ov, pnl];
+        items.push(this.add.text(CX, H / 2 - 95, '💀 PARTY WIPEOUT', { fontSize: '16px', fontStyle: 'bold', color: '#CD5C5C', fontFamily: 'Outfit' }).setOrigin(0.5));
+        items.push(this.add.text(CX, H / 2 - 60, `Full Potion tersedia: ${remaining}x`, { fontSize: '12px', color: THEME.TEXT_PRIMARY, fontFamily: 'Outfit' }).setOrigin(0.5));
+        items.push(this.add.text(CX, H / 2 - 30, 'Gunakan 1x Full Potion untuk\nmenghidupkan seluruh party\ndengan 100% HP & cooldown reset?', { fontSize: '10px', color: THEME.TEXT_SECONDARY, fontFamily: 'Outfit', align: 'center' }).setOrigin(0.5));
+
+        const useBtn = this.add.rectangle(CX, H / 2 + 30, 280, 42, 0x1a3a2a).setStrokeStyle(2, THEME.HEALTH).setInteractive({ useHandCursor: true });
+        const useTxt = this.add.text(CX, H / 2 + 30, '🧪 Revive Party (Full Potion)', { fontSize: '12px', fontStyle: 'bold', color: '#a8e6cf', fontFamily: 'Outfit' }).setOrigin(0.5);
+        useBtn.on('pointerdown', () => {
+            mc.destroy();
+            this.fullPotionsUsed++;
+            // Revive all characters to 100% HP and reset cooldowns
+            this.players.forEach(p => {
+                p.hp = p.maxHp;
+                p.cooldowns = {};
+                p.activeEffects = [];
+                p.refreshVisual();
+            });
+            this.showLog('🧪 Full Potion! Party revived at 100% HP!');
+            this.setTurn('player');
+        });
+        items.push(useBtn, useTxt);
+
+        const giveUpBtn = this.add.rectangle(CX, H / 2 + 85, 140, 34, 0x2a0d0d).setStrokeStyle(1, 0xe74c3c).setInteractive({ useHandCursor: true });
+        const giveUpTxt = this.add.text(CX, H / 2 + 85, 'MENYERAH', { fontSize: '11px', fontStyle: 'bold', color: '#ff8a80', fontFamily: 'Outfit' }).setOrigin(0.5);
+        giveUpBtn.on('pointerdown', () => {
+            mc.destroy();
+            this.turn = "none";
+            this.showLog("DEFEAT... 💀");
+            this.time.delayedCall(1500, () => {
+                this.scene.pause();
+                this.scene.launch('DefeatScene', {
+                    questId: this.questId, playerId: this.playerId, isRetreat: false, bsId: this.bsId
+                });
+            });
+        });
+        items.push(giveUpBtn, giveUpTxt);
+        mc.add(items);
     }
 
     showMainMenu() {

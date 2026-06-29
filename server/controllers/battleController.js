@@ -11,7 +11,43 @@ exports.initBattle = async (req, res) => {
         });
     }
 
+    const conn = await db.getConnection();
     try {
+        await conn.beginTransaction();
+
+        // Ambil data stamina cost dari quest
+        const [questRows] = await conn.query(
+            'SELECT mq_stamina_cost FROM master_quests WHERE mq_id = ?',
+            [questId]
+        );
+        const staminaCost = questRows[0] ? questRows[0].mq_stamina_cost : 10;
+
+        // Ambil data stamina player
+        const [playerRows] = await conn.query(
+            'SELECT stamina FROM players WHERE player_id = ? FOR UPDATE',
+            [playerId]
+        );
+        const playerStamina = playerRows[0] ? playerRows[0].stamina : 0;
+
+        if (playerStamina < staminaCost) {
+            await conn.rollback();
+            conn.release();
+            return res.status(200).json({
+                status: 'success',
+                reason: 'INSUFFICIENT_STAMINA',
+                message: 'Stamina tidak cukup untuk memulai quest!'
+            });
+        }
+
+        // Kurangi stamina player
+        await conn.query(
+            'UPDATE players SET stamina = GREATEST(0, stamina - ?) WHERE player_id = ?',
+            [staminaCost, playerId]
+        );
+        
+        await conn.commit();
+        conn.release();
+
         const battleState = await BattleService.initializeBattle(playerId, questId, presetSlot);
         
         return res.status(200).json({
@@ -21,6 +57,10 @@ exports.initBattle = async (req, res) => {
         });
 
     } catch (error) {
+        if (conn) {
+            await conn.rollback();
+            conn.release();
+        }
         console.error('[initBattle] Error:', error);
         return res.status(500).json({
             status: 'error',
@@ -32,7 +72,7 @@ exports.initBattle = async (req, res) => {
 
 exports.saveBattleResult = async (req, res) => {
     // bsId must be provided by the client now, along with the standard params
-    const { bsId, playerId, questId, potionsUsed } = req.body;
+    const { bsId, playerId, questId, potionsUsed, fullPotionsUsed } = req.body;
 
     if (!playerId || !questId) {
         return res.status(400).json({
@@ -54,35 +94,20 @@ exports.saveBattleResult = async (req, res) => {
             );
         }
 
-        // Ambil data stamina cost dari quest
-        const [questRows] = await conn.query(
-            'SELECT mq_stamina_cost FROM master_quests WHERE mq_id = ?',
-            [questId]
-        );
-        const staminaCost = questRows[0] ? questRows[0].mq_stamina_cost : 10;
+        // Kurangi full potion yang telah digunakan untuk revive
+        if (fullPotionsUsed && Number(fullPotionsUsed) > 0) {
+            await conn.query(
+                'UPDATE player_materials SET quantity = GREATEST(0, quantity - ?) WHERE player_id = ? AND mat_id = 8',
+                [Number(fullPotionsUsed), playerId]
+            );
+        }
 
-        // Ambil data stamina player
+        // Ambil data stamina player yang tersisa untuk dikembalikan di response
         const [playerRows] = await conn.query(
             'SELECT stamina FROM players WHERE player_id = ?',
             [playerId]
         );
-        const playerStamina = playerRows[0] ? playerRows[0].stamina : 0;
-
-        if (playerStamina < staminaCost) {
-            await conn.rollback();
-            conn.release();
-            return res.status(400).json({
-                status: 'error',
-                message: 'Stamina tidak cukup untuk menyelesaikan quest!'
-            });
-        }
-
-        // Kurangi stamina player
-        await conn.query(
-            'UPDATE players SET stamina = GREATEST(0, stamina - ?) WHERE player_id = ?',
-            [staminaCost, playerId]
-        );
-        const remainingStamina = Math.max(0, playerStamina - staminaCost);
+        const remainingStamina = playerRows[0] ? playerRows[0].stamina : 0;
 
         // 3. Ambil semua kemungkinan reward dari quest_rewards
         const [rewardRows] = await conn.query(
@@ -116,7 +141,7 @@ exports.saveBattleResult = async (req, res) => {
 
             if (type === 'Currency') {
                 await conn.query(
-                    'UPDATE players SET currency = currency + ? WHERE player_id = ?',
+                    'UPDATE players SET gold = gold + ? WHERE player_id = ?',
                     [item.quantity, playerId]
                 );
                 obtainedRewards.push({

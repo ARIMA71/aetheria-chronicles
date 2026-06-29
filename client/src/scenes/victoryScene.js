@@ -14,6 +14,7 @@ export default class VictoryScene extends Phaser.Scene {
         this.questId = data.questId || 5;
         this.playerId = data.playerId || 1;
         this.potionsUsed = data.potionsUsed || 0;
+        this.fullPotionsUsed = data.fullPotionsUsed || 0;
         this.bsId = data.bsId || null;
     }
 
@@ -73,7 +74,8 @@ export default class VictoryScene extends Phaser.Scene {
             bsId: this.bsId,
             playerId: this.playerId,
             questId: this.questId,
-            potionsUsed: this.potionsUsed
+            potionsUsed: this.potionsUsed,
+            fullPotionsUsed: this.fullPotionsUsed
         };
         
         BattleApi.saveBattleResult(payload)
@@ -217,7 +219,7 @@ export default class VictoryScene extends Phaser.Scene {
         btn.on('pointerdown', () => {
             this.scene.stop('BattleScene');
             this.scene.stop('VictoryScene');
-            this.scene.start('MainMenuScene');
+            this.scene.start('QuestScene');
         });
     }
 }

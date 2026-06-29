@@ -258,7 +258,7 @@ insert  into `master_materials`(`mat_id`,`mat_name`,`mat_desc`) values
 (4,'Enhance Crystal','Material EXP untuk menaikkan level Karakter.'),
 (5,'Weapon Whetstone','Material EXP untuk menaikkan level Senjata.'),
 (6,'Green Potion','Battle Item: Memulihkan 25% HP satu karakter.'),
-(7,'Revive Elixir','Battle Item: Menghidupkan kembali party yang terkena wipeout.');
+(7,'Full Potion','Battle Item: Menghidupkan kembali party yang terkena wipeout & memulihkan stamina.');
 
 /*Table structure for table `master_monsters` */
 
