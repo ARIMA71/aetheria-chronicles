@@ -82,6 +82,12 @@ export default class QuestScene extends Phaser.Scene {
             if (json.status === 'success') {
                 this.areaData = json.data.areas;
                 this._updateAreaDots();
+
+                // Auto-select the first unlocked area so quests are immediately visible
+                const firstUnlockedIdx = this.areaData.findIndex(a => a.status === 'UNLOCKED');
+                if (firstUnlockedIdx !== -1) {
+                    this._selectArea(firstUnlockedIdx);
+                }
             }
         } catch (e) { console.error('Failed to fetch quests:', e); }
     }
@@ -97,13 +103,28 @@ export default class QuestScene extends Phaser.Scene {
             dot.lockText.setText(unlocked ? '' : '🔒');
 
             if (unlocked) {
+                // Make circle interactive
                 dot.circle.setInteractive({ useHandCursor: true });
                 dot.circle.on('pointerover', () => dot.circle.setFillStyle(0x334155));
                 dot.circle.on('pointerout', () => dot.circle.setFillStyle(THEME.PANEL));
                 dot.circle.on('pointerdown', () => this._selectArea(i));
+
+                // Make label text interactive to prevent pointer-blocking overlay issue
+                dot.text.setInteractive({ useHandCursor: true });
+                dot.text.on('pointerdown', () => this._selectArea(i));
+                dot.text.on('pointerover', () => dot.circle.setFillStyle(0x334155));
+                dot.text.on('pointerout', () => dot.circle.setFillStyle(THEME.PANEL));
+
+                // Make name text below the dot interactive
+                dot.nameText.setInteractive({ useHandCursor: true });
+                dot.nameText.on('pointerdown', () => this._selectArea(i));
             } else {
                 dot.circle.setAlpha(0.5);
                 dot.text.setAlpha(0.5);
+                // Clear interaction if locked
+                dot.circle.disableInteractive();
+                dot.text.disableInteractive();
+                dot.nameText.disableInteractive();
             }
         });
     }

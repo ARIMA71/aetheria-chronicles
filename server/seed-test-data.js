@@ -33,6 +33,12 @@ async function seed() {
         );
         console.log('✅ Granted 5x Full Potion to player_id: 1 in player_materials.');
 
+        // ── 2.5. Set character & weapon levels to 80 for player_id: 1 to restore high HP/stats ──
+        await conn.query(
+            'UPDATE player_inventories SET item_level = 80 WHERE player_id = 1'
+        );
+        console.log('✅ Updated player_id: 1 character & weapon levels to 80.');
+
         // ── 3. Seed player_quests: mq_id 1-5 = Completed untuk player_id: 1 ──
         // Hapus data lama jika ada agar idempotent
         await conn.query(

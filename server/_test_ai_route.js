@@ -32,6 +32,7 @@ function post(path, body) {
 async function run() {
     console.log('Sending request to /api/battle/ai-decision...');
     const res = await post('/api/battle/ai-decision', {
+        bsId: 1,
         battleState: {
             player_party: {
                 characters: [
@@ -39,7 +40,7 @@ async function run() {
                 ]
             },
             boss: {
-                hp: 30000,
+                hp: 80000,
                 maxHp: 100000,
                 phase: 'Normal',
                 isCaReady: false

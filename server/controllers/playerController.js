@@ -1,4 +1,5 @@
 const db = require('../config/db')
+const { checkAndRegenStamina } = require('../services/staminaService')
 
 exports.getPlayerParty = async (req, res) => {
     const playerId = req.params.playerId
@@ -30,10 +31,13 @@ exports.getPlayerParty = async (req, res) => {
 }
 
 exports.getPlayerProfile = async (req, res) => {
-    const playerId = req.params.playerId;
+    const playerId = req.params.playerId || 1;
     try {
+        // Check and regenerate stamina if needed
+        await checkAndRegenStamina(playerId, db);
+
         const [playerRows] = await db.query(
-            `SELECT player_id, username, player_level, player_exp, stamina, gold, diamond, currency
+            `SELECT player_id, username, player_level, player_exp, stamina, stamina_last_updated, gold, diamond, currency
              FROM players WHERE player_id = ?`,
             [playerId]
         );
@@ -59,6 +63,15 @@ exports.getPlayerProfile = async (req, res) => {
             ? questRows[0].max_completed + 1
             : 1;
 
+        // Calculate seconds remaining until refill (5 min / 300 sec cap)
+        let staminaRefillIn = 0;
+        if (player.stamina < 100) {
+            const lastUpdated = new Date(player.stamina_last_updated).getTime();
+            const now = Date.now();
+            const elapsed = Math.floor((now - lastUpdated) / 1000);
+            staminaRefillIn = Math.max(0, 300 - elapsed);
+        }
+
         res.status(200).json({
             status: 'success',
             data: {
@@ -67,9 +80,9 @@ exports.getPlayerProfile = async (req, res) => {
                 player_level: player.player_level,
                 player_exp: player.player_exp,
                 stamina: player.stamina,
+                stamina_refill_in: staminaRefillIn,
                 gold: player.gold,
                 diamond: player.diamond,
-                // currency: player.currency,
                 current_quest_stage: currentQuestStage
             }
         });

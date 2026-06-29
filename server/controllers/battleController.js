@@ -1,5 +1,6 @@
 const db = require('../config/db');
 const BattleService = require('../services/BattleService');
+const { checkAndRegenStamina } = require('../services/staminaService');
 
 exports.initBattle = async (req, res) => {
     const { playerId, questId, presetSlot } = req.body;
@@ -22,6 +23,9 @@ exports.initBattle = async (req, res) => {
         );
         const staminaCost = questRows[0] ? questRows[0].mq_stamina_cost : 10;
 
+        // Run auto-regeneration check first
+        await checkAndRegenStamina(playerId, conn);
+
         // Ambil data stamina player
         const [playerRows] = await conn.query(
             'SELECT stamina FROM players WHERE player_id = ? FOR UPDATE',
@@ -30,18 +34,30 @@ exports.initBattle = async (req, res) => {
         const playerStamina = playerRows[0] ? playerRows[0].stamina : 0;
 
         if (playerStamina < staminaCost) {
+            // Ambil stok Full Potion (mat_id = 8)
+            const [potionRows] = await conn.query(
+                'SELECT quantity FROM player_materials WHERE player_id = ? AND mat_id = 8',
+                [playerId]
+            );
+            const potionCount = potionRows[0] ? potionRows[0].quantity : 0;
+
             await conn.rollback();
             conn.release();
             return res.status(200).json({
                 status: 'success',
                 reason: 'INSUFFICIENT_STAMINA',
-                message: 'Stamina tidak cukup untuk memulai quest!'
+                message: 'Stamina tidak cukup untuk memulai quest!',
+                data: {
+                    stamina_cost: staminaCost,
+                    current_stamina: playerStamina,
+                    full_potion_count: potionCount
+                }
             });
         }
 
-        // Kurangi stamina player
+        // Kurangi stamina player dan update last updated timestamp
         await conn.query(
-            'UPDATE players SET stamina = GREATEST(0, stamina - ?) WHERE player_id = ?',
+            'UPDATE players SET stamina = GREATEST(0, stamina - ?), stamina_last_updated = CURRENT_TIMESTAMP WHERE player_id = ?',
             [staminaCost, playerId]
         );
         
@@ -99,6 +115,11 @@ exports.saveBattleResult = async (req, res) => {
             await conn.query(
                 'UPDATE player_materials SET quantity = GREATEST(0, quantity - ?) WHERE player_id = ? AND mat_id = 8',
                 [Number(fullPotionsUsed), playerId]
+            );
+            // Full Potion refills stamina to max too
+            await conn.query(
+                'UPDATE players SET stamina = 100, stamina_last_updated = CURRENT_TIMESTAMP WHERE player_id = ?',
+                [playerId]
             );
         }
 
@@ -279,6 +300,13 @@ exports.saveBattleResult = async (req, res) => {
 exports.getBossAction = async (req, res) => {
     try {
         const { bsId, battleState, bossSkills } = req.body;
+
+        // Log to file for debugging
+        try {
+            require('fs').writeFileSync('req-body-log.json', JSON.stringify({ bsId, battleState, bossSkills }, null, 2));
+        } catch (e) {
+            console.error('Failed to write log file:', e);
+        }
 
         if (!bsId || !battleState || !bossSkills) {
             return res.status(400).json({

@@ -12,6 +12,14 @@ export default class MainMenuScene extends Phaser.Scene {
     create() {
         if (!checkSession(this)) return;
 
+        // Clean up timer on scene shutdown to prevent memory leaks
+        this.events.on('shutdown', () => {
+            if (this.staminaTimer) {
+                this.staminaTimer.destroy();
+                this.staminaTimer = null;
+            }
+        });
+
         // Read player data from localStorage as immediate fallback
         const raw = localStorage.getItem('aetheria_player');
         this.playerData = raw ? JSON.parse(raw) : {
@@ -71,13 +79,37 @@ export default class MainMenuScene extends Phaser.Scene {
     updateUIElements() {
         if (!this.playerData) return;
 
-        // Stamina text & bar fill
-        if (this.staminaText) {
-            this.staminaText.setText(`${this.playerData.stamina}/100`);
-        }
+        // Stamina bar fill (using setSize instead of .width to force geometry redraw)
         if (this.staminaFill) {
             const ratio = Math.min(1, Math.max(0, this.playerData.stamina / 100));
-            this.staminaFill.width = 120 * ratio;
+            this.staminaFill.setSize(120 * ratio, 6);
+        }
+
+        // Start or update stamina regen countdown timer (5 mins)
+        if (this.staminaTimer) {
+            this.staminaTimer.destroy();
+            this.staminaTimer = null;
+        }
+
+        if (this.playerData.stamina < 100 && this.playerData.stamina_refill_in > 0) {
+            this.staminaRefillSeconds = this.playerData.stamina_refill_in;
+            this.updateStaminaText();
+            this.staminaTimer = this.time.addEvent({
+                delay: 1000,
+                callback: () => {
+                    this.staminaRefillSeconds--;
+                    if (this.staminaRefillSeconds <= 0) {
+                        if (this.staminaTimer) this.staminaTimer.destroy();
+                        this.staminaTimer = null;
+                        this.fetchPlayerProfile();
+                    } else {
+                        this.updateStaminaText();
+                    }
+                },
+                loop: true
+            });
+        } else {
+            this.updateStaminaText();
         }
 
         // Stats panel texts
@@ -96,6 +128,20 @@ export default class MainMenuScene extends Phaser.Scene {
         if (this.questText) {
             const stage = this.playerData.current_quest_stage || 5;
             this.questText.setText(`Main Quest: Stage ${stage}`);
+        }
+    }
+
+    updateStaminaText() {
+        if (!this.playerData || !this.staminaText) return;
+        if (this.playerData.stamina >= 100) {
+            this.staminaText.setText(`${this.playerData.stamina}/100`);
+        } else if (this.staminaRefillSeconds > 0) {
+            const minutes = Math.floor(this.staminaRefillSeconds / 60);
+            const seconds = this.staminaRefillSeconds % 60;
+            const timeStr = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            this.staminaText.setText(`${this.playerData.stamina}/100 (${timeStr})`);
+        } else {
+            this.staminaText.setText(`${this.playerData.stamina}/100`);
         }
     }
 

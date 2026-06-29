@@ -135,6 +135,15 @@ class AiBehaviorService {
                                      true;
                 const isCaReady = isCaReadyVal === true || isCaReadyVal === 1;
                 if (!isCaReady) return false;
+            } else {
+                // BUG FIX: If it IS an override skill, ensure the HP trigger is ACTUALLY met!
+                // Otherwise, it leaks into readySkills and gets evaluated by utility scores even when CA is not ready.
+                const trigger = mods.override_hp_trigger !== undefined ? mods.override_hp_trigger : mods.Trigger_HP_Threshold;
+                if (trigger !== undefined && trigger !== null) {
+                    if (boss_hp_pct > Number(trigger)) {
+                        return false; // Threshold not met, exclude from ready pool!
+                    }
+                }
             }
 
             return true;

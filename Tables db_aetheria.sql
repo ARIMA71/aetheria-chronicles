@@ -924,6 +924,7 @@ CREATE TABLE `players` (
   `player_level` int DEFAULT '1',
   `player_exp` int DEFAULT '0',
   `stamina` int NOT NULL DEFAULT '100',
+  `stamina_last_updated` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `gold` int NOT NULL DEFAULT '0',
   `diamond` int NOT NULL DEFAULT '0',
   PRIMARY KEY (`player_id`)

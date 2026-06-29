@@ -1,0 +1,288 @@
+{
+  "bsId": 8,
+  "battleState": {
+    "player_party": {
+      "characters": [
+        {
+          "hp": 631,
+          "maxHp": 631,
+          "activeEffects": [
+            {
+              "effect_name": "DEF Up (Lohei)",
+              "effect_type": "Buff",
+              "target_stat": "DEF",
+              "value": 0.25,
+              "duration": 1
+            },
+            {
+              "effect_name": "ATK Up (Big)",
+              "effect_type": "Buff",
+              "target_stat": "ATK",
+              "value": 0.3,
+              "duration": 1
+            }
+          ]
+        },
+        {
+          "hp": 0,
+          "maxHp": 708,
+          "activeEffects": []
+        },
+        {
+          "hp": 561,
+          "maxHp": 561,
+          "activeEffects": [
+            {
+              "effect_name": "DEF Up (Lohei)",
+              "effect_type": "Buff",
+              "target_stat": "DEF",
+              "value": 0.25,
+              "duration": 1
+            },
+            {
+              "effect_name": "ATK Up (Big)",
+              "effect_type": "Buff",
+              "target_stat": "ATK",
+              "value": 0.3,
+              "duration": 1
+            }
+          ]
+        },
+        {
+          "hp": 0,
+          "maxHp": 568,
+          "activeEffects": [
+            {
+              "effect_name": "DEF Up (Lohei)",
+              "effect_type": "Buff",
+              "target_stat": "DEF",
+              "value": 0.25,
+              "duration": 2
+            },
+            {
+              "effect_name": "ATK Up (Big)",
+              "effect_type": "Buff",
+              "target_stat": "ATK",
+              "value": 0.3,
+              "duration": 2
+            }
+          ]
+        }
+      ]
+    },
+    "boss": {
+      "hp": 235304,
+      "maxHp": 304500,
+      "phase": "enraged",
+      "isCaReady": false,
+      "activeEffects": [
+        {
+          "effect_name": "DEF Down (25%)",
+          "effect_type": "Debuff",
+          "target_stat": "DEF",
+          "value": -0.25,
+          "duration": 2
+        }
+      ]
+    },
+    "usedSkills": []
+  },
+  "bossSkills": [
+    {
+      "id": 48,
+      "phase": "Normal",
+      "base_utility": 0.6,
+      "score_modifiers": {
+        "party_buff_count": 0.25,
+        "party_debuff_count": -0.1
+      },
+      "skill": {
+        "id": 48,
+        "name": "Flute",
+        "type": "Support",
+        "category": "Special",
+        "target_type": "All_Enemies",
+        "modifier": 0,
+        "status_effects": [
+          {
+            "effect_name": "Stun",
+            "effect_type": "Debuff",
+            "target_stat": "STUN",
+            "value": 0,
+            "duration": 1,
+            "effect_target": "Target"
+          }
+        ]
+      }
+    },
+    {
+      "id": 48,
+      "phase": "Enraged",
+      "base_utility": 0.9,
+      "score_modifiers": {
+        "party_buff_count": 0.35,
+        "party_debuff_count": -0.1
+      },
+      "skill": {
+        "id": 48,
+        "name": "Flute",
+        "type": "Support",
+        "category": "Special",
+        "target_type": "All_Enemies",
+        "modifier": 0,
+        "status_effects": [
+          {
+            "effect_name": "Stun",
+            "effect_type": "Debuff",
+            "target_stat": "STUN",
+            "value": 0,
+            "duration": 1,
+            "effect_target": "Target"
+          }
+        ]
+      }
+    },
+    {
+      "id": 49,
+      "phase": "Normal",
+      "base_utility": 1,
+      "score_modifiers": {
+        "party_buff_count": -0.2,
+        "party_total_hp_pct": 0.7
+      },
+      "skill": {
+        "id": 49,
+        "name": "Typhoon",
+        "type": "Damage",
+        "category": "Special",
+        "target_type": "All_Enemies",
+        "modifier": 2,
+        "status_effects": [
+          {
+            "effect_name": "DEF Down (Medium)",
+            "effect_type": "Debuff",
+            "target_stat": "DEF",
+            "value": -0.2,
+            "duration": 4,
+            "effect_target": "Target"
+          }
+        ]
+      }
+    },
+    {
+      "id": 49,
+      "phase": "Enraged",
+      "base_utility": 1.5,
+      "score_modifiers": {
+        "party_buff_count": -0.2,
+        "party_total_hp_pct": 0.8
+      },
+      "skill": {
+        "id": 49,
+        "name": "Typhoon",
+        "type": "Damage",
+        "category": "Special",
+        "target_type": "All_Enemies",
+        "modifier": 2,
+        "status_effects": [
+          {
+            "effect_name": "DEF Down (Medium)",
+            "effect_type": "Debuff",
+            "target_stat": "DEF",
+            "value": -0.2,
+            "duration": 4,
+            "effect_target": "Target"
+          }
+        ]
+      }
+    },
+    {
+      "id": 50,
+      "phase": "Normal",
+      "base_utility": 0.4,
+      "score_modifiers": {
+        "party_buff_count": 0.4,
+        "party_lowest_hp_missing_pct": 0.9
+      },
+      "skill": {
+        "id": 50,
+        "name": "Slingshot",
+        "type": "Damage",
+        "category": "Special",
+        "target_type": "Single_Enemy",
+        "modifier": 3,
+        "status_effects": []
+      }
+    },
+    {
+      "id": 50,
+      "phase": "Enraged",
+      "base_utility": 0.6,
+      "score_modifiers": {
+        "party_buff_count": 0.5,
+        "party_lowest_hp_missing_pct": 1.2
+      },
+      "skill": {
+        "id": 50,
+        "name": "Slingshot",
+        "type": "Damage",
+        "category": "Special",
+        "target_type": "Single_Enemy",
+        "modifier": 3,
+        "status_effects": []
+      }
+    },
+    {
+      "id": 51,
+      "phase": "Normal",
+      "base_utility": 1,
+      "score_modifiers": {
+        "override_hp_trigger": 0.5
+      },
+      "skill": {
+        "id": 51,
+        "name": "Siren's Requiem",
+        "type": "Damage",
+        "category": "Special",
+        "target_type": "All_Enemies",
+        "modifier": 4,
+        "status_effects": [
+          {
+            "effect_name": "DEF Down (Medium)",
+            "effect_type": "Debuff",
+            "target_stat": "DEF",
+            "value": -0.2,
+            "duration": 4,
+            "effect_target": "Target"
+          }
+        ]
+      }
+    },
+    {
+      "id": 51,
+      "phase": "Enraged",
+      "base_utility": 1,
+      "score_modifiers": {
+        "override_hp_trigger": 0.5
+      },
+      "skill": {
+        "id": 51,
+        "name": "Siren's Requiem",
+        "type": "Damage",
+        "category": "Special",
+        "target_type": "All_Enemies",
+        "modifier": 4,
+        "status_effects": [
+          {
+            "effect_name": "DEF Down (Medium)",
+            "effect_type": "Debuff",
+            "target_stat": "DEF",
+            "value": -0.2,
+            "duration": 4,
+            "effect_target": "Target"
+          }
+        ]
+      }
+    }
+  ]
+}

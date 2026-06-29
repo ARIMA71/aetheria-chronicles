@@ -533,65 +533,89 @@ export default class BattleScene extends Phaser.Scene {
             }
         });
     }
-    processTurnEnd() {
-        if (this.enemy.modeState === "enraged") {
-            this._enragedTurns--;
-            if (this._enragedTurns <= 0) {
-                this.enemy.modeState = "exhausted";
-                this.enemy.modeBar = 0;
-                this._exhaustedTurns = 2;
-                this.showLog("ENEMY ENRAGE ENDED! Entering Exhausted...");
+    processTurnEnd(finishedTurn) {
+        if (finishedTurn === 'enemy') {
+            if (this.enemy.modeState === "enraged") {
+                this._enragedTurns--;
+                if (this._enragedTurns <= 0) {
+                    this.enemy.modeState = "exhausted";
+                    this.enemy.modeBar = 0;
+                    this._exhaustedTurns = 2;
+                    this.showLog("ENEMY ENRAGE ENDED! Entering Exhausted...");
+                }
+            } else if (this.enemy.modeState === "exhausted") {
+                this._exhaustedTurns--;
+                if (this._exhaustedTurns <= 0) {
+                    this.enemy.modeState = "normal";
+                    this.enemy.modeBar = 0;
+                    this._refreshEnemyHUD();
+                }
             }
-        } else if (this.enemy.modeState === "exhausted") {
-            this._exhaustedTurns--;
-            if (this._exhaustedTurns <= 0) {
-                this.enemy.modeState = "normal";
-                this.enemy.modeBar = 0;
-                this._refreshEnemyHUD();
-            }
-        }
-        // Tick down cooldowns & active effects untuk semua player hidup
-        this.players.forEach(p => {
-            if (p.hp <= 0) return;
 
-            // Terapkan damage Poison jika ada sebelum durasi berkurang
-            const poisonEffects = p.activeEffects.filter(e => e.target_stat === 'POISON');
-            poisonEffects.forEach(eff => {
-                const dmg = Math.floor(Math.abs(Number(eff.value) || 0.05) * p.maxHp);
-                p.hp = Math.max(0, p.hp - dmg);
-                this.showLog(`💀 Poison deals ${dmg} damage to ${p.charName}!`);
-                p.refreshVisual();
+            // Terapkan damage Poison pada musuh jika ada
+            if (this.enemy.hp > 0) {
+                const poisonEffects = this.enemy.activeEffects.filter(e => e.target_stat === 'POISON');
+                let totalPoisonDmg = 0;
+                poisonEffects.forEach(eff => {
+                    const dmg = Math.floor(Math.abs(Number(eff.value) || 0.05) * this.enemy.maxHp);
+                    totalPoisonDmg += dmg;
+                });
+                if (totalPoisonDmg > 0) {
+                    this._applyEnemyDamage(totalPoisonDmg);
+                    this.showLog(`💀 Poison deals ${totalPoisonDmg} damage to ${this.enemy.charName}!`);
+                }
+                this.enemy.updateEffectsTurn();
+            }
+
+            if (this.checkVictory()) return;
+            if (this.players.every(p => p.hp <= 0)) {
+                this.triggerDefeat(false);
+                return;
+            }
+
+            this.currentTurn++;
+            this.turnText.setText("TURN " + this.currentTurn);
+            if (this._sidebarOpen) this._renderSidebar();
+
+            // Auto-skip giliran player jika semua yang hidup terkena STUN
+            const alive = this.players.filter(p => p.hp > 0);
+            const allStunned = alive.length > 0 && alive.every(p => p.activeEffects.some(e => e.target_stat === 'STUN'));
+            if (allStunned) {
+                this.showLog("⚡ Seluruh party dalam keadaan STUN! Giliran dilewati.");
+                this.setTurn('enemy'); // Sembunyikan tombol serang
+                this.time.delayedCall(1500, () => this.processTurnEnd('player'));
+                return;
+            }
+
+            this.setTurn('player');
+
+        } else if (finishedTurn === 'player') {
+            // Tick down cooldowns & active effects untuk semua player hidup
+            this.players.forEach(p => {
+                if (p.hp <= 0) return;
+
+                // Terapkan damage Poison jika ada sebelum durasi berkurang
+                const poisonEffects = p.activeEffects.filter(e => e.target_stat === 'POISON');
+                poisonEffects.forEach(eff => {
+                    const dmg = Math.floor(Math.abs(Number(eff.value) || 0.05) * p.maxHp);
+                    p.hp = Math.max(0, p.hp - dmg);
+                    this.showLog(`💀 Poison deals ${dmg} damage to ${p.charName}!`);
+                    p.refreshVisual();
+                });
+
+                for (let id in p.cooldowns) if (p.cooldowns[id] > 0) p.cooldowns[id]--;
+                p.updateEffectsTurn(); // tick efek status, hapus yang expired, refresh visual
             });
 
-            for (let id in p.cooldowns) if (p.cooldowns[id] > 0) p.cooldowns[id]--;
-            p.updateEffectsTurn(); // tick efek status, hapus yang expired, refresh visual
-        });
-
-        // Terapkan damage Poison pada musuh jika ada
-        if (this.enemy.hp > 0) {
-            const poisonEffects = this.enemy.activeEffects.filter(e => e.target_stat === 'POISON');
-            let totalPoisonDmg = 0;
-            poisonEffects.forEach(eff => {
-                const dmg = Math.floor(Math.abs(Number(eff.value) || 0.05) * this.enemy.maxHp);
-                totalPoisonDmg += dmg;
-            });
-            if (totalPoisonDmg > 0) {
-                this._applyEnemyDamage(totalPoisonDmg);
-                this.showLog(`💀 Poison deals ${totalPoisonDmg} damage to ${this.enemy.charName}!`);
+            if (this.checkVictory()) return;
+            if (this.players.every(p => p.hp <= 0)) {
+                this.triggerDefeat(false);
+                return;
             }
-            this.enemy.updateEffectsTurn();
+
+            this.setTurn('enemy');
+            this.time.delayedCall(800, () => this.enemyAttack());
         }
-
-        if (this.checkVictory()) return;
-
-        if (this.players.every(p => p.hp <= 0)) {
-            this.triggerDefeat(false);
-            return;
-        }
-
-        this.currentTurn++;
-        this.turnText.setText("TURN " + this.currentTurn);
-        if (this._sidebarOpen) this._renderSidebar();
     }
     /**
      * Kumpulkan data keadaan arena (Knowledge Base) untuk AI musuh.
@@ -642,15 +666,7 @@ export default class BattleScene extends Phaser.Scene {
         this.closeSidebar();
         let dead = false;
 
-        // Cek jika seluruh party yang hidup dalam keadaan Stun
-        const allStunned = alive.every(p => p.activeEffects.some(e => e.target_stat === 'STUN'));
-        if (allStunned) {
-            this.showLog("⚡ Seluruh party dalam keadaan STUN dan tidak bisa menyerang!");
-            await new Promise(resolve => this.time.delayedCall(1500, resolve));
-            this.setTurn("enemy");
-            this.time.delayedCall(800, () => this.enemyAttack());
-            return;
-        }
+        // Stun is handled in processTurnEnd, Attack button is hidden if all are stunned.
 
         const basicAttackers = alive.filter(p => !p.isSAReady);
         for (const p of basicAttackers) {
@@ -715,8 +731,7 @@ export default class BattleScene extends Phaser.Scene {
             this.checkVictory();
             return;
         }
-        this.setTurn("enemy");
-        this.time.delayedCall(800, () => this.enemyAttack());
+        this.time.delayedCall(800, () => this.processTurnEnd('player'));
     }
     useSkill(idx) {
         const p = this.activePlayer, sk = p ? p.skills[idx] : null;
@@ -824,8 +839,7 @@ export default class BattleScene extends Phaser.Scene {
         const isStunned = this.enemy.activeEffects.some(e => e.target_stat === 'STUN');
         if (isStunned) {
             this.showLog(`⚡ ${this.enemy.charName} is STUNNED and cannot move!`);
-            this.setTurn('player');
-            this.time.delayedCall(1500, () => this.processTurnEnd());
+            this.time.delayedCall(1500, () => this.processTurnEnd('enemy'));
             return;
         }
 
@@ -867,7 +881,7 @@ export default class BattleScene extends Phaser.Scene {
         };
 
         const bossSkills = (this.enemy.aiBehaviors || []).map(b => ({
-            id: b.id,
+            id: b.skill.id,
             phase: b.phase,
             base_utility: b.base_utility,
             score_modifiers: b.modifiers,
@@ -880,7 +894,7 @@ export default class BattleScene extends Phaser.Scene {
             const j = await BattleApi.getAiDecision(this.bsId, battleState, bossSkills);
             if (j.status === "success" && j.data && j.data.selected_skill) {
                 const selected = j.data.selected_skill;
-                chosenBehavior = this.enemy.aiBehaviors.find(b => b.id === selected.id);
+                chosenBehavior = this.enemy.aiBehaviors.find(b => b.skill.id === selected.id);
             }
         } catch (e) {
             console.error("AI decision failed, triggering fallback:", e);
@@ -888,12 +902,6 @@ export default class BattleScene extends Phaser.Scene {
 
         // --- AI FALLBACK MECHANISM ---
         if (!chosenBehavior) {
-            console.warn("[AI_FALLBACK_ENGAGED] Enemy AI decision failed or returned null. Using fallback heuristic.");
-            // Visual Toaster for User / QA
-            const toast = this.add.text(CX, H / 2 - 100, "⚠️ [System: Network Timeout - AI Heuristic Fallback Engaged]", {
-                fontSize: "10px", color: "#ff4757", backgroundColor: "#1e0b0b", padding: { x: 8, y: 4 }, fontStyle: "bold"
-            }).setOrigin(0.5).setDepth(100);
-            this.time.delayedCall(3000, () => toast.destroy());
 
             // Retrieve heuristic fallback action locally
             const isCaReady = this.enemy.caBar >= this.enemy.caMax && !isExhausted;
@@ -917,8 +925,7 @@ export default class BattleScene extends Phaser.Scene {
             this._executeEnemySkill(chosenBehavior, modeMult);
 
             if (this.players.every(p => p.hp <= 0)) { this.triggerDefeat(false); return; }
-            this.setTurn('player');
-            this.time.delayedCall(1500, () => this.processTurnEnd());
+            this.time.delayedCall(1500, () => this.processTurnEnd('enemy'));
             return;
         }
 
@@ -940,8 +947,7 @@ export default class BattleScene extends Phaser.Scene {
 
         if (!handledAsync) {
             if (this.players.every(p => p.hp <= 0)) { this.triggerDefeat(false); return; }
-            this.setTurn('player');
-            this.time.delayedCall(1500, () => this.processTurnEnd());
+            this.time.delayedCall(1500, () => this.processTurnEnd('enemy'));
         }
     }
 
@@ -966,7 +972,7 @@ export default class BattleScene extends Phaser.Scene {
             } else {
                 this.showLog(`⚡ ${this.enemy.charName}: ${sk.name}!`);
             }
-            this._applyStatusEffects(this.enemy, sk, sk.status_effects);
+            CombatManager.applyStatusEffects(this.enemy, sk, sk.status_effects, this.players, this.enemy, this.showLog.bind(this), this._refreshEnemyHUD.bind(this));
         } else {
             let t;
             if (behavior.modifiers && behavior.modifiers.Target_Lowest_HP && aliveChars.length > 0) {
@@ -1020,8 +1026,7 @@ export default class BattleScene extends Phaser.Scene {
                 const t2 = this._randAlive();
                 if (!t2) {
                     if (this.players.every(p => p.hp <= 0)) { this.triggerDefeat(false); return; }
-                    this.setTurn('player');
-                    this.time.delayedCall(1500, () => this.processTurnEnd());
+                    this.time.delayedCall(1500, () => this.processTurnEnd('enemy'));
                     return;
                 }
                 let dmg2 = CombatManager.calcMitigatedDmg(eAtk, this.enemy, t2, this.enemy);
@@ -1034,8 +1039,7 @@ export default class BattleScene extends Phaser.Scene {
                     : `${this.enemy.charName} → ${t2.charName}: ${dmg2}`);
 
                 if (this.players.every(p => p.hp <= 0)) { this.triggerDefeat(false); return; }
-                this.setTurn('player');
-                this.time.delayedCall(1500, () => this.processTurnEnd());
+                this.time.delayedCall(1500, () => this.processTurnEnd('enemy'));
             });
             return true;
         }
@@ -1185,12 +1189,14 @@ export default class BattleScene extends Phaser.Scene {
     }
 
     triggerDefeat(isRetreat = false) {
+        this.turn = "none";
         // Check if player has Full Potions for revive
         if (!isRetreat && this.fullPotionCount > this.fullPotionsUsed) {
-            this._showReviveModal();
+            this.time.delayedCall(1500, () => {
+                this._showReviveModal();
+            });
             return;
         }
-        this.turn = "none";
         this.showLog(isRetreat ? "RETREATED" : "DEFEAT... 💀");
         this.time.delayedCall(1500, () => {
             this.scene.pause();
