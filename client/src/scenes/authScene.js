@@ -151,7 +151,7 @@ export default class AuthScene extends Phaser.Scene {
 
         this._formOverlay = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.6)
             .setInteractive().setDepth(50);
-        this._formOverlay.on('pointerdown', () => this._hideForm());
+        // this._formOverlay.on('pointerdown', () => this._hideForm()); // Disabled to prevent accidental closes on mobile
 
         const html = `
         <div id="dialog-box" style="
@@ -218,7 +218,7 @@ export default class AuthScene extends Phaser.Scene {
         // Overlay
         this._formOverlay = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.6)
             .setInteractive().setDepth(50);
-        this._formOverlay.on('pointerdown', () => this._hideForm());
+        // this._formOverlay.on('pointerdown', () => this._hideForm()); // Disabled to prevent accidental closes on mobile
 
         const isRegister = mode === 'register';
         const title = isRegister ? 'CREATE ACCOUNT' : 'LOGIN';

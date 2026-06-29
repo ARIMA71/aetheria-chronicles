@@ -38,7 +38,7 @@ export default class BattleScene extends Phaser.Scene {
     }
     async fetchBattleData() {
         try {
-            const j = await BattleApi.initBattle(this.questId, this.playerId);
+            const j = await BattleApi.initBattle(this.questId, this.playerId, 1);
             if (j.status !== "success") throw new Error(j.message || "API error");
             this.loadingText.destroy();
             this.bsId = j.data.bs_id;
@@ -59,7 +59,10 @@ export default class BattleScene extends Phaser.Scene {
             this._setupUI();
         } catch (e) {
             console.error(e);
-            this.loadingText.setText("Error: " + e.message).setColor("#f55").setAlign("center");
+            this.scene.start('FallbackScene', { 
+                message: 'Oops! Ada kesalahan kecil pada sistem, silakan coba lagi.\n\nDetail: ' + e.message,
+                previousScene: 'MainMenuScene'
+            });
         }
     }
     _setActive(p) {

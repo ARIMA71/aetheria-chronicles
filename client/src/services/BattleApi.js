@@ -12,12 +12,12 @@ export default class BattleApi {
      * @param {number} playerId
      * @returns {Promise<object>} JSON response from server
      */
-    static async initBattle(questId, playerId) {
+    static async initBattle(questId, playerId, presetSlot = 1) {
         try {
             const res = await fetch(`${API_BASE}/init`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ questId, playerId })
+                body: JSON.stringify({ questId, playerId, presetSlot })
             });
             if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
             return await res.json();

@@ -4,6 +4,7 @@ import MainMenuScene from './scenes/mainMenuScene.js';
 import BattleScene from './scenes/battleScene.js';
 import VictoryScene from './scenes/victoryScene.js';
 import DefeatScene from './scenes/defeatScene.js';
+import FallbackScene from './scenes/fallbackScene.js';
 
 // =========================================================
 // Aetherial Cyber-Dark Theme — Centralized Color Config
@@ -60,7 +61,7 @@ const config = {
         width: 450,
         height: 800
     },
-    scene: [AuthScene, MainMenuScene, BattleScene, VictoryScene, DefeatScene]
+    scene: [AuthScene, MainMenuScene, BattleScene, VictoryScene, DefeatScene, FallbackScene]
 };
 
 new Phaser.Game(config);
