@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { THEME } from '../main.js';
-import { checkSession } from '../utils/auth.js';
+import { checkSession, saveCurrentScene } from '../utils/auth.js';
 
 const W = 450, H = 800, CX = 225;
 const API_BASE = 'http://localhost:3000/api';
@@ -23,6 +23,7 @@ export default class QuestScene extends Phaser.Scene {
 
     create() {
         if (!checkSession(this)) return;
+        saveCurrentScene(this.scene.key);
         const raw = localStorage.getItem('aetheria_player');
         this.playerData = raw ? JSON.parse(raw) : { player_id: 1 };
         this.playerId = this.playerData.player_id || 1;

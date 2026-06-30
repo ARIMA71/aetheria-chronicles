@@ -40,9 +40,16 @@ export function checkSession(scene) {
     // 3. Update the activity timer for this scene transition
     localStorage.setItem('aetheria_last_activity', now.toString());
 
-    // 4. If we are in the login/register screen, skip it and go to Main Menu
+    // 4. If we are in the login/register screen, skip it and go to the last active scene
     if (isAuthScene) {
-        scene.scene.start('MainMenuScene');
+        const savedScene = localStorage.getItem('aetheria_current_scene') || 'MainMenuScene';
+        let savedData = {};
+        try {
+            const dataStr = localStorage.getItem('aetheria_scene_data');
+            if (dataStr) savedData = JSON.parse(dataStr);
+        } catch (e) {}
+        
+        scene.scene.start(savedScene, savedData);
         return true;
     }
 
@@ -105,4 +112,12 @@ async function verifyTokenOnServer(token) {
         console.error('Failed to contact auth server for verification:', err);
         return true;
     }
+}
+/**
+ * Simpan scene aktif saat ini beserta datanya ke localStorage.
+ * Ini digunakan agar saat page refresh, player kembali ke state terakhirnya.
+ */
+export function saveCurrentScene(sceneKey, data = {}) {
+    localStorage.setItem('aetheria_current_scene', sceneKey);
+    localStorage.setItem('aetheria_scene_data', JSON.stringify(data));
 }

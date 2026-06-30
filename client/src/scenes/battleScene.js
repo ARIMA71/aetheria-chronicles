@@ -1,7 +1,7 @@
 import Player from "../entities/player";
 import Enemy from "../entities/enemy";
 import { THEME } from "../main.js";
-import { checkSession } from "../utils/auth.js";
+import { checkSession, saveCurrentScene } from "../utils/auth.js";
 import BattleApi from "../services/BattleApi.js";
 import CombatManager from "../services/CombatManager.js";
 import BattleMenu from "../ui/BattleMenu.js";
@@ -11,6 +11,7 @@ export default class BattleScene extends Phaser.Scene {
     init(data) {
         // Accept data from QuestScene if available
         this._sceneData = data || {};
+        saveCurrentScene(this.scene.key, this._sceneData);
     }
     setTurn(newTurn) {
         this.turn = newTurn;

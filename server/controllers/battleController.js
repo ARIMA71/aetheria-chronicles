@@ -66,10 +66,20 @@ exports.initBattle = async (req, res) => {
 
         const battleState = await BattleService.initializeBattle(playerId, questId, presetSlot);
         
+        // Buat salinan state untuk client agar data rahasia tidak bocor
+        const clientBattleState = JSON.parse(JSON.stringify(battleState));
+        
+        // Hapus ai_behaviors dari payload client
+        if (clientBattleState.enemies) {
+            clientBattleState.enemies.forEach(enemy => {
+                delete enemy.ai_behaviors;
+            });
+        }
+        
         return res.status(200).json({
             status: 'success',
             message: 'Data arena pertarungan siap!',
-            data: battleState
+            data: clientBattleState
         });
 
     } catch (error) {

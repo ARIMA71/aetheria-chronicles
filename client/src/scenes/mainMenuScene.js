@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { THEME } from '../main.js';
-import { checkSession, clearSession } from '../utils/auth.js';
+import { checkSession, clearSession, saveCurrentScene } from '../utils/auth.js';
 
 const W = 450, H = 800, CX = 225;
 
@@ -11,6 +11,7 @@ export default class MainMenuScene extends Phaser.Scene {
 
     create() {
         if (!checkSession(this)) return;
+        saveCurrentScene(this.scene.key);
 
         // Clean up timer on scene shutdown to prevent memory leaks
         this.events.on('shutdown', () => {

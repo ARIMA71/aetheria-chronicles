@@ -52,6 +52,13 @@ class GridCalculatorService {
                 }
             });
 
+            // Initialize runtime skill states
+            if (charSkills) {
+                charSkills.forEach(skill => {
+                    skill.current_cooldown = 0;
+                });
+            }
+
             return {
                 slot:    char.role_slot,
                 name:    char.name,
@@ -64,6 +71,9 @@ class GridCalculatorService {
                     crit:   Number((0.1 + (personalPassive.CRIT || 0)).toFixed(4)),
                     max_sa: Number(char.max_sa)   || 100
                 },
+                current_hp: Math.floor(rawHp  * (1 + personalPassive.HP)),
+                current_sa: 0,
+                active_buffs: [],
                 portrait_path: char.portrait_path,
                 sprite_path:   char.sprite_path,
                 skills: charSkills

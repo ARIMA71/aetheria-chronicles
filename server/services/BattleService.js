@@ -201,13 +201,17 @@ class BattleService {
         const behaviorMap = {};
         monsterRows.forEach(row => {
             if (!monsterMap[row.mon_id]) {
+                const finalHp = (Number(row.mon_base_hp) || 0) + (Number(row.mon_hp_growth) || 0) * ((row.monster_level || 1) - 1);
                 monsterMap[row.mon_id] = {
                     id: row.mon_id, name: row.mon_name, element: row.mon_element, level: row.monster_level || 1,
                     final_stats: {
-                        hp:  (Number(row.mon_base_hp) || 0) + (Number(row.mon_hp_growth) || 0) * ((row.monster_level || 1) - 1),
+                        hp:  finalHp,
                         atk: (Number(row.mon_base_atk) || 0) + (Number(row.mon_atk_growth) || 0) * ((row.monster_level || 1) - 1),
                         def: (Number(row.mon_base_def) || 0) + (Number(row.mon_def_growth) || 0) * ((row.monster_level || 1) - 1)
                     },
+                    current_hp: finalHp,
+                    current_ca: 0,
+                    active_buffs: [],
                     caMax: Number(row.mon_max_ca) || 5, icon_path: row.mon_icon_path, sprite_path: row.mon_sprite_path,
                     ai_behaviors: []
                 };
@@ -227,6 +231,7 @@ class BattleService {
                             id: row.skill_id, name: row.skill_name, category: row.skill_category,
                             type: row.skill_type, target_type: row.skill_target_type || 'Single_Enemy',
                             modifier: Number(row.skill_modifier) || 0, cooldown: row.skill_cooldown,
+                            current_cooldown: 0,
                             icon_path: row.skill_icon_path, vfx_path: row.skill_vfx_path, status_effects: []
                         }
                     };
