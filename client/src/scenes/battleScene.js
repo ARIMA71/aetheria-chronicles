@@ -24,7 +24,7 @@ export default class BattleScene extends Phaser.Scene {
         this.setTurn("player"); this.currentTurn = 1;
         this.players = []; this.activePlayer = null;
         this.aetherGauge = 0; this.aetherGaugeMax = 100;
-        this._sidebarOpen = false; this._timerSec = 2699; this._exhaustedTurns = 0; this._enragedTurns = 0;
+        this._sidebarOpen = false; this._timerSec = 2700; this._exhaustedTurns = 0; this._enragedTurns = 0;
         this.potionCount = 0;
         this.potionsUsed = 0;
         this.healsRemaining = 0;
@@ -42,8 +42,12 @@ export default class BattleScene extends Phaser.Scene {
         this.add.rectangle(CX, 435, W, 2, THEME.BORDER);
         this.add.rectangle(CX, 550, W, 2, THEME.BORDER);
 
-        // If initData was passed from QuestScene (battle already initialized), use it directly
-        if (this._sceneData.initData && this._sceneData.initData.status === 'success') {
+        // === RESUME PATH: data resume dari MainMenu Pop-up ===
+        if (this._sceneData.resumeData) {
+            this._resumeBattle(this._sceneData);
+        }
+        // === NORMAL PATH: initData dari QuestScene (battle baru) ===
+        else if (this._sceneData.initData && this._sceneData.initData.status === 'success') {
             this._processBattleData(this._sceneData.initData);
         } else {
             this.loadingText = this.add.text(CX, H / 2, "Loading...", { fontSize: "20px", color: "#ccc" }).setOrigin(0.5);
@@ -57,9 +61,12 @@ export default class BattleScene extends Phaser.Scene {
             this._processBattleData(j);
         } catch (e) {
             console.error(e);
-            this.scene.start('FallbackScene', { 
-                message: 'Oops! Ada kesalahan kecil pada sistem, silakan coba lagi.\n\nDetail: ' + e.message,
-                previousScene: 'QuestScene'
+            this.scene.start('LoadingScene', {
+                targetScene: 'FallbackScene',
+                targetData: {
+                    message: 'Oops! Ada kesalahan kecil pada sistem, silakan coba lagi.\n\nDetail: ' + e.message,
+                    previousScene: 'QuestScene'
+                }
             });
         }
     }
@@ -83,6 +90,77 @@ export default class BattleScene extends Phaser.Scene {
         this.enemy = new Enemy(this, CX, 270, j.data.enemies[0]);
         this._setupUI();
     }
+
+    /**
+     * Resume battle dari data yang tersimpan di server.
+     * Inject seluruh state (HP, cooldowns, SA/CA, buffs, turn counter, timer)
+     * sebelum UI dibangun.
+     */
+    _resumeBattle(sceneData) {
+        const state = sceneData.resumeData;
+        if (!state) { this.scene.start('LoadingScene', { targetScene: 'MainMenuScene' }); return; }
+
+        this.bsId = sceneData.bsId;
+        this.questId = sceneData.questId || state.quest_id;
+        this._timerSec = sceneData.remainingTime || 2700;
+
+        // Restore potion counts
+        this.potionCount = state.potion_count !== undefined ? state.potion_count : 0;
+        this.healsRemaining = Math.min(3, this.potionCount);
+        this.fullPotionCount = state.full_potion_count !== undefined ? state.full_potion_count : 0;
+        this.potionsUsed = state.potions_used || 0;
+        this.fullPotionsUsed = state.full_potions_used || 0;
+
+        // Restore turn counter
+        this.currentTurn = state.current_turn || 1;
+        this.aetherGauge = state.aether_gauge || 0;
+
+        // Build player entities with resume state
+        const chars = state.player_party.characters.slice(0, 4);
+        const cW = 85, gap = 15, total = chars.length, totalW = total * cW + (total - 1) * gap, sx = (W - totalW) / 2 + cW / 2;
+        chars.forEach((d, i) => {
+            const px = sx + i * (cW + gap);
+            const p = new Player(this, px, 600, d);
+            p._baseX = px;
+
+            // Inject runtime state dari resume data
+            if (d.current_hp !== undefined) p.hp = d.current_hp;
+            if (d.current_sa !== undefined) p.sa = d.current_sa;
+            if (d.active_buffs && Array.isArray(d.active_buffs)) p.activeEffects = [...d.active_buffs];
+            if (d.skills) {
+                d.skills.forEach(sk => {
+                    if (sk.current_cooldown !== undefined && sk.current_cooldown > 0) {
+                        p.cooldowns[sk.id] = sk.current_cooldown;
+                    }
+                });
+            }
+
+            p.setInteractive(new Phaser.Geom.Rectangle(-42.5, -60, 85, 120), Phaser.Geom.Rectangle.Contains);
+            p.on("pointerdown", () => { if (this.turn !== "player") return; this._tapPortrait(p); });
+            this.players.push(p);
+        });
+        this.activePlayer = null;
+
+        // Build enemy entity with resume state
+        const enemyData = state.enemies[0];
+        this.enemy = new Enemy(this, CX, 270, enemyData);
+        if (enemyData.current_hp !== undefined) this.enemy.hp = enemyData.current_hp;
+        if (enemyData.current_ca !== undefined) this.enemy.chargeBar = enemyData.current_ca;
+        if (enemyData.active_buffs && Array.isArray(enemyData.active_buffs)) {
+            this.enemy.activeEffects = [...enemyData.active_buffs];
+        }
+        if (enemyData.mode_state) this.enemy.modeState = enemyData.mode_state;
+        if (enemyData.mode_bar !== undefined) this.enemy.modeBar = enemyData.mode_bar;
+
+        this._setupUI();
+
+        // Update turn text setelah UI dibangun
+        if (this.turnText) this.turnText.setText("TURN " + this.currentTurn);
+
+        // Refresh visual semua entity setelah state di-inject
+        this.players.forEach(p => p.refreshVisual());
+        this._refreshEnemyHUD();
+    }
     _setActive(p) {
         if (this.activePlayer && this.activePlayer !== p) this.activePlayer.setHighlight(false);
         this.activePlayer = p;
@@ -98,6 +176,7 @@ export default class BattleScene extends Phaser.Scene {
         this._buildLayer1(); this._buildEnemyHUD(); this._buildArenaButtons();
         this._buildPartySprites(); this._buildLayer4(); this._buildSidebar(); this._buildBattleLog();
         this._startTimer(); this._refreshEnemyHUD();
+        this._playStartAnimation();
     }
     _buildLayer1() {
         this.turnText = this.add.text(20, 15, "TURN 1", { fontSize: "13px", color: THEME.TEXT_SECONDARY, fontStyle: "bold" }).setOrigin(0, 0);
@@ -517,6 +596,40 @@ export default class BattleScene extends Phaser.Scene {
         this.battleLog.setText(msg);
         this._logTimer = this.time.delayedCall(2200, () => this.battleLog.setText(""));
     }
+
+    _playStartAnimation() {
+        const cx = this.cameras.main.width / 2;
+        const cy = this.cameras.main.height / 2;
+        const startText = this.add.text(cx, cy, "START!", {
+            fontSize: "48px",
+            fontStyle: "bold",
+            fontFamily: "Outfit",
+            color: THEME.TEXT_PRIMARY,
+            letterSpacing: 8
+        }).setOrigin(0.5).setDepth(200).setScale(0.5).setAlpha(0);
+
+        this.showLog("BATTLE START!");
+
+        this.tweens.add({
+            targets: startText,
+            scale: 1.2,
+            alpha: 1,
+            duration: 300,
+            ease: 'Back.out',
+            onComplete: () => {
+                this.time.delayedCall(800, () => {
+                    this.tweens.add({
+                        targets: startText,
+                        alpha: 0,
+                        scale: 1.5,
+                        duration: 300,
+                        onComplete: () => startText.destroy()
+                    });
+                });
+            }
+        });
+    }
+
     _startTimer() {
         this.timerEvent = this.time.addEvent({
             delay: 1000, repeat: -1, callback: () => {
@@ -617,6 +730,60 @@ export default class BattleScene extends Phaser.Scene {
             this.setTurn('enemy');
             this.time.delayedCall(800, () => this.enemyAttack());
         }
+
+        // === AUTO-SYNC: fire-and-forget ke server setiap Turn End ===
+        this._syncStateToServer();
+    }
+
+    /**
+     * Kumpulkan snapshot state saat ini dan kirim ke server (fire-and-forget).
+     * Dipanggil di akhir setiap giliran (processTurnEnd).
+     */
+    _syncStateToServer() {
+        if (!this.bsId) return;
+        try {
+            const snapshot = {
+                quest_id: this.questId,
+                current_turn: this.currentTurn,
+                aether_gauge: this.aetherGauge,
+                potions_used: this.potionsUsed,
+                full_potions_used: this.fullPotionsUsed,
+                potion_count: this.potionCount,
+                full_potion_count: this.fullPotionCount,
+                player_party: {
+                    characters: this.players.map(p => ({
+                        slot: p.slot,
+                        name: p.charName,
+                        element: p.element,
+                        level: p.level,
+                        final_stats: p.finalStats,
+                        current_hp: p.hp,
+                        current_sa: p.sa || 0,
+                        active_buffs: p.activeEffects ? [...p.activeEffects] : [],
+                        skills: (p.skills || []).map(s => ({
+                            ...s,
+                            current_cooldown: p.cooldowns[s.id] || 0
+                        }))
+                    }))
+                },
+                enemies: [{
+                    id: this.enemy.monsterId,
+                    name: this.enemy.charName,
+                    element: this.enemy.element,
+                    level: this.enemy.level,
+                    final_stats: this.enemy.finalStats,
+                    caMax: this.enemy.caMax,
+                    current_hp: this.enemy.hp,
+                    current_ca: this.enemy.chargeBar,
+                    active_buffs: this.enemy.activeEffects ? [...this.enemy.activeEffects] : [],
+                    mode_state: this.enemy.modeState,
+                    mode_bar: this.enemy.modeBar
+                }]
+            };
+            BattleApi.syncBattleState(this.bsId, snapshot, this._timerSec);
+        } catch (e) {
+            console.error('[_syncStateToServer] Error building snapshot:', e);
+        }
     }
     /**
      * Kumpulkan data keadaan arena (Knowledge Base) untuk AI musuh.
@@ -667,66 +834,75 @@ export default class BattleScene extends Phaser.Scene {
         this.closeSidebar();
         let dead = false;
 
-        // Stun is handled in processTurnEnd, Attack button is hidden if all are stunned.
+        const saUsers = alive.filter(p => p.isSAReady);
+        const saCount = saUsers.length;
+        const saMults = [1.0, 1.0, 2.0, 2.5, 3.0]; // 0, 1, 2, 3, 4 chars
+        const saMultiplier = saMults[saCount] || 1.0;
+        const lNames = ["", "", "Double", "Triple", "Full"];
+        let totalSaDamage = 0;
 
-        const basicAttackers = alive.filter(p => !p.isSAReady);
-        for (const p of basicAttackers) {
+        for (const p of alive) {
             // Cek jika karakter ini stun
             if (p.activeEffects.some(e => e.target_stat === 'STUN')) {
-                this.showLog(`⚡ ${p.charName} terkena STUN dan tidak bisa menyerang!`);
+                this.showLog(`⚡ ${p.charName} terkena STUN dan tidak bisa bergerak!`);
+                if (p.isSAReady) {
+                    p.setSAReady(false);
+                }
+                p.refreshVisual();
                 await new Promise(resolve => this.time.delayedCall(800, resolve));
                 continue;
             }
 
-            const pAtk = p.getStat('ATK');
-            const rawDmg = pAtk;
-            let dmg = CombatManager.calcMitigatedDmg(rawDmg, p, this.enemy, this.enemy);
-            const crit = Math.random() < p.getStat('CRIT');
-            if (crit) dmg = Math.floor(dmg * p.getCritDamage());
-            else dmg = Math.floor(dmg);
-            this._applyEnemyDamage(dmg);
-            p.specialBar = Math.min(p.specialBar + 20, p.specialMax);
-            p.refreshVisual();
-            this.showLog(`${p.charName} attacks... ${crit ? "💥 " : ""}${dmg} dmg`);
+            if (p.isSAReady) {
+                // --- SPECIAL ATTACK ---
+                const pAtk = p.getStat('ATK');
+                const rawSA = pAtk * (p.specialAttack.modifier || 1.0);
+                const mitigated = CombatManager.calcMitigatedDmg(rawSA, p, this.enemy, this.enemy);
+
+                // Terapkan bonus DMG dari Combo (200%, 250%, 300%)
+                const finalDmg = Math.floor(Math.max(mitigated, 1) * saMultiplier);
+
+                this._applyEnemyDamage(finalDmg);
+                totalSaDamage += finalDmg;
+
+                // Terapkan status_effects dari SA skill
+                CombatManager.applyStatusEffects(p, p.specialAttack, p.specialAttack.status_effects, this.players, this.enemy, this.showLog.bind(this), this._refreshEnemyHUD.bind(this));
+
+                p.specialBar = 0;
+                p.setSAReady(false);
+                p.refreshVisual();
+
+                this.aetherGauge = Math.min(this.aetherGaugeMax, this.aetherGauge + 10);
+                this.showLog(`✦ ${p.charName} casts SA! ${finalDmg} dmg`);
+
+            } else {
+                // --- BASIC ATTACK ---
+                const pAtk = p.getStat('ATK');
+                const rawDmg = pAtk;
+                let dmg = CombatManager.calcMitigatedDmg(rawDmg, p, this.enemy, this.enemy);
+                const crit = Math.random() < p.getStat('CRIT');
+                if (crit) dmg = Math.floor(dmg * p.getCritDamage());
+                else dmg = Math.floor(dmg);
+
+                this._applyEnemyDamage(dmg);
+                p.specialBar = Math.min(p.specialBar + 20, p.specialMax);
+                p.refreshVisual();
+                this.showLog(`${p.charName} attacks... ${crit ? "💥 " : ""}${dmg} dmg`);
+            }
+
             await new Promise(resolve => this.time.delayedCall(800, resolve));
-            if (this.enemy.hp <= 0) { dead = true; break; }
-        }
 
-        if (!dead) {
-            const saUsers = alive.filter(p => p.isSAReady);
-            if (saUsers.length > 0) {
-                const mult = [0, 1, 0.5, 1.0, 2.0];
-                const lNames = ["", "", "Small", "Medium", "Big"];
-                let bonus = 0;
-                for (const p of saUsers) {
-                    // Cek jika karakter ini stun
-                    if (p.activeEffects.some(e => e.target_stat === 'STUN')) {
-                        this.showLog(`⚡ ${p.charName} terkena STUN dan batal melancarkan Special Attack!`);
-                        p.setSAReady(false);
-                        p.refreshVisual();
-                        await new Promise(resolve => this.time.delayedCall(800, resolve));
-                        continue;
-                    }
-
-                    const pAtk = p.getStat('ATK');
-                    const rawSA = pAtk * p.specialAttack.modifier;
-                    const mitigated = CombatManager.calcMitigatedDmg(rawSA, p, this.enemy, this.enemy);
-                    const add = Math.floor(Math.max(mitigated, 1) * (saUsers.length >= 2 ? mult[saUsers.length] : 1));
-                    this._applyEnemyDamage(add); bonus += add;
-                    // Terapkan status_effects dari SA skill
-                    CombatManager.applyStatusEffects(p, p.specialAttack, p.specialAttack.status_effects, this.players, this.enemy, this.showLog.bind(this), this._refreshEnemyHUD.bind(this));
-                    p.specialBar = 0; p.setSAReady(false); p.refreshVisual();
-                    this.aetherGauge = Math.min(this.aetherGaugeMax, this.aetherGauge + 10);
-                    this.showLog(`✦ ${p.charName} casts SA! ${add} dmg`);
-                    await new Promise(resolve => this.time.delayedCall(800, resolve));
-                    if (this.enemy.hp <= 0) { dead = true; break; }
-                }
-                if (!dead && saUsers.length >= 2) {
-                    this.showLog(`⚡AETHER LINK (${lNames[saUsers.length] || "Boost"})! Bonus Dmg: ${bonus}`);
-                    await new Promise(resolve => this.time.delayedCall(800, resolve));
-                }
+            if (this.enemy.hp <= 0) {
+                dead = true;
+                break;
             }
         }
+
+        if (!dead && saCount >= 2) {
+            this.showLog(`⚡AETHER LINK (${lNames[saCount]} Burst)! Total SA Dmg: ${totalSaDamage}`);
+            await new Promise(resolve => this.time.delayedCall(1200, resolve));
+        }
+
         this._refreshAetherUI();
         if (dead) {
             this.checkVictory();
@@ -907,7 +1083,7 @@ export default class BattleScene extends Phaser.Scene {
             // Retrieve heuristic fallback action locally
             const isCaReady = this.enemy.caBar >= this.enemy.caMax && !isExhausted;
             chosenBehavior = CombatManager.getAiFallbackAction(this.enemy, isCaReady);
-            
+
             // Note: Snapshot Integrity is intrinsically maintained because chosenBehavior will be executed below,
             // which internally modifies hp/caBar. The next time 'battleState' snapshot is constructed on the next turn,
             // it captures these valid fallback results directly from the entity properties.

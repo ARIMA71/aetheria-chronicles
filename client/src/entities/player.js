@@ -20,14 +20,14 @@ export default class Player extends Phaser.GameObjects.Container {
         this.charName = data.name;
         this.element = data.element || 'None';
         this.level = data.level || 1;
-        this.maxHp = data.final_stats.hp;
-        this.hp = data.final_stats.hp;
-        this.atk = data.final_stats.atk;
-
+        this.finalStats = data.final_stats || { hp: 100, atk: 10, def: 10, crit: 0.1, max_sa: 100 }; // Fallback for old save states
+        this.maxHp = this.finalStats.hp;
+        this.hp = this.finalStats.hp;
+        this.atk = this.finalStats.atk;
         // Base stats (disimpan untuk referensi getStat())
-        this._baseAtk = data.final_stats.atk;
-        this._baseDef = data.final_stats.def || 500;
-        this._baseCrit = data.final_stats.crit !== undefined ? data.final_stats.crit : 0.1;
+        this._baseAtk = this.finalStats.atk;
+        this._baseDef = this.finalStats.def || 500;
+        this._baseCrit = this.finalStats.crit !== undefined ? this.finalStats.crit : 0.1;
 
         this.def = this._baseDef;
         this.crit = this._baseCrit;
@@ -39,7 +39,7 @@ export default class Player extends Phaser.GameObjects.Container {
 
         // ── Combat State ──────────────────────────────────────────────────────
         this.specialBar = 0;
-        this.specialMax = data.final_stats.max_sa || 100;
+        this.specialMax = this.finalStats.max_sa || 100;
         this.cooldowns = {};
         this.isSAReady = false;
 

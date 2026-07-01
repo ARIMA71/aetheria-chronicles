@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { THEME } from '../main.js';
 import { checkSession, saveCurrentScene } from '../utils/auth.js';
+import BattleApi from '../services/BattleApi.js';
 
 const W = 450, H = 800, CX = 225;
 const API_BASE = 'http://localhost:3000/api';
@@ -39,6 +40,7 @@ export default class QuestScene extends Phaser.Scene {
         this._buildMap();
         this._buildQuestPanel();
         this.fetchQuestData();
+        this._checkActiveBattle();
     }
 
     _buildTopBar() {
@@ -46,7 +48,7 @@ export default class QuestScene extends Phaser.Scene {
         this.add.text(CX, 30, 'QUEST MAP', { fontSize: '15px', fontStyle: 'bold', color: THEME.TEXT_PRIMARY, fontFamily: 'Outfit', letterSpacing: 2 }).setOrigin(0.5);
         const backBtn = this.add.circle(40, 30, 18, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
         this.add.text(40, 30, '←', { fontSize: '16px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
-        backBtn.on('pointerdown', () => this.scene.start('MainMenuScene'));
+        backBtn.on('pointerdown', () => this.scene.start('LoadingScene', { targetScene: 'MainMenuScene' }));
     }
 
     _buildMap() {
@@ -252,7 +254,7 @@ export default class QuestScene extends Phaser.Scene {
         const partyTxt = this.add.text(CX - 85, 530, '⚙ Atur Party', { fontSize: '11px', fontStyle: 'bold', color: THEME.TEXT_PRIMARY, fontFamily: 'Outfit' }).setOrigin(0.5);
         partyBtn.on('pointerover', () => partyBtn.setFillStyle(0x334155));
         partyBtn.on('pointerout', () => partyBtn.setFillStyle(THEME.PANEL));
-        partyBtn.on('pointerdown', () => { this.preBattleContainer.destroy(); this.scene.start('PartyScene'); });
+        partyBtn.on('pointerdown', () => { this.preBattleContainer.destroy(); this.scene.start('LoadingScene', { targetScene: 'PartyScene' }); });
         items.push(partyBtn, partyTxt);
 
         // Mulai Battle button
@@ -313,10 +315,13 @@ export default class QuestScene extends Phaser.Scene {
 
             // Success — go to battle
             if (this.preBattleContainer) this.preBattleContainer.destroy();
-            this.scene.start('BattleScene', {
-                questId: quest.mq_id,
-                presetSlot: this.selectedPresetSlot,
-                initData: json
+            this.scene.start('LoadingScene', {
+                targetScene: 'ReadyScene',
+                targetData: {
+                    questId: quest.mq_id,
+                    presetSlot: this.selectedPresetSlot,
+                    initData: json
+                }
             });
         } catch (e) {
             console.error('Battle init error:', e);
@@ -374,5 +379,103 @@ export default class QuestScene extends Phaser.Scene {
                 this._startBattle(quest);
             }
         } catch (e) { console.error('Use stamina potion failed:', e); }
+    }
+
+    async _checkActiveBattle() {
+        if (!this.playerData || !this.playerData.player_id) return;
+        try {
+            const res = await BattleApi.checkActiveBattle(this.playerData.player_id);
+            if (res.status === 'success' && res.data && res.data.has_active) {
+                this._showResumeBattleModal(res.data);
+            }
+        } catch (e) {
+            console.error('Failed to check active battle:', e);
+        }
+    }
+
+    _showResumeBattleModal(data) {
+        if (this.resumeContainer) this.resumeContainer.destroy();
+        this.resumeContainer = this.add.container(0, 0).setDepth(110);
+
+        const items = [];
+
+        // Backdrop
+        const overlay = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.85).setInteractive();
+        overlay.on('pointerdown', (p, x, y, e) => e.stopPropagation());
+        items.push(overlay);
+
+        // Panel
+        const panel = this.add.rectangle(CX, H / 2, 360, 320, 0x0d1b2a).setStrokeStyle(2, THEME.AETHER).setInteractive();
+        panel.on('pointerdown', (p, x, y, e) => e.stopPropagation());
+        items.push(panel);
+
+        // Icon
+        items.push(this.add.text(CX, H / 2 - 120, '⚔️', { fontSize: '32px' }).setOrigin(0.5));
+
+        // Title
+        items.push(this.add.text(CX, H / 2 - 80, 'PERTEMPURAN AKTIF', {
+            fontSize: '16px', fontStyle: 'bold', color: '#A5B4FC',
+            fontFamily: 'Outfit', letterSpacing: 2
+        }).setOrigin(0.5));
+
+        // Quest name
+        items.push(this.add.text(CX, H / 2 - 50, data.quest_name || 'Unknown Quest', {
+            fontSize: '13px', color: THEME.TEXT_PRIMARY, fontFamily: 'Outfit'
+        }).setOrigin(0.5));
+
+        // Remaining time
+        const mins = Math.floor((data.remaining_time || 0) / 60);
+        const secs = (data.remaining_time || 0) % 60;
+        const timeStr = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        items.push(this.add.text(CX, H / 2 - 25, `⏱ Sisa Waktu: ${timeStr}`, {
+            fontSize: '12px', color: data.remaining_time < 300 ? '#ff4444' : '#f39c12',
+            fontFamily: 'Outfit'
+        }).setOrigin(0.5));
+
+        // Info
+        items.push(this.add.text(CX, H / 2 + 5, 'Kamu memiliki pertempuran yang belum selesai.\nLanjutkan atau menyerah?', {
+            fontSize: '10px', color: THEME.TEXT_SECONDARY, fontFamily: 'Outfit',
+            align: 'center', lineSpacing: 4
+        }).setOrigin(0.5));
+
+        // Lanjutkan Button
+        const resumeBtn = this.add.rectangle(CX, H / 2 + 60, 300, 44, 0x1a3a2a).setStrokeStyle(2, THEME.HEALTH).setInteractive({ useHandCursor: true });
+        const resumeTxt = this.add.text(CX, H / 2 + 60, '⚔ Lanjutkan Pertempuran', {
+            fontSize: '13px', fontStyle: 'bold', color: '#a8e6cf', fontFamily: 'Outfit'
+        }).setOrigin(0.5);
+        resumeBtn.on('pointerover', () => resumeBtn.setFillStyle(0x245a3a));
+        resumeBtn.on('pointerout', () => resumeBtn.setFillStyle(0x1a3a2a));
+        resumeBtn.on('pointerdown', () => {
+            this.resumeContainer.destroy();
+            this.scene.start('LoadingScene', {
+                targetScene: 'ReadyScene',
+                targetData: {
+                    resumeData: data.battle_state,
+                    bsId: data.bs_id,
+                    questId: data.mq_id,
+                    remainingTime: data.remaining_time
+                }
+            });
+        });
+        items.push(resumeBtn, resumeTxt);
+
+        // Menyerah Button
+        const surrenderBtn = this.add.rectangle(CX, H / 2 + 115, 300, 38, 0x2a0d0d).setStrokeStyle(1, 0xef4444).setInteractive({ useHandCursor: true });
+        const surrenderTxt = this.add.text(CX, H / 2 + 115, '🏳 Menyerah (Stamina Hangus)', {
+            fontSize: '11px', fontStyle: 'bold', color: '#ff8a80', fontFamily: 'Outfit'
+        }).setOrigin(0.5);
+        surrenderBtn.on('pointerover', () => surrenderBtn.setFillStyle(0x3d1111));
+        surrenderBtn.on('pointerout', () => surrenderBtn.setFillStyle(0x2a0d0d));
+        surrenderBtn.on('pointerdown', async () => {
+            try {
+                await BattleApi.surrenderBattle(data.bs_id, this.playerId);
+                this.resumeContainer.destroy();
+            } catch (e) {
+                console.error('Surrender failed:', e);
+            }
+        });
+        items.push(surrenderBtn, surrenderTxt);
+
+        this.resumeContainer.add(items);
     }
 }

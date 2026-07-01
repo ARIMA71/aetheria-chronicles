@@ -42,7 +42,7 @@ export default class FallbackScene extends Phaser.Scene {
 
         // 5. Tombol "KEMBALI" (Kembali ke Scene sebelumnya)
         this._createButton(CX - 70, H / 2 + 60, 120, 35, 'KEMBALI', () => {
-            this.scene.start(this.previousScene);
+            this.scene.start('LoadingScene', { targetScene: this.previousScene });
         }, THEME.PANEL, THEME.BORDER);
 
         // 6. Tombol "REFRESH" (Reload Browser)

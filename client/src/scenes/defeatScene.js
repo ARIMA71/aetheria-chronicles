@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { THEME } from '../main.js';
 import { checkSession } from '../utils/auth.js';
+import BattleApi from '../services/BattleApi.js';
 
 const W = 450, H = 800, CX = 225, CY = 400;
 
@@ -13,10 +14,16 @@ export default class DefeatScene extends Phaser.Scene {
         this.questId = data.questId || 5;
         this.playerId = data.playerId || 1;
         this.isRetreat = data.isRetreat || false;
+        this.bsId = data.bsId || null;
     }
 
     create() {
         if (!checkSession(this)) return;
+
+        // Clear the active session in DB
+        if (this.bsId) {
+            BattleApi.surrenderBattle(this.bsId, this.playerId).catch(e => console.error("Failed to surrender battle in DB:", e));
+        }
 
         // Dim the background battle scene
         const overlay = this.add.rectangle(CX, CY, W, H, 0x000000, 0.75).setInteractive();
@@ -54,9 +61,9 @@ export default class DefeatScene extends Phaser.Scene {
         const stamBg = this.add.rectangle(CX, CY - 120, 330, 48, THEME.BG);
         stamBg.setStrokeStyle(1, THEME.BORDER);
 
-        this.add.text(CX, CY - 120, "🛡️ Stamina dikembalikan", {
+        this.add.text(CX, CY - 120, "☠️ Stamina Hangus (Tidak Dikembalikan)", {
             fontSize: "11px",
-            color: THEME.TEXT_SECONDARY,
+            color: "#CD5C5C",
             fontStyle: "bold"
         }).setOrigin(0.5);
 
@@ -126,7 +133,7 @@ export default class DefeatScene extends Phaser.Scene {
         btnLeft.on('pointerdown', () => {
             this.scene.stop('BattleScene');
             this.scene.stop('DefeatScene');
-            this.scene.start('BattleScene');
+            this.scene.start('LoadingScene', { targetScene: 'QuestScene' });
         });
 
         // Button 2: RETURN TO MENU
@@ -146,7 +153,7 @@ export default class DefeatScene extends Phaser.Scene {
         btnRight.on('pointerdown', () => {
             this.scene.stop('BattleScene');
             this.scene.stop('DefeatScene');
-            this.scene.start('MainMenuScene');
+            this.scene.start('LoadingScene', { targetScene: 'MainMenuScene' });
         });
     }
 }

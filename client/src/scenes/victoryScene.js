@@ -219,7 +219,7 @@ export default class VictoryScene extends Phaser.Scene {
         btn.on('pointerdown', () => {
             this.scene.stop('BattleScene');
             this.scene.stop('VictoryScene');
-            this.scene.start('QuestScene');
+            this.scene.start('LoadingScene', { targetScene: 'QuestScene' });
         });
     }
 }

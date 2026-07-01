@@ -17,16 +17,17 @@ export default class Enemy extends Phaser.GameObjects.Container {
         this.charName = data.name;
         this.element = data.element || 'None';
         this.level = data.level || 1;
-        this.maxHp = data.final_stats.hp;
-        this.hp = data.final_stats.hp;
-        this.atk = data.final_stats.atk;
-        this.def = data.final_stats.def || 500;
+        this.finalStats = data.final_stats || { hp: 1000, atk: 50, def: 50 }; // Needed for state sync & fallback
+        this.maxHp = this.finalStats.hp;
+        this.hp = this.finalStats.hp;
+        this.atk = this.finalStats.atk;
+        this.def = this.finalStats.def || 500;
         this.crit = 0.1;
         this.critDamage = 2.0;
 
         // Base stats (untuk getStat())
-        this._baseAtk = data.final_stats.atk;
-        this._baseDef = data.final_stats.def || 500;
+        this._baseAtk = this.finalStats.atk;
+        this._baseDef = this.finalStats.def || 500;
         this._baseCrit = 0.1;
 
         // ── Active Effects ────────────────────────────────────────────────────

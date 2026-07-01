@@ -87,6 +87,16 @@ exports.initBattle = async (req, res) => {
             await conn.rollback();
             conn.release();
         }
+
+        // Tangani kasus double-init: ada sesi ACTIVE yang belum selesai
+        if (error.message && error.message.startsWith('ACTIVE_SESSION_EXISTS')) {
+            return res.status(409).json({
+                status: 'error',
+                reason: 'ACTIVE_SESSION_EXISTS',
+                message: 'Kamu masih memiliki pertempuran aktif. Selesaikan dulu sebelum memulai yang baru.'
+            });
+        }
+
         console.error('[initBattle] Error:', error);
         return res.status(500).json({
             status: 'error',
@@ -341,5 +351,133 @@ exports.getBossAction = async (req, res) => {
             message: 'Terjadi kesalahan pada server saat sinkronisasi state dan menghitung aksi bos.',
             error_detail: error.message
         });
+    }
+};
+
+/**
+ * GET /api/battle/active/:playerId
+ * Cek apakah player punya battle session ACTIVE.
+ */
+exports.getActiveBattle = async (req, res) => {
+    try {
+        const { playerId } = req.params;
+        if (!playerId) {
+            return res.status(400).json({ status: 'error', message: 'playerId wajib diisi!' });
+        }
+
+        const session = await BattleService.getActiveSession(playerId);
+
+        if (!session) {
+            return res.status(200).json({
+                status: 'success',
+                message: 'Tidak ada pertempuran aktif.',
+                data: { has_active: false }
+            });
+        }
+
+        // Parse battle_state_json dan hapus ai_behaviors sebelum kirim ke client
+        let clientState = null;
+        try {
+            clientState = JSON.parse(session.battle_state_json);
+            if (clientState.enemies) {
+                clientState.enemies.forEach(enemy => { delete enemy.ai_behaviors; });
+            }
+        } catch (e) {
+            clientState = null;
+        }
+
+        // Ambil nama quest untuk ditampilkan di Pop-up
+        const [questRow] = await db.query('SELECT mq_name FROM master_quests WHERE mq_id = ?', [session.mq_id]);
+        const questName = questRow[0] ? questRow[0].mq_name : 'Unknown Quest';
+
+        return res.status(200).json({
+            status: 'success',
+            message: 'Ditemukan pertempuran aktif.',
+            data: {
+                has_active: true,
+                bs_id: session.bs_id,
+                mq_id: session.mq_id,
+                quest_name: questName,
+                remaining_time: session.remaining_time,
+                battle_state: clientState
+            }
+        });
+    } catch (error) {
+        console.error('[getActiveBattle] Error:', error);
+        return res.status(500).json({
+            status: 'error',
+            message: 'Gagal mengecek pertempuran aktif.',
+            error_detail: error.message
+        });
+    }
+};
+
+/**
+ * POST /api/battle/sync
+ * Sinkronisasi state pertempuran dari client (Turn End).
+ * Fire-and-forget: DB write berjalan async, response langsung.
+ */
+exports.syncBattleState = async (req, res) => {
+    try {
+        const { bsId, battleStateJson, remainingTime } = req.body;
+        if (!bsId || !battleStateJson) {
+            return res.status(400).json({ status: 'error', message: 'bsId dan battleStateJson wajib diisi!' });
+        }
+
+        // syncState adalah fire-and-forget (tidak di-await untuk DB)
+        BattleService.syncState(bsId, battleStateJson, remainingTime || 0);
+
+        return res.status(200).json({
+            status: 'success',
+            message: 'State tersinkronisasi.'
+        });
+    } catch (error) {
+        console.error('[syncBattleState] Error:', error);
+        return res.status(500).json({
+            status: 'error',
+            message: 'Gagal menyinkronisasi state.',
+            error_detail: error.message
+        });
+    }
+};
+
+/**
+ * POST /api/battle/surrender
+ * Player menyerah. Sesi diubah ke FAILED. Stamina TIDAK dikembalikan.
+ */
+exports.surrenderBattle = async (req, res) => {
+    try {
+        const { bsId, playerId } = req.body;
+        if (!bsId || !playerId) {
+            return res.status(400).json({ status: 'error', message: 'bsId dan playerId wajib diisi!' });
+        }
+
+        await BattleService.surrenderSession(bsId);
+
+        return res.status(200).json({
+            status: 'success',
+            message: 'Kamu telah menyerah. Stamina yang digunakan tidak dikembalikan.'
+        });
+    } catch (error) {
+        console.error('[surrenderBattle] Error:', error);
+        return res.status(500).json({
+            status: 'error',
+            message: 'Gagal memproses penyerahan.',
+            error_detail: error.message
+        });
+    }
+};
+
+exports.surrenderBattle = async (req, res) => {
+    const { bsId } = req.body;
+    if (!bsId) {
+        return res.status(400).json({ status: 'error', message: 'bsId wajib diisi!' });
+    }
+    try {
+        await BattleService.surrenderSession(bsId);
+        return res.status(200).json({ status: 'success', message: 'Pertempuran dihentikan.' });
+    } catch (error) {
+        console.error('[surrenderBattle] Error:', error);
+        return res.status(500).json({ status: 'error', message: 'Gagal surrender battle.', error_detail: error.message });
     }
 };

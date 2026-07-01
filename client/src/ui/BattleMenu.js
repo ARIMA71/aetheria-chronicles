@@ -320,7 +320,7 @@ export default class BattleMenu extends Phaser.GameObjects.Container {
         this._confirmContainer.add(panel);
 
         const warnTitle = this.scene.add.text(0, -40, "CONFIRM RETREAT?", { fontSize: "14px", color: "#ff8a80", fontStyle: "bold" }).setOrigin(0.5);
-        const warnDesc = this.scene.add.text(0, -10, "Mundur sekarang?\nStamina Anda tidak akan berkurang.", { fontSize: "10px", color: "#ffffff", align: "center", lineSpacing: 2 }).setOrigin(0.5);
+        const warnDesc = this.scene.add.text(0, -10, "Mundur sekarang?\nStamina yang sudah terpakai akan HANGUS.", { fontSize: "10px", color: "#ffffff", align: "center", lineSpacing: 2 }).setOrigin(0.5);
         this._confirmContainer.add([warnTitle, warnDesc]);
 
         const cancelBtn = this.scene.add.rectangle(-65, 40, 110, 34, 0x1a2e3b).setInteractive();
@@ -341,8 +341,9 @@ export default class BattleMenu extends Phaser.GameObjects.Container {
         confirmBtn.on('pointerdown', () => {
             this._confirmContainer.destroy();
             this._confirmOverlay.destroy();
+            const battleScene = this.scene;
             this.closeMenu();
-            this.scene.triggerDefeat(true); // Trigger retreat logic
+            battleScene.triggerDefeat(true); // Trigger retreat logic
         });
 
         this._confirmContainer.add([cancelBtn, cancelTxt, confirmBtn, confirmTxt]);

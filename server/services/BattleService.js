@@ -66,7 +66,9 @@ class BattleService {
         const querySkills = `
         SELECT pi.inv_id, ms.ms_id, ms.ms_name AS name, ms.ms_category AS category,
             ms.ms_action_type AS type, ms.ms_target_type AS target_type, ms.ms_modifier_value AS modifier,
-            ms.ms_cooldown AS cooldown, ms.ms_element AS element, ms.ms_icon_path AS icon_path, ms.ms_vfx_path AS vfx_path,
+            ms.ms_cooldown AS cooldown, ms.ms_element AS element, 
+            ms.trigger_delay, ms.trigger_dispel, ms.trigger_heal_pct, ms.hp_cost_pct,
+            ms.ms_icon_path AS icon_path, ms.ms_vfx_path AS vfx_path,
             mse.mse_name AS effect_name, mse.mse_type AS effect_type, mse.modifier_target AS target_stat,
             mse.modifier_value AS effect_value, mse.mse_duration AS effect_duration, sse.effect_target AS effect_target, mse.mse_id AS mse_id
         FROM player_party_presets ppp
@@ -79,7 +81,9 @@ class BattleService {
         UNION ALL
         SELECT pi.inv_id, ms.ms_id, ms.ms_name AS name, ms.ms_category AS category,
             ms.ms_action_type AS type, ms.ms_target_type AS target_type, ms.ms_modifier_value AS modifier,
-            ms.ms_cooldown AS cooldown, ms.ms_element AS element, ms.ms_icon_path AS icon_path, ms.ms_vfx_path AS vfx_path,
+            ms.ms_cooldown AS cooldown, ms.ms_element AS element,
+            ms.trigger_delay, ms.trigger_dispel, ms.trigger_heal_pct, ms.hp_cost_pct,
+            ms.ms_icon_path AS icon_path, ms.ms_vfx_path AS vfx_path,
             mse.mse_name AS effect_name, mse.mse_type AS effect_type, mse.modifier_target AS target_stat,
             mse.modifier_value AS effect_value, mse.mse_duration AS effect_duration, sse.effect_target AS effect_target, mse.mse_id AS mse_id
         FROM player_party_presets ppp
@@ -92,7 +96,9 @@ class BattleService {
         UNION ALL
         SELECT pi_mc.inv_id, ms.ms_id, ms.ms_name AS name, ms.ms_category AS category,
             ms.ms_action_type AS type, ms.ms_target_type AS target_type, ms.ms_modifier_value AS modifier,
-            ms.ms_cooldown AS cooldown, ms.ms_element AS element, ms.ms_icon_path AS icon_path, ms.ms_vfx_path AS vfx_path,
+            ms.ms_cooldown AS cooldown, ms.ms_element AS element,
+            ms.trigger_delay, ms.trigger_dispel, ms.trigger_heal_pct, ms.hp_cost_pct,
+            ms.ms_icon_path AS icon_path, ms.ms_vfx_path AS vfx_path,
             mse.mse_name AS effect_name, mse.mse_type AS effect_type, mse.modifier_target AS target_stat,
             mse.modifier_value AS effect_value, mse.mse_duration AS effect_duration, sse.effect_target AS effect_target, mse.mse_id AS mse_id
         FROM player_party_presets ppp
@@ -106,7 +112,9 @@ class BattleService {
         UNION ALL
         SELECT pi.inv_id, ms.ms_id, ms.ms_name AS name, ms.ms_category AS category,
             ms.ms_action_type AS type, ms.ms_target_type AS target_type, ms.ms_modifier_value AS modifier,
-            ms.ms_cooldown AS cooldown, ms.ms_element AS element, ms.ms_icon_path AS icon_path, ms.ms_vfx_path AS vfx_path,
+            ms.ms_cooldown AS cooldown, ms.ms_element AS element,
+            ms.trigger_delay, ms.trigger_dispel, ms.trigger_heal_pct, ms.hp_cost_pct,
+            ms.ms_icon_path AS icon_path, ms.ms_vfx_path AS vfx_path,
             mse.mse_name AS effect_name, mse.mse_type AS effect_type, mse.modifier_target AS target_stat,
             mse.modifier_value AS effect_value, mse.mse_duration AS effect_duration, sse.effect_target AS effect_target, mse.mse_id AS mse_id
         FROM player_party_presets ppp
@@ -127,6 +135,8 @@ class BattleService {
             ms.ms_id AS skill_id, ms.ms_name AS skill_name, ms.ms_category AS skill_category,
             ms.ms_action_type AS skill_type, ms.ms_target_type AS skill_target_type, ms.ms_modifier_value AS skill_modifier,
             ms.ms_cooldown AS skill_cooldown, ms.ms_icon_path AS skill_icon_path, ms.ms_vfx_path AS skill_vfx_path,
+            ms.trigger_delay AS skill_trigger_delay, ms.trigger_dispel AS skill_trigger_dispel, 
+            ms.trigger_heal_pct AS skill_trigger_heal_pct, ms.hp_cost_pct AS skill_hp_cost_pct,
             mse.mse_name AS effect_name, mse.mse_type AS effect_type, mse.modifier_target AS target_stat,
             mse.modifier_value AS effect_value, mse.mse_duration AS effect_duration, sse.effect_target AS effect_target
         FROM quest_enemies qe
@@ -185,7 +195,10 @@ class BattleService {
                 skillMap.set(key, {
                     _inv_id: row.inv_id, id: row.ms_id, name: row.name, category: row.category,
                     type: row.type, target_type: row.target_type, modifier: Number(row.modifier) || 0,
-                    cooldown: row.cooldown, element: row.element, icon_path: row.icon_path, vfx_path: row.vfx_path,
+                    cooldown: row.cooldown, element: row.element, 
+                    trigger_delay: Boolean(row.trigger_delay), trigger_dispel: Boolean(row.trigger_dispel),
+                    trigger_heal_pct: Number(row.trigger_heal_pct) || 0, hp_cost_pct: Number(row.hp_cost_pct) || 0,
+                    icon_path: row.icon_path, vfx_path: row.vfx_path,
                     status_effects: []
                 });
             }
@@ -232,6 +245,8 @@ class BattleService {
                             type: row.skill_type, target_type: row.skill_target_type || 'Single_Enemy',
                             modifier: Number(row.skill_modifier) || 0, cooldown: row.skill_cooldown,
                             current_cooldown: 0,
+                            trigger_delay: Boolean(row.skill_trigger_delay), trigger_dispel: Boolean(row.skill_trigger_dispel),
+                            trigger_heal_pct: Number(row.skill_trigger_heal_pct) || 0, hp_cost_pct: Number(row.skill_hp_cost_pct) || 0,
                             icon_path: row.skill_icon_path, vfx_path: row.skill_vfx_path, status_effects: []
                         }
                     };
@@ -263,9 +278,18 @@ class BattleService {
             full_potion_count: fullPotionCount
         };
 
-        // Create Database Anchor Record
+        // Guard: cegah double-init jika sudah ada sesi ACTIVE
+        const [existingActive] = await db.query(
+            'SELECT bs_id FROM battle_sessions WHERE player_id = ? AND bs_status = \'ACTIVE\' LIMIT 1',
+            [playerId]
+        );
+        if (existingActive.length > 0) {
+            throw new Error('ACTIVE_SESSION_EXISTS: Pemain masih memiliki pertempuran aktif (bs_id: ' + existingActive[0].bs_id + '). Selesaikan dulu sebelum memulai yang baru.');
+        }
+
+        // Create Database Anchor Record with status tracking
         const [insertRes] = await db.query(
-            'INSERT INTO battle_sessions (player_id, mq_id, battle_state_json) VALUES (?, ?, ?)',
+            'INSERT INTO battle_sessions (player_id, mq_id, bs_status, started_at, remaining_time, battle_state_json) VALUES (?, ?, \'ACTIVE\', NOW(), 2700, ?)',
             [playerId, questId, JSON.stringify(initialState)]
         );
         const bsId = insertRes.insertId;
@@ -303,19 +327,102 @@ class BattleService {
         // Get the final state from RAM if we want to log it
         const finalState = BattleMemoryStore.get(bsId);
 
-        // Note: Actual item drop calculation logic is handled in the controller (from saveBattleResult), 
-        // we can leave that in the controller or move it here. Let's just do memory cleanup for this method for now, 
-        // since the controller will handle the MySQL transaction for rewards.
-        
-        // Mark database session as completed
+        // Mark database session as COMPLETED
         await db.query(
-            'UPDATE battle_sessions SET battle_state_json = ? WHERE bs_id = ?',
+            'UPDATE battle_sessions SET bs_status = \'COMPLETED\', battle_state_json = ? WHERE bs_id = ?',
             [JSON.stringify(finalState || { status: "CLEARED" }), bsId]
         );
 
         // Remove from RAM
         BattleMemoryStore.delete(bsId);
     }
+
+    /**
+     * Cek apakah player punya battle session ACTIVE.
+     * Hitung remaining_time berdasarkan elapsed dari started_at.
+     * Jika waktu sudah habis, lazy-update ke FAILED.
+     */
+    async getActiveSession(playerId) {
+        const [rows] = await db.query(
+            'SELECT bs_id, mq_id, remaining_time, started_at, battle_state_json FROM battle_sessions WHERE player_id = ? AND bs_status = \'ACTIVE\' ORDER BY bs_id DESC LIMIT 1',
+            [playerId]
+        );
+        if (rows.length === 0) return null;
+
+        const session = rows[0];
+        const now = Date.now();
+        const startedAt = new Date(session.started_at).getTime();
+        const elapsedSec = Math.floor((now - startedAt) / 1000);
+        const adjustedRemaining = Math.max(0, 2700 - elapsedSec);
+
+        // Jika waktu sudah habis, lazy-update ke FAILED
+        if (adjustedRemaining <= 0) {
+            await db.query(
+                'UPDATE battle_sessions SET bs_status = \'FAILED\', remaining_time = 0 WHERE bs_id = ?',
+                [session.bs_id]
+            );
+            BattleMemoryStore.delete(session.bs_id);
+            return null;
+        }
+
+        return {
+            bs_id: session.bs_id,
+            mq_id: session.mq_id,
+            remaining_time: adjustedRemaining,
+            battle_state_json: session.battle_state_json
+        };
+    }
+
+    /**
+     * Player menyerah. Set sesi ke FAILED, bersihkan RAM.
+     * Stamina TIDAK dikembalikan (sudah dipotong di initBattle).
+     */
+    async surrenderSession(bsId) {
+        await db.query(
+            'UPDATE battle_sessions SET bs_status = \'FAILED\', remaining_time = 0 WHERE bs_id = ?',
+            [bsId]
+        );
+        BattleMemoryStore.delete(bsId);
+    }
+
+    /**
+     * Sinkronisasi state dari client ke server (Turn End).
+     * BattleMemoryStore = primary layer (sync), MySQL = cadangan (fire-and-forget async).
+     */
+    syncState(bsId, stateJson, remainingTime) {
+        // 1. Primary: update RAM cache langsung (sync)
+        BattleMemoryStore.set(bsId, typeof stateJson === 'string' ? JSON.parse(stateJson) : stateJson);
+
+        // 2. Secondary: fire-and-forget async DB write (tidak di-await)
+        const jsonStr = typeof stateJson === 'string' ? stateJson : JSON.stringify(stateJson);
+        db.query(
+            'UPDATE battle_sessions SET battle_state_json = ?, remaining_time = ? WHERE bs_id = ? AND bs_status = \'ACTIVE\'',
+            [jsonStr, remainingTime, bsId]
+        ).catch(err => console.error('[syncState] Fire-and-forget DB write failed:', err.message));
+    }
+
+    /**
+     * Active Session Garbage Collector.
+     * Sweep database setiap 15 menit: semua battle_sessions dengan bs_status = 'ACTIVE'
+     * yang sudah melewati 45 menit (2700 detik) sejak started_at akan di-batch update ke FAILED.
+     */
+    async runActiveSessionGC() {
+        try {
+            const [result] = await db.query(
+                'UPDATE battle_sessions SET bs_status = \'FAILED\', remaining_time = 0 WHERE bs_status = \'ACTIVE\' AND TIMESTAMPDIFF(SECOND, started_at, NOW()) > 2700'
+            );
+            if (result.affectedRows > 0) {
+                console.log(`[BattleService GC] Swept ${result.affectedRows} expired ACTIVE sessions to FAILED.`);
+            }
+        } catch (err) {
+            console.error('[BattleService GC] Error during active session sweep:', err.message);
+        }
+    }
 }
 
-module.exports = new BattleService();
+const battleServiceInstance = new BattleService();
+
+// Start Active Session GC: setiap 15 menit
+setInterval(() => battleServiceInstance.runActiveSessionGC(), 15 * 60 * 1000);
+
+module.exports = battleServiceInstance;

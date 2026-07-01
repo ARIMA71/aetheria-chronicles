@@ -19,7 +19,7 @@ export default class PartyScene extends Phaser.Scene {
         // Back button
         const backBtn = this.add.circle(40, 30, 18, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
         this.add.text(40, 30, '←', { fontSize: '16px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
-        backBtn.on('pointerdown', () => this.scene.start('QuestScene'));
+        backBtn.on('pointerdown', () => this.scene.start('LoadingScene', { targetScene: 'QuestScene' }));
 
         // Placeholder content
         this.add.rectangle(CX, H / 2, W - 40, 500, THEME.PANEL, 0.4).setStrokeStyle(1, THEME.BORDER);

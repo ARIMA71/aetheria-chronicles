@@ -385,7 +385,7 @@ export default class AuthScene extends Phaser.Scene {
         localStorage.setItem('aetheria_player', JSON.stringify(loginData.data));
         localStorage.setItem('aetheria_last_activity', Date.now().toString());
         this._hideForm();
-        this.scene.start('MainMenuScene');
+        this.scene.start('LoadingScene', { targetScene: 'MainMenuScene' });
     }
 
     _hideForm() {

@@ -73,6 +73,66 @@ export default class CombatManager {
      * @param {Function} refreshHudCallback - Function to refresh the enemy HUD UI
      */
     static applyStatusEffects(caster, skill, statusEffects, players, enemy, logCallback, refreshHudCallback) {
+        // --- INSTANT EFFECTS FROM SKILL ---
+        let primaryTargets = [];
+        const targetType = (skill.target_type || '').toLowerCase();
+        const isCasterPlayer = (caster !== enemy);
+
+        if (isCasterPlayer) {
+            if (targetType === 'all_allies') primaryTargets = players.filter(pl => pl.hp > 0);
+            else if (targetType === 'self' || targetType === 'single_ally') primaryTargets = [caster];
+            else primaryTargets = [enemy];
+        } else {
+            if (targetType === 'all_allies' || targetType === 'self' || targetType === 'single_ally') primaryTargets = [enemy];
+            else primaryTargets = players.filter(pl => pl.hp > 0);
+        }
+
+        // 1. HP Cost (always on caster)
+        if (skill.hp_cost_pct && skill.hp_cost_pct > 0) {
+            const sacrificeDmg = Math.floor(skill.hp_cost_pct * caster.maxHp);
+            caster.hp = Math.max(0, caster.hp - sacrificeDmg);
+            if (caster.refreshVisual) caster.refreshVisual();
+            logCallback(`✨ ${skill.name}: ${caster.charName} sacrificed ${sacrificeDmg} HP!`);
+        }
+
+        // 2. Trigger Heal (Secondary Heal mechanic)
+        if (skill.trigger_heal_pct && skill.trigger_heal_pct > 0) {
+            primaryTargets.forEach(tgt => {
+                const healAmt = Math.floor(skill.trigger_heal_pct * tgt.maxHp);
+                tgt.hp = Math.min(tgt.maxHp, tgt.hp + healAmt);
+                if (tgt.refreshVisual) tgt.refreshVisual();
+                logCallback(`💚 ${skill.name}: Healed ${tgt.charName} for ${healAmt} HP!`);
+            });
+        }
+
+        // 3. Trigger Delay (reduces enemy CA)
+        if (skill.trigger_delay) {
+            primaryTargets.forEach(tgt => {
+                if (tgt === enemy) {
+                    const oldBar = tgt.caBar;
+                    tgt.caBar = Math.max(0, tgt.caBar - 1);
+                    if (refreshHudCallback) refreshHudCallback();
+                    if (oldBar > tgt.caBar) {
+                        logCallback(`⏳ ${skill.name}: Delayed ${tgt.charName}'s CA!`);
+                    }
+                }
+            });
+        }
+
+        // 4. Trigger Dispel (removes 1 buff from enemy)
+        if (skill.trigger_dispel) {
+            primaryTargets.forEach(tgt => {
+                const buffIndex = (tgt.activeEffects || []).findIndex(e => (e.effect_type || '').toLowerCase() === 'buff' && e.is_dispellable);
+                if (buffIndex !== -1) {
+                    const dispelled = tgt.activeEffects.splice(buffIndex, 1)[0];
+                    if (tgt.refreshVisual) tgt.refreshVisual();
+                    if (refreshHudCallback && tgt === enemy) refreshHudCallback();
+                    logCallback(`🌪️ ${skill.name}: Dispelled ${dispelled.effect_name} from ${tgt.charName}!`);
+                }
+            });
+        }
+
+        // --- REGULAR STATUS EFFECTS ---
         if (!statusEffects || !statusEffects.length) return;
 
         statusEffects.forEach(eff => {

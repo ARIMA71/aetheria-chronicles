@@ -68,4 +68,60 @@ export default class BattleApi {
             throw error;
         }
     }
+
+    /**
+     * Cek apakah player punya battle session ACTIVE.
+     * @param {number} playerId
+     * @returns {Promise<object>} JSON response
+     */
+    static async checkActiveBattle(playerId) {
+        try {
+            const res = await fetch(`${API_BASE}/active/${playerId}`);
+            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+            return await res.json();
+        } catch (error) {
+            console.error("Failed to check active battle:", error);
+            return { status: 'error', data: { has_active: false } };
+        }
+    }
+
+    /**
+     * Sinkronisasi state pertempuran ke server (fire-and-forget di Turn End).
+     * Tidak menunggu response — jika gagal, hanya log ke console.
+     * @param {number|string} bsId
+     * @param {object} battleState
+     * @param {number} remainingTime
+     */
+    static syncBattleState(bsId, battleState, remainingTime) {
+        fetch(`${API_BASE}/sync`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                bsId,
+                battleStateJson: battleState,
+                remainingTime
+            })
+        }).catch(err => console.error("[syncState] Fire-and-forget DB write failed:", err.message));
+    }
+
+    /**
+     * Player menyerah. Sesi diubah ke FAILED. Stamina hangus.
+     * @param {number|string} bsId
+     * @param {number} playerId
+     * @returns {Promise<object>} JSON response
+     */
+    static async surrenderBattle(bsId, playerId) {
+        try {
+            const res = await fetch(`${API_BASE}/surrender`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ bsId, playerId })
+            });
+            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+            return await res.json();
+        } catch (error) {
+            console.error("Failed to surrender battle:", error);
+            throw error;
+        }
+    }
 }

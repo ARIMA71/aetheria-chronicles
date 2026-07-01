@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { THEME } from '../main.js';
 import { checkSession, clearSession, saveCurrentScene } from '../utils/auth.js';
+import BattleApi from '../services/BattleApi.js';
 
 const W = 450, H = 800, CX = 225;
 
@@ -54,6 +55,9 @@ export default class MainMenuScene extends Phaser.Scene {
 
         // Fetch latest profile from backend in real-time
         this.fetchPlayerProfile();
+
+        // Cek apakah ada pertempuran aktif yang terputus
+        this._checkActiveBattle();
     }
 
     async fetchPlayerProfile() {
@@ -230,8 +234,8 @@ export default class MainMenuScene extends Phaser.Scene {
     _buildFABCluster() {
         // Floating Action Buttons dengan patokan Quest di kanan
         // Quest (Patokan Utama, nempel di kanan sejajar border stats)
-        this._createFAB(395, 575, 40, 'Quest', THEME.TEXT_PRIMARY, () => {
-            this.scene.start('QuestScene');
+        this.questFab = this._createFAB(395, 575, 40, 'Quest', THEME.TEXT_PRIMARY, () => {
+            this.scene.start('LoadingScene', { targetScene: 'QuestScene' });
         });
 
         // Party (Di atas Quest, sejajar kanan)
@@ -264,6 +268,7 @@ export default class MainMenuScene extends Phaser.Scene {
             circle.setFillStyle(THEME.PANEL);
         });
         circle.on('pointerdown', onClick);
+        return { circle, txt };
     }
 
     _buildStatsPanel() {
@@ -388,7 +393,7 @@ export default class MainMenuScene extends Phaser.Scene {
         });
         const btnQuest = this._createModalRoundBtn(CX, 125, 'QUEST', () => {
             this.toggleMenuModal(false);
-            this.scene.start('QuestScene');
+            this.scene.start('LoadingScene', { targetScene: 'QuestScene' });
         });
         const btnGacha = this._createModalRoundBtn(CX + 100, 125, 'GACHA', () => {
             this.toggleMenuModal(false);
@@ -586,5 +591,31 @@ export default class MainMenuScene extends Phaser.Scene {
 
     showLogoutConfirmation() {
         this.confirmContainer.setVisible(true);
+    }
+
+    async _checkActiveBattle() {
+        if (!this.playerData || !this.playerData.player_id) return;
+        try {
+            const res = await BattleApi.checkActiveBattle(this.playerData.player_id);
+            if (res.status === 'success' && res.data && res.data.has_active) {
+                // Tampilkan indikator merah berkedip di tombol Quest
+                if (this.questFab && this.questFab.circle) {
+                    const cx = this.questFab.circle.x + 25;
+                    const cy = this.questFab.circle.y - 25;
+                    const redDot = this.add.circle(cx, cy, 8, 0xef4444).setDepth(50);
+                    redDot.setStrokeStyle(1, 0xffffff);
+                    
+                    this.tweens.add({
+                        targets: redDot,
+                        alpha: 0.2,
+                        yoyo: true,
+                        repeat: -1,
+                        duration: 800
+                    });
+                }
+            }
+        } catch (e) {
+            console.error('Failed to check active battle:', e);
+        }
     }
 }
