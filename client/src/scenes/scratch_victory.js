@@ -27,17 +27,21 @@ export default class VictoryScene extends Phaser.Scene {
 
         // Dim the background battle scene
         // Make it very tall to cover scrolling
-        this.add.rectangle(CX, CY, W, 4000, 0x000000, 0.75).setInteractive();
+        const overlay = this.add.rectangle(CX, CY, W, 3000, 0x000000, 0.75).setInteractive();
+
+        // Main Panel background (height will be adjusted dynamically or just visually omitted since we scroll)
+        // Let's use a full screen dark panel
+        const bg = this.add.rectangle(CX, CY, W, 3000, THEME.BG, 0.95);
 
         // Title text
-        this.add.text(CX, 60, "QUEST CLEARED", {
+        this.add.text(CX, 50, "QUEST CLEARED", {
             fontSize: "26px",
             color: "#D4A017",
             fontStyle: "bold",
             fontFamily: "Outfit, Inter, sans-serif"
         }).setOrigin(0.5);
 
-        this.add.text(CX, 90, "★ VICTORY ★", {
+        this.add.text(CX, 80, "★ VICTORY ★", {
             fontSize: "12px",
             color: "#D4A017",
             fontStyle: "bold",
@@ -46,7 +50,7 @@ export default class VictoryScene extends Phaser.Scene {
 
         const divider = this.add.graphics();
         divider.lineStyle(1, THEME.BORDER, 1);
-        divider.lineBetween(CX - 150, 115, CX + 150, 115);
+        divider.lineBetween(CX - 150, 105, CX + 150, 105);
 
         // Loading message
         this.loadingText = this.add.text(CX, 200, "Menghitung hasil...", {
@@ -117,28 +121,28 @@ export default class VictoryScene extends Phaser.Scene {
         const expData = data.exp_data || {};
         const rewards = data.obtained_rewards || [];
         
-        let cursorY = 160;
+        let cursorY = 140;
 
         // 1. SEGMENT ATAS (PLAYER RANK)
         const playerObj = JSON.parse(localStorage.getItem('player') || '{}');
         const username = playerObj.username || 'Player';
 
         // Username (Left)
-        this.add.text(35, cursorY, username, {
+        this.add.text(40, cursorY, username, {
             fontSize: "14px", color: THEME.TEXT_PRIMARY, fontStyle: "bold"
         }).setOrigin(0, 0.5);
 
         // Rank (Right)
-        const rankText = this.add.text(W - 35, cursorY, `Rank ${expData.player_rank}`, {
+        const rankText = this.add.text(W - 40, cursorY, `Rank ${expData.player_rank}`, {
             fontSize: "14px", color: THEME.GOLD, fontStyle: "bold"
         }).setOrigin(1, 0.5);
 
         cursorY += 25;
 
         // Player Rank Progress Bar (Wide)
-        const rankBarW = W - 70;
-        const rankBarBg = this.add.rectangle(35, cursorY, rankBarW, 14, 0x334155).setOrigin(0, 0.5);
-        const rankBarFill = this.add.rectangle(35, cursorY, 0, 14, 0x10B981).setOrigin(0, 0.5);
+        const rankBarW = W - 80;
+        const rankBarBg = this.add.rectangle(40, cursorY, rankBarW, 14, 0x334155).setOrigin(0, 0.5);
+        const rankBarFill = this.add.rectangle(40, cursorY, 0, 14, 0x10B981).setOrigin(0, 0.5);
 
         // Rank Animation Logic
         const pTotal = expData.player_total_exp || 0;
@@ -149,14 +153,14 @@ export default class VictoryScene extends Phaser.Scene {
         
         this.animateProgressBar(rankBarFill, rankText, rankBarW, pOldTotal, pTotal, pBase, pNext, expData.player_rank, 'Rank');
 
-        cursorY += 60;
+        cursorY += 50;
 
         // 2. SEGMENT TENGAH (PARTY EXP)
         this.add.text(CX, cursorY, "PARTY EXPERIENCE", {
             fontSize: "12px", color: THEME.TEXT_SECONDARY, letterSpacing: 2
         }).setOrigin(0.5);
         
-        cursorY += 50;
+        cursorY += 40;
 
         const party = expData.party_exp_details || [];
         const cW = 58, gap = 15, total = party.length;
@@ -176,15 +180,15 @@ export default class VictoryScene extends Phaser.Scene {
                 fontSize: "12px", color: THEME.TEXT_SECONDARY 
             }).setOrigin(0.5);
 
-            // Level Text (bold white)
-            const lvlTxt = this.add.text(px, cursorY + 45, `Lv ${char.current_level}`, {
-                fontSize: "12px", color: "#FFFFFF", fontStyle: "bold"
+            // Level Text
+            const lvlTxt = this.add.text(px, cursorY + 40, `Lv ${char.current_level}`, {
+                fontSize: "11px", color: "#FFFFFF", fontStyle: "bold"
             }).setOrigin(0.5);
 
             // Mini EXP Bar
-            const barW = 56;
-            const barBg = this.add.rectangle(px, cursorY + 60, barW, 6, 0x334155).setOrigin(0.5);
-            const barFill = this.add.rectangle(px - barW/2, cursorY + 60, 0, 6, 0x06B6D4).setOrigin(0, 0.5);
+            const barW = 50;
+            const barBg = this.add.rectangle(px, cursorY + 52, barW, 6, 0x334155).setOrigin(0.5);
+            const barFill = this.add.rectangle(px - barW/2, cursorY + 52, 0, 6, 0x06B6D4).setOrigin(0, 0.5);
 
             // Animate Char Bar
             const cTotal = char.total_exp;
@@ -195,29 +199,29 @@ export default class VictoryScene extends Phaser.Scene {
             this.animateProgressBar(barFill, lvlTxt, barW, cOld, cTotal, cBase, cNext, char.current_level, 'Lv');
         });
 
-        cursorY += 100;
+        cursorY += 90;
 
         // Divider
         const div2 = this.add.graphics();
         div2.lineStyle(1, THEME.BORDER, 1);
         div2.lineBetween(CX - 150, cursorY, CX + 150, cursorY);
-        cursorY += 40;
+        cursorY += 30;
 
         // 3. SEGMENT BAWAH (LOOT GRID)
         this.add.text(CX, cursorY, "OBTAINED LOOT", {
             fontSize: "12px", color: THEME.TEXT_SECONDARY, letterSpacing: 2
         }).setOrigin(0.5);
-        cursorY += 40;
+        cursorY += 30;
 
         if (rewards.length === 0) {
             this.add.text(CX, cursorY + 20, "No rewards dropped.", {
                 fontSize: "14px", color: THEME.TEXT_MUTED, fontStyle: "italic"
             }).setOrigin(0.5);
-            cursorY += 80;
+            cursorY += 60;
         } else {
             // Grid config: 4 columns
             const cols = 4;
-            const boxSize = 75;
+            const boxSize = 65;
             const padding = 15;
             const gridW = (cols * boxSize) + ((cols - 1) * padding);
             const gridStartX = (W - gridW) / 2 + (boxSize / 2);
@@ -244,14 +248,10 @@ export default class VictoryScene extends Phaser.Scene {
                 else if (item.reward_type === 'Weapon') iconTxt = "⚔️";
                 else if (item.reward_type === 'Character') iconTxt = "👤";
 
-                this.add.text(ix, iy - 14, iconTxt, { fontSize: "24px" }).setOrigin(0.5);
-                
-                // Short name
-                const itemName = item.name ? item.name.substring(0, 10) : "";
-                this.add.text(ix, iy + 8, itemName, { fontSize: "9px", color: "#ccc" }).setOrigin(0.5);
+                this.add.text(ix, iy - 10, iconTxt, { fontSize: "20px" }).setOrigin(0.5);
 
                 // Quantity
-                this.add.text(ix, iy + 22, `x${item.quantity}`, {
+                this.add.text(ix, iy + 15, `x${item.quantity}`, {
                     fontSize: "12px", color: "#fff", fontStyle: "bold"
                 }).setOrigin(0.5);
             });
@@ -260,7 +260,7 @@ export default class VictoryScene extends Phaser.Scene {
             cursorY += rows * (boxSize + padding) + 20;
         }
 
-        cursorY += 30;
+        cursorY += 20;
 
         // CONTINUE BUTTON
         const btn = this.add.rectangle(CX, cursorY, 240, 44, THEME.PANEL).setInteractive();
@@ -292,7 +292,7 @@ export default class VictoryScene extends Phaser.Scene {
             // First, animate the old level's bar to 100%
             // Since we don't have the previous level's base and next thresholds easily, 
             // we'll just simulate filling to 100%
-            const startWidth = 0; // Estimate
+            const startWidth = 0; // Or estimate
             fillRect.width = startWidth;
 
             this.tweens.add({
@@ -302,6 +302,7 @@ export default class VictoryScene extends Phaser.Scene {
                 ease: 'Quad.easeIn',
                 onComplete: () => {
                     // Flash Level Up text
+                    const origText = textObj.text;
                     textObj.setText("LEVEL UP!");
                     textObj.setColor("#D4A017"); // Gold
                     

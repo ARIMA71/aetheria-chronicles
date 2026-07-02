@@ -215,10 +215,42 @@ export default class CombatManager {
     static getAiFallbackAction(enemy, isCaReady) {
         const behaviors = enemy.aiBehaviors || [];
         
+        // 1. Evaluasi HP Trigger Dulu (Sama seperti backend)
         let chosenBehavior = null;
+        const hpRatio = enemy.hp / enemy.maxHp;
+        const hpTriggers = behaviors.filter(b => {
+            const mods = b.modifiers || {};
+            const trigger = mods.override_hp_trigger !== undefined ? mods.override_hp_trigger : mods.Trigger_HP_Threshold;
+            if (trigger !== undefined && trigger !== null) {
+                // Cek One_Time_Use
+                if (mods.One_Time_Use === true || mods.one_time_use === true) {
+                    if (enemy._usedOneTimeSkills && enemy._usedOneTimeSkills.has(b.skill.id)) {
+                        return false;
+                    }
+                }
+                return hpRatio <= Number(trigger);
+            }
+            return false;
+        });
+
+        if (hpTriggers.length > 0) {
+            hpTriggers.sort((a, b) => {
+                const ta = Number((a.modifiers || {}).override_hp_trigger || (a.modifiers || {}).Trigger_HP_Threshold);
+                const tb = Number((b.modifiers || {}).override_hp_trigger || (b.modifiers || {}).Trigger_HP_Threshold);
+                if (ta !== tb) return ta - tb; // Prioritaskan threshold terendah (paling kritis)
+                return (b.base_utility || 0) - (a.base_utility || 0);
+            });
+            return hpTriggers[0]; // Langsung kembalikan HP trigger
+        }
+
+        // 2. Evaluasi Charge Attack
         if (isCaReady) {
-            // Force a damage skill to reset CA
-            const damageSkills = behaviors.filter(b => b.skill && (b.skill.type || '').toLowerCase() === 'damage');
+            // Force a damage skill to reset CA (Pastikan bukan HP trigger)
+            const damageSkills = behaviors.filter(b => {
+                const mods = b.modifiers || {};
+                const isHpTrigger = mods.override_hp_trigger !== undefined || mods.Trigger_HP_Threshold !== undefined;
+                return !isHpTrigger && b.skill && (b.skill.type || '').toLowerCase() === 'damage';
+            });
             if (damageSkills.length > 0) {
                 chosenBehavior = damageSkills[Math.floor(Math.random() * damageSkills.length)];
             }

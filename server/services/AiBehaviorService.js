@@ -96,6 +96,11 @@ class AiBehaviorService {
         const currentPhase = (boss.phase || boss.modeState || 'Normal').trim().toLowerCase();
         
         const phaseSkills = bossSkills.filter(s => {
+            // HP triggers bypass phase filtering
+            const mods = s.score_modifiers || s.modifiers || {};
+            if (mods.override_hp_trigger !== undefined || mods.Trigger_HP_Threshold !== undefined) {
+                return true;
+            }
             const skillPhase = (s.phase || s.boss_phase || 'Normal').trim().toLowerCase();
             return skillPhase === currentPhase;
         });

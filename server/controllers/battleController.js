@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const BattleService = require('../services/BattleService');
 const { checkAndRegenStamina } = require('../services/staminaService');
+const LevelingSystem = require('../utils/LevelingSystem');
 
 exports.initBattle = async (req, res) => {
     const { playerId, questId, presetSlot } = req.body;
@@ -288,6 +289,76 @@ exports.saveBattleResult = async (req, res) => {
             await conn.query('UPDATE player_quests SET pq_status = \'Completed\' WHERE player_id = ? AND mq_id = ?', [playerId, questId]);
         }
 
+        // 6. Bagikan EXP (Player Rank & Party)
+        let expData = { base_exp: 0, player_rank: 1, player_total_exp: 0, party_exp_details: [] };
+        
+        try {
+            const [questMetaRows] = await conn.query('SELECT mq_reward_exp FROM master_quests WHERE mq_id = ?', [questId]);
+            const rewardExp = questMetaRows[0] ? (questMetaRows[0].mq_reward_exp || 0) : 0;
+            
+            expData.base_exp = rewardExp;
+            
+            if (rewardExp > 0) {
+                // Update Player Rank EXP
+                await conn.query('UPDATE players SET player_exp = player_exp + ? WHERE player_id = ?', [rewardExp, playerId]);
+                
+                // Fetch Active Party from preset to distribute EXP
+                const [presetRows] = await conn.query(
+                    'SELECT main_char_inv_id, char_slot_1_inv_id, char_slot_2_inv_id, char_slot_3_inv_id FROM player_party_presets WHERE player_id = ? ORDER BY preset_slot ASC LIMIT 1',
+                    [playerId]
+                );
+                
+                if (presetRows.length > 0) {
+                    const p = presetRows[0];
+                    const partyInvIds = [p.main_char_inv_id, p.char_slot_1_inv_id, p.char_slot_2_inv_id, p.char_slot_3_inv_id].filter(id => id !== null);
+                    
+                    if (partyInvIds.length > 0) {
+                        await conn.query(
+                            `UPDATE player_inventories SET item_exp = item_exp + ? WHERE inv_id IN (?)`,
+                            [rewardExp, partyInvIds]
+                        );
+                        
+                        // Cek level riil terbaru untuk ditampilkan di client
+                        const [updatedPartyRows] = await conn.query(
+                            `SELECT pi.inv_id, pi.item_exp, pi.limit_break_level, mc.mc_id, mc.mc_name, mc.mc_rarity
+                             FROM player_inventories pi
+                             JOIN master_characters mc ON pi.master_item_id = mc.mc_id
+                             WHERE pi.inv_id IN (?)`,
+                            [partyInvIds]
+                        );
+                        
+                        for (const char of updatedPartyRows) {
+                            const maxLevel = LevelingSystem.getCharMaxLevel(char.mc_id, char.mc_rarity, char.limit_break_level);
+                            const realLevel = LevelingSystem.calculateCurrentLevel(char.item_exp, maxLevel, 'Character');
+                            const thresholds = LevelingSystem.getExpThresholds(realLevel, maxLevel, 'Character');
+                            expData.party_exp_details.push({
+                                inv_id: char.inv_id,
+                                name: char.mc_name,
+                                total_exp: char.item_exp,
+                                current_level: realLevel,
+                                max_level: maxLevel,
+                                current_level_base_exp: thresholds.current_level_base_exp,
+                                next_level_exp: thresholds.next_level_exp
+                            });
+                        }
+                    }
+                }
+            }
+            
+            // Cek level rank terbaru
+            const [playerExpRows] = await conn.query('SELECT player_exp FROM players WHERE player_id = ?', [playerId]);
+            const totalPlayerExp = playerExpRows[0] ? playerExpRows[0].player_exp : 0;
+            const rankLevel = LevelingSystem.calculateCurrentLevel(totalPlayerExp, 100, 'Rank');
+            const rankThresholds = LevelingSystem.getExpThresholds(rankLevel, 100, 'Rank');
+            expData.player_rank = rankLevel;
+            expData.player_total_exp = totalPlayerExp;
+            expData.player_current_level_base_exp = rankThresholds.current_level_base_exp;
+            expData.player_next_level_exp = rankThresholds.next_level_exp;
+            
+        } catch (expError) {
+            console.error('[saveBattleResult] Warning: Gagal memproses EXP reward', expError.message);
+        }
+
         // Clean up RAM Session
         if (bsId) {
             await BattleService.finalizeBattle(bsId);
@@ -301,7 +372,8 @@ exports.saveBattleResult = async (req, res) => {
             message: 'Hasil battle berhasil diproses!',
             data: {
                 obtained_rewards: obtainedRewards,
-                remaining_stamina: remainingStamina
+                remaining_stamina: remainingStamina,
+                exp_data: expData
             }
         });
 

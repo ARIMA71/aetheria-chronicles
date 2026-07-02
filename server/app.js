@@ -1,5 +1,6 @@
 require('dotenv').config();
 require('./config/db');
+require('./utils/LevelingSystem').init();
 const express = require('express');
 const cors = require('cors');
 
