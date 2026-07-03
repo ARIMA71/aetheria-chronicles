@@ -57,6 +57,10 @@ export default class Enemy extends Phaser.GameObjects.Container {
                 category: b.skill.category || 'Active',
                 target_type: b.skill.target_type || 'Single_Enemy',
                 modifier: parseFloat(b.skill.modifier ?? 1.0),
+                trigger_delay: b.skill.trigger_delay,
+                trigger_dispel: b.skill.trigger_dispel,
+                trigger_heal_pct: b.skill.trigger_heal_pct,
+                hp_cost_pct: b.skill.hp_cost_pct,
                 status_effects: b.skill.status_effects || []
             }
         }));

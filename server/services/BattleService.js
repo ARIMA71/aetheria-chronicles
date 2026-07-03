@@ -308,18 +308,32 @@ class BattleService {
      * then uses AiBehaviorService to compute the boss action.
      */
     async getAiDecision(bsId, battleStateSnapshot, bossSkills) {
-        // Option B: Client-Driven State Snapshot
-        // The frontend sends its latest battleState, we anchor it to RAM,
-        // then the AiBehaviorService computes using it.
-        
-        // 1. Anchor state to RAM to keep server cache fresh
-        BattleMemoryStore.set(bsId, battleStateSnapshot);
-        
-        // 2. Fetch the newly saved state (it gets lastAccessed updated)
-        const updatedState = BattleMemoryStore.get(bsId);
+        // 1. Pulihkan ai_behaviors asli dari server-side cache karena payload client sudah di-scrub
+        let originalState = BattleMemoryStore.get(bsId);
+        if (!originalState) {
+            // RAM Cache miss (biasanya karena server restart/nodemon). Tarik dari DB.
+            const [rows] = await db.query('SELECT battle_state_json FROM battle_sessions WHERE bs_id = ?', [bsId]);
+            if (rows.length > 0 && rows[0].battle_state_json) {
+                try { originalState = JSON.parse(rows[0].battle_state_json); } catch (e) {}
+            }
+        }
 
-        // 3. Compute AI decision
-        const selectedSkill = AiBehaviorService.calculateBossAction(updatedState, bossSkills);
+        // 2. Server Authority: BANGUN ULANG bossSkills murni dari data Server (Abaikan data Client)
+        let trueBossSkills = [];
+        if (originalState && originalState.enemies && originalState.enemies.length > 0) {
+            trueBossSkills = (originalState.enemies[0].ai_behaviors || []).map(b => ({
+                id: b.skill.id,
+                phase: b.phase,
+                base_utility: b.base_utility,
+                score_modifiers: b.modifiers,
+                skill: b.skill
+            }));
+        }
+
+        // 3. JANGAN overwrite BattleMemoryStore dengan battleStateSnapshot dari client!
+        // battleStateSnapshot HANYA berisi `{ boss, player_party }`, BUKAN full state!
+        // Gunakan snapshot ini SECARA LANGSUNG untuk kalkulasi AI di turn ini.
+        const selectedSkill = AiBehaviorService.calculateBossAction(battleStateSnapshot, trueBossSkills);
         return selectedSkill;
     }
 

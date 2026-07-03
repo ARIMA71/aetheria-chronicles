@@ -25,9 +25,8 @@ export default class VictoryScene extends Phaser.Scene {
         this.cameras.main.setBounds(0, 0, W, H);
         this.cameras.main.setScroll(0, 0);
 
-        // Dim the background battle scene
-        // Make it very tall to cover scrolling
-        this.add.rectangle(CX, CY, W, 4000, 0x000000, 0.75).setInteractive();
+        // Solid background since we transition completely from BattleScene
+        this.add.rectangle(CX, CY, W, 4000, THEME.BG, 1.0).setInteractive();
 
         // Title text
         this.add.text(CX, 60, "QUEST CLEARED", {
@@ -283,6 +282,97 @@ export default class VictoryScene extends Phaser.Scene {
         // Update Camera Bounds dynamically based on total height
         const totalHeight = Math.max(H, cursorY);
         this.cameras.main.setBounds(0, 0, W, totalHeight);
+        
+        // Setup newly unlocked characters queue
+        this.unlockQueue = rewards.filter(r => r.is_new_unlock);
+        if (this.unlockQueue.length > 0) {
+            this.time.delayedCall(500, () => this.showNextUnlockModal());
+        }
+    }
+
+    showNextUnlockModal() {
+        if (!this.unlockQueue || this.unlockQueue.length === 0) return;
+
+        const char = this.unlockQueue.shift();
+        const W = this.cameras.main.width;
+        const H = this.cameras.main.height;
+        const CX = W / 2;
+        const scrollY = this.cameras.main.scrollY;
+
+        // Container for the modal
+        const modal = this.add.container(0, scrollY).setDepth(100);
+
+        // Dark overlay
+        const overlay = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.8).setInteractive();
+        modal.add(overlay);
+
+        // Modal BG
+        const bg = this.add.rectangle(CX, H / 2, 300, 400, THEME.BG, 1);
+        bg.setStrokeStyle(2, 0xD4A017); // Gold border
+        modal.add(bg);
+
+        // Title
+        modal.add(this.add.text(CX, H / 2 - 160, "NEW CHARACTER UNLOCKED!", {
+            fontSize: "16px", color: "#D4A017", fontStyle: "bold", letterSpacing: 1
+        }).setOrigin(0.5));
+
+        // Portrait placeholder
+        const portBg = this.add.rectangle(CX, H / 2 - 20, 160, 200, 0x1E293B);
+        portBg.setStrokeStyle(1, THEME.BORDER);
+        modal.add(portBg);
+
+        // Wait, check if portrait exists, else show emoji placeholder
+        if (char.portrait_path) {
+            // Placeholder if image logic is added later
+            modal.add(this.add.text(CX, H / 2 - 20, "👤", { fontSize: "64px" }).setOrigin(0.5));
+        } else {
+            modal.add(this.add.text(CX, H / 2 - 20, "👤", { fontSize: "64px" }).setOrigin(0.5));
+        }
+
+        // Rarity & Element
+        modal.add(this.add.text(CX, H / 2 + 100, `${char.rarity || 'SSR'} | ${char.element || 'Any'}`, {
+            fontSize: "14px", color: THEME.TEXT_MUTED
+        }).setOrigin(0.5));
+
+        // Character Name
+        modal.add(this.add.text(CX, H / 2 + 130, char.name || 'Unknown', {
+            fontSize: "20px", color: THEME.TEXT_PRIMARY, fontStyle: "bold"
+        }).setOrigin(0.5));
+
+        // OK Button
+        const btnBg = this.add.rectangle(CX, H / 2 + 175, 120, 36, THEME.PANEL).setInteractive();
+        btnBg.setStrokeStyle(1, THEME.BORDER);
+        modal.add(btnBg);
+
+        const btnTxt = this.add.text(CX, H / 2 + 175, "AWESOME!", {
+            fontSize: "14px", color: "#D4A017", fontStyle: "bold"
+        }).setOrigin(0.5);
+        modal.add(btnTxt);
+
+        // Pop animation
+        modal.setScale(0.8);
+        modal.setAlpha(0);
+        this.tweens.add({
+            targets: modal,
+            scale: 1,
+            alpha: 1,
+            duration: 300,
+            ease: 'Back.easeOut'
+        });
+
+        btnBg.on('pointerdown', () => {
+            this.tweens.add({
+                targets: modal,
+                scale: 0.8,
+                alpha: 0,
+                duration: 200,
+                ease: 'Power2',
+                onComplete: () => {
+                    modal.destroy();
+                    this.showNextUnlockModal(); // Show next if queue has more
+                }
+            });
+        });
     }
 
     animateProgressBar(fillRect, textObj, fullWidth, oldExp, newExp, baseExp, nextExp, finalLevel, labelPrefix) {

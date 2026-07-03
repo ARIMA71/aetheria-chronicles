@@ -69,14 +69,20 @@ exports.initBattle = async (req, res) => {
         
         // Buat salinan state untuk client agar data rahasia tidak bocor
         const clientBattleState = JSON.parse(JSON.stringify(battleState));
-        
-        // Hapus ai_behaviors dari payload client
         if (clientBattleState.enemies) {
             clientBattleState.enemies.forEach(enemy => {
-                delete enemy.ai_behaviors;
+                if (enemy.ai_behaviors) {
+                    enemy.ai_behaviors.forEach(b => {
+                        // Hapus parameter logika AI rahasia agar tidak bisa di-inspect player di browser
+                        delete b.base_utility;
+                        delete b.modifiers;
+                        delete b.score_modifiers;
+                    });
+                }
             });
         }
         
+
         return res.status(200).json({
             status: 'success',
             message: 'Data arena pertarungan siap!',
@@ -151,24 +157,32 @@ exports.saveBattleResult = async (req, res) => {
         );
         const remainingStamina = playerRows[0] ? playerRows[0].stamina : 0;
 
-        // 3. Ambil semua kemungkinan reward dari quest_rewards
+        // 3. Cek apakah ini penyelesaian pertama kali
+        const [existingQuest] = await conn.query(
+            'SELECT pq_id FROM player_quests WHERE player_id = ? AND mq_id = ?',
+            [playerId, questId]
+        );
+        const isFirstClear = existingQuest.length === 0;
+
+        // 4. Ambil semua kemungkinan reward dari quest_rewards
         const [rewardRows] = await conn.query(
             'SELECT * FROM quest_rewards WHERE mq_id = ?',
             [questId]
         );
 
         if (rewardRows.length === 0) {
-            await conn.rollback();
-            conn.release();
-            return res.status(404).json({
-                status: 'error',
-                message: `Tidak ada reward yang ditemukan untuk questId: ${questId}`
-            });
+            // Quest without drops is valid, just proceed with empty rewards array
+            console.log(`[saveBattleResult] No loot drops found for questId: ${questId}. Proceeding to EXP phase.`);
         }
 
-        // 4. RNG Roll
+        // 5. RNG Roll & Guaranteed First Clear
         const obtainedRaw = [];
         for (const reward of rewardRows) {
+            if (reward.is_first_clear === 1) {
+                if (isFirstClear) obtainedRaw.push(reward); // Guaranteed on first clear
+                continue; // Skip normal roll for first-clear exclusive items
+            }
+            
             const roll = Math.random();
             if (roll <= reward.drop_chance) {
                 obtainedRaw.push(reward);
@@ -207,6 +221,14 @@ exports.saveBattleResult = async (req, res) => {
                     name: detail.name, description: detail.description, rarity: null, element: null
                 });
             } else if (type === 'Weapon') {
+                // Cek apakah player sudah memiliki senjata ini sebelumnya
+                const [weapExists] = await conn.query(
+                    `SELECT inv_id FROM player_inventories
+                     WHERE player_id = ? AND master_item_id = ? AND item_type = 'Weapon'`,
+                    [playerId, item.reward_item_id]
+                );
+                const isWeapDuplicate = weapExists.length > 0;
+
                 await conn.query(
                     `INSERT INTO player_inventories
                         (player_id, master_item_id, item_type, item_level, limit_break_level, item_exp)
@@ -220,11 +242,11 @@ exports.saveBattleResult = async (req, res) => {
                 const detail = weapDetail[0] || { name: 'Unknown Weapon', rarity: null, element: null, unlocks_mc_id: null };
                 obtainedRewards.push({
                     reward_type: 'Weapon', reward_item_id: item.reward_item_id, quantity: item.quantity,
-                    name: detail.name, description: null, rarity: detail.rarity, element: detail.element
+                    name: detail.name, description: isWeapDuplicate ? 'Sudah dimiliki (duplikat)' : null, rarity: detail.rarity, element: detail.element
                 });
 
-                // Unlocks char
-                if (detail.unlocks_mc_id !== null) {
+                // Unlocks char if weapon is NOT a duplicate
+                if (detail.unlocks_mc_id !== null && !isWeapDuplicate) {
                     const [charExists] = await conn.query(
                         `SELECT inv_id FROM player_inventories
                          WHERE player_id = ? AND master_item_id = ? AND item_type = 'Character'`,
@@ -238,13 +260,14 @@ exports.saveBattleResult = async (req, res) => {
                             [playerId, detail.unlocks_mc_id]
                         );
                         const [charDetail] = await conn.query(
-                            'SELECT mc_name AS name, mc_rarity AS rarity, mc_element AS element FROM master_characters WHERE mc_id = ?',
+                            'SELECT mc_name AS name, mc_rarity AS rarity, mc_element AS element, mc_portrait_path FROM master_characters WHERE mc_id = ?',
                             [detail.unlocks_mc_id]
                         );
-                        const cDetail = charDetail[0] || { name: 'Unknown Character', rarity: null, element: null };
+                        const cDetail = charDetail[0] || { name: 'Unknown Character', rarity: null, element: null, mc_portrait_path: null };
                         obtainedRewards.push({
                             reward_type: 'Character', reward_item_id: detail.unlocks_mc_id, quantity: 1,
-                            name: cDetail.name, description: `Karakter terbuka via Senjata ${detail.name}!`, rarity: cDetail.rarity, element: cDetail.element
+                            name: cDetail.name, description: `Karakter terbuka via Senjata ${detail.name}!`, rarity: cDetail.rarity, element: cDetail.element,
+                            is_new_unlock: true, portrait_path: cDetail.mc_portrait_path
                         });
                     }
                 }
@@ -266,24 +289,20 @@ exports.saveBattleResult = async (req, res) => {
                     isDuplicate = true;
                 }
                 const [charDetail] = await conn.query(
-                    'SELECT mc_name AS name, mc_rarity AS rarity, mc_element AS element FROM master_characters WHERE mc_id = ?',
+                    'SELECT mc_name AS name, mc_rarity AS rarity, mc_element AS element, mc_portrait_path FROM master_characters WHERE mc_id = ?',
                     [item.reward_item_id]
                 );
-                const detail = charDetail[0] || { name: 'Unknown Character', rarity: null, element: null };
+                const detail = charDetail[0] || { name: 'Unknown Character', rarity: null, element: null, mc_portrait_path: null };
                 obtainedRewards.push({
                     reward_type: 'Character', reward_item_id: item.reward_item_id, quantity: item.quantity,
-                    name: detail.name, description: isDuplicate ? 'Sudah dimiliki (duplikat)' : null, rarity: detail.rarity, element: detail.element
+                    name: detail.name, description: isDuplicate ? 'Sudah dimiliki (duplikat)' : null, rarity: detail.rarity, element: detail.element,
+                    is_new_unlock: !isDuplicate, portrait_path: detail.mc_portrait_path
                 });
             }
         }
 
-        // 5.5. Catat progress quest player
-        const [existingQuest] = await conn.query(
-            'SELECT pq_id FROM player_quests WHERE player_id = ? AND mq_id = ?',
-            [playerId, questId]
-        );
-
-        if (existingQuest.length === 0) {
+        // 6. Catat progress quest player
+        if (isFirstClear) {
             await conn.query('INSERT INTO player_quests (player_id, mq_id, pq_status) VALUES (?, ?, \'Completed\')', [playerId, questId]);
         } else {
             await conn.query('UPDATE player_quests SET pq_status = \'Completed\' WHERE player_id = ? AND mq_id = ?', [playerId, questId]);
@@ -293,14 +312,17 @@ exports.saveBattleResult = async (req, res) => {
         let expData = { base_exp: 0, player_rank: 1, player_total_exp: 0, party_exp_details: [] };
         
         try {
-            const [questMetaRows] = await conn.query('SELECT mq_reward_exp FROM master_quests WHERE mq_id = ?', [questId]);
-            const rewardExp = questMetaRows[0] ? (questMetaRows[0].mq_reward_exp || 0) : 0;
+            const [questMetaRows] = await conn.query('SELECT reward_player_exp, reward_char_exp FROM master_quests WHERE mq_id = ?', [questId]);
+            const rewardPlayerExp = questMetaRows[0] ? (questMetaRows[0].reward_player_exp || 0) : 0;
+            const rewardCharExp = questMetaRows[0] ? (questMetaRows[0].reward_char_exp || 0) : 0;
             
-            expData.base_exp = rewardExp;
+            expData.base_exp = rewardCharExp; // Use char exp as the base for the UI display
             
-            if (rewardExp > 0) {
+            if (rewardPlayerExp > 0 || rewardCharExp > 0) {
                 // Update Player Rank EXP
-                await conn.query('UPDATE players SET player_exp = player_exp + ? WHERE player_id = ?', [rewardExp, playerId]);
+                if (rewardPlayerExp > 0) {
+                    await conn.query('UPDATE players SET player_exp = player_exp + ? WHERE player_id = ?', [rewardPlayerExp, playerId]);
+                }
                 
                 // Fetch Active Party from preset to distribute EXP
                 const [presetRows] = await conn.query(
@@ -308,19 +330,20 @@ exports.saveBattleResult = async (req, res) => {
                     [playerId]
                 );
                 
-                if (presetRows.length > 0) {
+                if (presetRows.length > 0 && rewardCharExp > 0) {
                     const p = presetRows[0];
                     const partyInvIds = [p.main_char_inv_id, p.char_slot_1_inv_id, p.char_slot_2_inv_id, p.char_slot_3_inv_id].filter(id => id !== null);
                     
                     if (partyInvIds.length > 0) {
                         await conn.query(
                             `UPDATE player_inventories SET item_exp = item_exp + ? WHERE inv_id IN (?)`,
-                            [rewardExp, partyInvIds]
+                            [rewardCharExp, partyInvIds]
                         );
+
                         
                         // Cek level riil terbaru untuk ditampilkan di client
                         const [updatedPartyRows] = await conn.query(
-                            `SELECT pi.inv_id, pi.item_exp, pi.limit_break_level, mc.mc_id, mc.mc_name, mc.mc_rarity
+                            `SELECT pi.inv_id, pi.item_exp, pi.item_level, pi.limit_break_level, mc.mc_id, mc.mc_name, mc.mc_rarity
                              FROM player_inventories pi
                              JOIN master_characters mc ON pi.master_item_id = mc.mc_id
                              WHERE pi.inv_id IN (?)`,
@@ -329,7 +352,21 @@ exports.saveBattleResult = async (req, res) => {
                         
                         for (const char of updatedPartyRows) {
                             const maxLevel = LevelingSystem.getCharMaxLevel(char.mc_id, char.mc_rarity, char.limit_break_level);
+                            
+                            // Self-heal dummy data: if EXP is less than what their current level dictates
+                            const dbBaseExp = LevelingSystem.getExpThresholds(char.item_level, maxLevel, 'Character').current_level_base_exp;
+                            if ((char.item_exp - rewardCharExp) < dbBaseExp) {
+                                char.item_exp = dbBaseExp + rewardCharExp;
+                                await conn.query('UPDATE player_inventories SET item_exp = ? WHERE inv_id = ?', [char.item_exp, char.inv_id]);
+                            }
+
                             const realLevel = LevelingSystem.calculateCurrentLevel(char.item_exp, maxLevel, 'Character');
+                            
+                            // Update level stat in DB if leveled up
+                            if (realLevel !== char.item_level) {
+                                await conn.query('UPDATE player_inventories SET item_level = ? WHERE inv_id = ?', [realLevel, char.inv_id]);
+                            }
+                            
                             const thresholds = LevelingSystem.getExpThresholds(realLevel, maxLevel, 'Character');
                             expData.party_exp_details.push({
                                 inv_id: char.inv_id,
@@ -346,9 +383,22 @@ exports.saveBattleResult = async (req, res) => {
             }
             
             // Cek level rank terbaru
-            const [playerExpRows] = await conn.query('SELECT player_exp FROM players WHERE player_id = ?', [playerId]);
-            const totalPlayerExp = playerExpRows[0] ? playerExpRows[0].player_exp : 0;
+            const [playerExpRows] = await conn.query('SELECT player_exp, player_level FROM players WHERE player_id = ?', [playerId]);
+            let totalPlayerExp = playerExpRows[0] ? playerExpRows[0].player_exp : 0;
+            const dbPlayerLevel = playerExpRows[0] ? playerExpRows[0].player_level : 1;
+            
+            // Self-heal dummy data for player rank
+            const pDbBaseExp = LevelingSystem.getExpThresholds(dbPlayerLevel, 100, 'Rank').current_level_base_exp;
+            if ((totalPlayerExp - rewardPlayerExp) < pDbBaseExp) {
+                totalPlayerExp = pDbBaseExp + rewardPlayerExp;
+                await conn.query('UPDATE players SET player_exp = ? WHERE player_id = ?', [totalPlayerExp, playerId]);
+            }
+
             const rankLevel = LevelingSystem.calculateCurrentLevel(totalPlayerExp, 100, 'Rank');
+            if (rankLevel !== dbPlayerLevel) {
+                await conn.query('UPDATE players SET player_level = ? WHERE player_id = ?', [rankLevel, playerId]);
+            }
+            
             const rankThresholds = LevelingSystem.getExpThresholds(rankLevel, 100, 'Rank');
             expData.player_rank = rankLevel;
             expData.player_total_exp = totalPlayerExp;
@@ -447,13 +497,10 @@ exports.getActiveBattle = async (req, res) => {
             });
         }
 
-        // Parse battle_state_json dan hapus ai_behaviors sebelum kirim ke client
+        // Parse battle_state_json
         let clientState = null;
         try {
             clientState = JSON.parse(session.battle_state_json);
-            if (clientState.enemies) {
-                clientState.enemies.forEach(enemy => { delete enemy.ai_behaviors; });
-            }
         } catch (e) {
             clientState = null;
         }

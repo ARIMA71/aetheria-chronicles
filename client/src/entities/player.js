@@ -59,13 +59,17 @@ export default class Player extends Phaser.GameObjects.Container {
                 target_type: s.target_type || 'Single_Enemy',
                 modifier: parseFloat(s.modifier ?? 1.0),
                 cooldown: (s.category || '').toLowerCase() === 'special' ? 0 : (s.cooldown || 0),
+                trigger_delay: s.trigger_delay,
+                trigger_dispel: s.trigger_dispel,
+                trigger_heal_pct: s.trigger_heal_pct,
+                hp_cost_pct: s.hp_cost_pct,
                 status_effects: s.status_effects || []    // array efek dari API
             }));
 
         // Special Attack — skill berkategori 'Special', fallback Limit Break
         const spSkill = this.skills.find(s => s.category.toLowerCase() === 'special');
         this.specialAttack = spSkill
-            ? { id: spSkill.id, name: spSkill.name, modifier: spSkill.modifier, target_type: spSkill.target_type || 'Single_Enemy', status_effects: spSkill.status_effects || [] }
+            ? { id: spSkill.id, name: spSkill.name, modifier: spSkill.modifier, target_type: spSkill.target_type || 'Single_Enemy', trigger_delay: spSkill.trigger_delay, trigger_dispel: spSkill.trigger_dispel, trigger_heal_pct: spSkill.trigger_heal_pct, hp_cost_pct: spSkill.hp_cost_pct, status_effects: spSkill.status_effects || [] }
             : { id: 'limit_break', name: 'Limit Break', modifier: 3.5, target_type: 'Single_Enemy', status_effects: [] };
 
         // ── Dimensi & Warna ───────────────────────────────────────────────────

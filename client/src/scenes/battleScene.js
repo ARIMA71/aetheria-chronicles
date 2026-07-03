@@ -1068,10 +1068,19 @@ export default class BattleScene extends Phaser.Scene {
         let chosenBehavior = null;
 
         try {
+            console.log("=== AI DECISION TRIGGERED ===");
+            console.log("[AI Input] Battle State Boss HP:", this.enemy.hp, "/", this.enemy.maxHp, "Phase:", this.enemy.modeState);
+            console.log("[AI Input] Boss Skills sent to API:", JSON.parse(JSON.stringify(bossSkills)));
+            
             const j = await BattleApi.getAiDecision(this.bsId, battleState, bossSkills);
+            console.log("[AI API Response]:", j);
+            
             if (j.status === "success" && j.data && j.data.selected_skill) {
                 const selected = j.data.selected_skill;
                 chosenBehavior = this.enemy.aiBehaviors.find(b => b.skill.id === selected.id);
+                console.log("[AI API] Chose behavior:", chosenBehavior);
+            } else {
+                console.log("[AI API] Returned no skill (null).");
             }
         } catch (e) {
             console.error("AI decision failed, triggering fallback:", e);
@@ -1079,14 +1088,11 @@ export default class BattleScene extends Phaser.Scene {
 
         // --- AI FALLBACK MECHANISM ---
         if (!chosenBehavior) {
-
+            console.log("[AI Fallback] Triggering local heuristic fallback...");
             // Retrieve heuristic fallback action locally
             const isCaReady = this.enemy.caBar >= this.enemy.caMax && !isExhausted;
             chosenBehavior = CombatManager.getAiFallbackAction(this.enemy, isCaReady);
-
-            // Note: Snapshot Integrity is intrinsically maintained because chosenBehavior will be executed below,
-            // which internally modifies hp/caBar. The next time 'battleState' snapshot is constructed on the next turn,
-            // it captures these valid fallback results directly from the entity properties.
+            console.log("[AI Fallback] Chose behavior:", chosenBehavior);
         }
 
         if (chosenBehavior) {
@@ -1113,7 +1119,7 @@ export default class BattleScene extends Phaser.Scene {
             if (!handledAsync) {
                 if (this.players.every(p => p.hp <= 0)) { this.triggerDefeat(false); return; }
                 this.setTurn('player');
-                this.time.delayedCall(1500, () => this.processTurnEnd());
+                this.time.delayedCall(1500, () => this.processTurnEnd('enemy'));
             }
             return;
         }
@@ -1351,13 +1357,16 @@ export default class BattleScene extends Phaser.Scene {
             this.turn = "none";
             this.showLog("VICTORY! 🎉");
             this.time.delayedCall(1500, () => {
-                this.scene.pause();
-                this.scene.launch('VictoryScene', {
-                    questId: this.questId,
-                    playerId: this.playerId,
-                    potionsUsed: this.potionsUsed,
-                    fullPotionsUsed: this.fullPotionsUsed,
-                    bsId: this.bsId
+                this.scene.stop();
+                this.scene.start('LoadingScene', {
+                    targetScene: 'VictoryScene',
+                    targetData: {
+                        questId: this.questId,
+                        playerId: this.playerId,
+                        potionsUsed: this.potionsUsed,
+                        fullPotionsUsed: this.fullPotionsUsed,
+                        bsId: this.bsId
+                    }
                 });
             });
             return true;

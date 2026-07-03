@@ -337,6 +337,17 @@ export default class AuthScene extends Phaser.Scene {
 
             this._doAuth(endpoint, username, password, isRegister, errorDiv, submitBtn);
         });
+
+        // Dukungan tombol Enter
+        const handleEnterKey = (e) => {
+            if (e.key === 'Enter') {
+                submitBtn.click();
+            }
+        };
+        const userInp = domElement.getChildByID('auth-username');
+        const passInp = domElement.getChildByID('auth-password');
+        if (userInp) userInp.addEventListener('keydown', handleEnterKey);
+        if (passInp) passInp.addEventListener('keydown', handleEnterKey);
     }
 
     async _doAuth(endpoint, username, password, isRegister, errorDiv, submitBtn) {
