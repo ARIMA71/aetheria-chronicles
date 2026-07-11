@@ -42,12 +42,19 @@ export function checkSession(scene) {
 
     // 4. If we are in the login/register screen, skip it and go to the last active scene
     if (isAuthScene) {
-        const savedScene = localStorage.getItem('aetheria_current_scene') || 'MainMenuScene';
+        let savedScene = localStorage.getItem('aetheria_current_scene') || 'MainMenuScene';
         let savedData = {};
-        try {
-            const dataStr = localStorage.getItem('aetheria_scene_data');
-            if (dataStr) savedData = JSON.parse(dataStr);
-        } catch (e) {}
+        
+        // Never jump straight to BattleScene from local storage. The local data is stale.
+        // Go to MainMenuScene instead, which will handle proper auto-resume via server.
+        if (savedScene === 'BattleScene') {
+            savedScene = 'MainMenuScene';
+        } else {
+            try {
+                const dataStr = localStorage.getItem('aetheria_scene_data');
+                if (dataStr) savedData = JSON.parse(dataStr);
+            } catch (e) {}
+        }
         
         scene.scene.start(savedScene, savedData);
         return true;
@@ -120,4 +127,15 @@ async function verifyTokenOnServer(token) {
 export function saveCurrentScene(sceneKey, data = {}) {
     localStorage.setItem('aetheria_current_scene', sceneKey);
     localStorage.setItem('aetheria_scene_data', JSON.stringify(data));
+}
+
+export function getPlayerId() {
+    const raw = localStorage.getItem('aetheria_player');
+    if (!raw) return null;
+    try {
+        const player = JSON.parse(raw);
+        return player.player_id;
+    } catch (e) {
+        return null;
+    }
 }

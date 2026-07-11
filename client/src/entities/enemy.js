@@ -17,6 +17,7 @@ export default class Enemy extends Phaser.GameObjects.Container {
         this.charName = data.name;
         this.element = data.element || 'None';
         this.level = data.level || 1;
+        this.isBoss = data.is_boss === true;
         this.finalStats = data.final_stats || { hp: 1000, atk: 50, def: 50 }; // Needed for state sync & fallback
         this.maxHp = this.finalStats.hp;
         this.hp = this.finalStats.hp;
@@ -41,7 +42,7 @@ export default class Enemy extends Phaser.GameObjects.Container {
         // ── Mode State: 'normal' | 'enraged' | 'exhausted' ──────────────────
         this.modeState = 'normal';
         this.modeBar = 0;
-        this.modeMax = this.maxHp * 0.2; // 20% HP threshold → Enraged
+        this.modeMax = this.maxHp * 0.20; // 20% HP threshold → Enraged
 
         // ── AI Behaviors (raw dari API, digunakan oleh BattleScene) ──────────
         // Format setiap entry:
@@ -77,6 +78,7 @@ export default class Enemy extends Phaser.GameObjects.Container {
         const elemColor = this._getElementColor(this.element);
 
         const shadow = scene.add.rectangle(5, 5, 130, 130, 0x000000).setAlpha(0.4);
+        this._glow = scene.add.rectangle(0, 0, 138, 138, 0xffffff).setAlpha(0); // Glow Background
         this._body = scene.add.rectangle(0, 0, 130, 130, 0x1c0a0a);
         this._body.setStrokeStyle(3, elemColor);
 
@@ -89,7 +91,7 @@ export default class Enemy extends Phaser.GameObjects.Container {
         // Container untuk indikator status efek aktif (di-rebuild tiap refreshVisual)
         this._effectIndicators = scene.add.container(0, -80);
 
-        this.add([shadow, this._body, inner, h, v, this._effectIndicators]);
+        this.add([shadow, this._glow, this._body, inner, h, v, this._effectIndicators]);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -368,12 +370,23 @@ export default class Enemy extends Phaser.GameObjects.Container {
     }
 
     updateEnrageVisual() {
-        const colors = { normal: null, enraged: 0xe74c3c, exhausted: 0x3498db };
-        const col = colors[this.modeState];
-        if (col) {
-            this._body.setStrokeStyle(3, col);
+        if (!this.isBoss) {
+            this._body.setStrokeStyle(3, this._getElementColor(this.element));
+            if (this._glow) this._glow.setAlpha(0);
+            return;
+        }
+
+        const ratio = this.modeBar / this.modeMax;
+
+        if (this.modeState === 'enraged') {
+            this._body.setStrokeStyle(3, 0xe74c3c);
+            if (this._glow) this._glow.setFillStyle(0xe74c3c).setAlpha(0.6);
+        } else if (this.modeState === 'exhausted') {
+            this._body.setStrokeStyle(3, 0x3498db);
+            if (this._glow) this._glow.setFillStyle(0x3498db).setAlpha(0.6);
         } else {
             this._body.setStrokeStyle(3, this._getElementColor(this.element));
+            if (this._glow) this._glow.setAlpha(0);
         }
     }
 

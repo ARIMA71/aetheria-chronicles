@@ -32,20 +32,18 @@ const LevelingSystem = {
         }
     },
 
-    // Menentukan batas maksimal level berdasarkan rarity dan limit break
-    // Batas level dengan pengecualian mutlak untuk MC
+    // Menentukan batas maksimal level berdasarkan rarity
+    // Batas level mutlak
     getCharMaxLevel: function(mcId, rarity, limitBreakLevel = 0) {
         if (mcId === 1) { 
             // Main Character absolut mentok di level 20
             return 20; 
         }
         if (rarity === 'SSR') {
-            // SSR: Base 30. Jika LB >= 1, Max 50.
-            return limitBreakLevel >= 1 ? 50 : 30; 
+            return 60; 
         }
         if (rarity === 'SR') {
-            // SR: Base 20. Jika LB >= 1, Max 40.
-            return limitBreakLevel >= 1 ? 40 : 20; 
+            return 50; 
         }
         return 1; // Fallback
     },

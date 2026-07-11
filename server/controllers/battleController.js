@@ -129,11 +129,22 @@ exports.saveBattleResult = async (req, res) => {
     try {
         await conn.beginTransaction();
 
+        let actualPotionsUsed = potionsUsed;
+        if (bsId) {
+            const [sessionRows] = await conn.query('SELECT battle_state_json FROM battle_sessions WHERE bs_id = ?', [bsId]);
+            if (sessionRows.length > 0) {
+                try {
+                    const state = JSON.parse(sessionRows[0].battle_state_json);
+                    actualPotionsUsed = state.potions_used || 0;
+                } catch (e) {}
+            }
+        }
+
         // Kurangi green potion yang telah digunakan selama pertempuran
-        if (potionsUsed && Number(potionsUsed) > 0) {
+        if (actualPotionsUsed && Number(actualPotionsUsed) > 0) {
             await conn.query(
                 'UPDATE player_materials SET quantity = GREATEST(0, quantity - ?) WHERE player_id = ? AND mat_id = 6',
-                [Number(potionsUsed), playerId]
+                [Number(actualPotionsUsed), playerId]
             );
         }
 
@@ -319,10 +330,7 @@ exports.saveBattleResult = async (req, res) => {
             expData.base_exp = rewardCharExp; // Use char exp as the base for the UI display
             
             if (rewardPlayerExp > 0 || rewardCharExp > 0) {
-                // Update Player Rank EXP
-                if (rewardPlayerExp > 0) {
-                    await conn.query('UPDATE players SET player_exp = player_exp + ? WHERE player_id = ?', [rewardPlayerExp, playerId]);
-                }
+                // We process Player Rank EXP later down below to safely lock it
                 
                 // Fetch Active Party from preset to distribute EXP
                 const [presetRows] = await conn.query(
@@ -335,14 +343,8 @@ exports.saveBattleResult = async (req, res) => {
                     const partyInvIds = [p.main_char_inv_id, p.char_slot_1_inv_id, p.char_slot_2_inv_id, p.char_slot_3_inv_id].filter(id => id !== null);
                     
                     if (partyInvIds.length > 0) {
-                        await conn.query(
-                            `UPDATE player_inventories SET item_exp = item_exp + ? WHERE inv_id IN (?)`,
-                            [rewardCharExp, partyInvIds]
-                        );
-
-                        
-                        // Cek level riil terbaru untuk ditampilkan di client
-                        const [updatedPartyRows] = await conn.query(
+                        // Baca data party sebelum ditambahkan EXP
+                        const [partyRows] = await conn.query(
                             `SELECT pi.inv_id, pi.item_exp, pi.item_level, pi.limit_break_level, mc.mc_id, mc.mc_name, mc.mc_rarity
                              FROM player_inventories pi
                              JOIN master_characters mc ON pi.master_item_id = mc.mc_id
@@ -350,32 +352,56 @@ exports.saveBattleResult = async (req, res) => {
                             [partyInvIds]
                         );
                         
-                        for (const char of updatedPartyRows) {
+                        for (const char of partyRows) {
                             const maxLevel = LevelingSystem.getCharMaxLevel(char.mc_id, char.mc_rarity, char.limit_break_level);
+                            const maxLevelExpCap = LevelingSystem.getExpThresholds(maxLevel, maxLevel, 'Character').current_level_base_exp;
                             
                             // Self-heal dummy data: if EXP is less than what their current level dictates
                             const dbBaseExp = LevelingSystem.getExpThresholds(char.item_level, maxLevel, 'Character').current_level_base_exp;
-                            if ((char.item_exp - rewardCharExp) < dbBaseExp) {
-                                char.item_exp = dbBaseExp + rewardCharExp;
-                                await conn.query('UPDATE player_inventories SET item_exp = ? WHERE inv_id = ?', [char.item_exp, char.inv_id]);
+                            let currentExp = char.item_exp;
+                            if (currentExp < dbBaseExp) {
+                                currentExp = dbBaseExp;
                             }
 
-                            const realLevel = LevelingSystem.calculateCurrentLevel(char.item_exp, maxLevel, 'Character');
-                            
-                            // Update level stat in DB if leveled up
-                            if (realLevel !== char.item_level) {
-                                await conn.query('UPDATE player_inventories SET item_level = ? WHERE inv_id = ?', [realLevel, char.inv_id]);
+                            // Tambahkan EXP tapi batasi di maxLevelExpCap (Opsi A: EXP Lock/Hangus)
+                            let newExp = currentExp + rewardCharExp;
+                            if (newExp > maxLevelExpCap) {
+                                newExp = maxLevelExpCap;
                             }
+
+                            const realLevel = LevelingSystem.calculateCurrentLevel(newExp, maxLevel, 'Character');
+                            
+                            // Deteksi Skill Unlock
+                            let newSkillsUnlocked = [];
+                            if (realLevel > char.item_level) {
+                                // Cari di item_skills (karakter id = char.mc_id, item_type = 'Character')
+                                const [unlockedSkills] = await conn.query(`
+                                    SELECT ms.ms_name
+                                    FROM item_skills isc
+                                    JOIN master_skills ms ON isc.ms_id = ms.ms_id
+                                    WHERE isc.item_id = ? AND isc.item_type = 'Character'
+                                      AND isc.unlock_level > ? 
+                                      AND isc.unlock_level <= ?
+                                      AND isc.unlock_limit_break <= ?
+                                `, [char.mc_id, char.item_level, realLevel, char.limit_break_level]);
+                                
+                                newSkillsUnlocked = unlockedSkills.map(s => s.ms_name);
+                            }
+
+                            // Update EXP dan Level di DB
+                            await conn.query('UPDATE player_inventories SET item_exp = ?, item_level = ? WHERE inv_id = ?', [newExp, realLevel, char.inv_id]);
                             
                             const thresholds = LevelingSystem.getExpThresholds(realLevel, maxLevel, 'Character');
                             expData.party_exp_details.push({
                                 inv_id: char.inv_id,
                                 name: char.mc_name,
-                                total_exp: char.item_exp,
+                                total_exp: newExp,
                                 current_level: realLevel,
+                                old_level: char.item_level,
                                 max_level: maxLevel,
                                 current_level_base_exp: thresholds.current_level_base_exp,
-                                next_level_exp: thresholds.next_level_exp
+                                next_level_exp: thresholds.next_level_exp,
+                                new_skills: newSkillsUnlocked
                             });
                         }
                     }
@@ -384,24 +410,34 @@ exports.saveBattleResult = async (req, res) => {
             
             // Cek level rank terbaru
             const [playerExpRows] = await conn.query('SELECT player_exp, player_level FROM players WHERE player_id = ?', [playerId]);
-            let totalPlayerExp = playerExpRows[0] ? playerExpRows[0].player_exp : 0;
+            let currentTotalExp = playerExpRows[0] ? playerExpRows[0].player_exp : 0;
             const dbPlayerLevel = playerExpRows[0] ? playerExpRows[0].player_level : 1;
             
             // Self-heal dummy data for player rank
             const pDbBaseExp = LevelingSystem.getExpThresholds(dbPlayerLevel, 100, 'Rank').current_level_base_exp;
-            if ((totalPlayerExp - rewardPlayerExp) < pDbBaseExp) {
-                totalPlayerExp = pDbBaseExp + rewardPlayerExp;
-                await conn.query('UPDATE players SET player_exp = ? WHERE player_id = ?', [totalPlayerExp, playerId]);
+            if (currentTotalExp < pDbBaseExp) {
+                currentTotalExp = pDbBaseExp;
             }
 
-            const rankLevel = LevelingSystem.calculateCurrentLevel(totalPlayerExp, 100, 'Rank');
-            if (rankLevel !== dbPlayerLevel) {
-                await conn.query('UPDATE players SET player_level = ? WHERE player_id = ?', [rankLevel, playerId]);
+            const pMaxLevelExpCap = LevelingSystem.getExpThresholds(100, 100, 'Rank').current_level_base_exp;
+            let pNewExp = currentTotalExp;
+            
+            if (rewardPlayerExp > 0) {
+                pNewExp = currentTotalExp + rewardPlayerExp;
+                if (pNewExp > pMaxLevelExpCap) {
+                    pNewExp = pMaxLevelExpCap;
+                }
+                
+                const rankLevel = LevelingSystem.calculateCurrentLevel(pNewExp, 100, 'Rank');
+                await conn.query('UPDATE players SET player_exp = ?, player_level = ? WHERE player_id = ?', [pNewExp, rankLevel, playerId]);
+                expData.player_rank = rankLevel;
+            } else {
+                expData.player_rank = dbPlayerLevel;
             }
             
-            const rankThresholds = LevelingSystem.getExpThresholds(rankLevel, 100, 'Rank');
-            expData.player_rank = rankLevel;
-            expData.player_total_exp = totalPlayerExp;
+            const rankLevelForThresholds = expData.player_rank;
+            const rankThresholds = LevelingSystem.getExpThresholds(rankLevelForThresholds, 100, 'Rank');
+            expData.player_total_exp = pNewExp;
             expData.player_current_level_base_exp = rankThresholds.current_level_base_exp;
             expData.player_next_level_exp = rankThresholds.next_level_exp;
             
@@ -537,27 +573,11 @@ exports.getActiveBattle = async (req, res) => {
  * Fire-and-forget: DB write berjalan async, response langsung.
  */
 exports.syncBattleState = async (req, res) => {
-    try {
-        const { bsId, battleStateJson, remainingTime } = req.body;
-        if (!bsId || !battleStateJson) {
-            return res.status(400).json({ status: 'error', message: 'bsId dan battleStateJson wajib diisi!' });
-        }
-
-        // syncState adalah fire-and-forget (tidak di-await untuk DB)
-        BattleService.syncState(bsId, battleStateJson, remainingTime || 0);
-
-        return res.status(200).json({
-            status: 'success',
-            message: 'State tersinkronisasi.'
-        });
-    } catch (error) {
-        console.error('[syncBattleState] Error:', error);
-        return res.status(500).json({
-            status: 'error',
-            message: 'Gagal menyinkronisasi state.',
-            error_detail: error.message
-        });
-    }
+    // Obsolete: Server-authoritative model makes client-side sync unnecessary.
+    return res.status(200).json({
+        status: 'success',
+        message: 'Sync diabaikan (Server-Authoritative mode)'
+    });
 };
 
 /**
@@ -587,16 +607,90 @@ exports.surrenderBattle = async (req, res) => {
     }
 };
 
-exports.surrenderBattle = async (req, res) => {
-    const { bsId } = req.body;
-    if (!bsId) {
-        return res.status(400).json({ status: 'error', message: 'bsId wajib diisi!' });
-    }
+/**
+ * POST /api/battle/ai-decision
+ * Resolves the enemy turn (AI, target selection, actions) server-side.
+ */
+exports.getBossAction = async (req, res) => {
     try {
-        await BattleService.surrenderSession(bsId);
-        return res.status(200).json({ status: 'success', message: 'Pertempuran dihentikan.' });
+        const { bsId } = req.body;
+        if (!bsId) {
+            return res.status(400).json({ status: 'error', message: 'bsId wajib disertakan' });
+        }
+
+        const result = await BattleService.processEnemyTurn(bsId);
+
+        return res.status(200).json({
+            status: 'success',
+            message: 'Enemy Turn Processed',
+            data: result
+        });
     } catch (error) {
-        console.error('[surrenderBattle] Error:', error);
-        return res.status(500).json({ status: 'error', message: 'Gagal surrender battle.', error_detail: error.message });
+        console.error('[getBossAction] Error:', error);
+        return res.status(500).json({
+            status: 'error',
+            message: 'Gagal memproses giliran musuh.',
+            error_detail: error.message
+        });
+    }
+};
+
+/**
+ * POST /api/battle/action
+ * Eksekusi aksi dari client (Player atau AI Musuh).
+ */
+exports.executeAction = async (req, res) => {
+    try {
+        const { bsId, actionData } = req.body;
+        if (!bsId || !actionData) {
+            return res.status(400).json({ status: 'error', message: 'bsId dan actionData wajib diisi!' });
+        }
+
+        const result = await BattleService.processAction(bsId, actionData);
+
+        return res.status(200).json({
+            status: 'success',
+            message: 'Aksi dieksekusi',
+            data: result
+        });
+    } catch (error) {
+        console.error('[executeAction] Error:', error);
+        
+        if (error.message && error.message.startsWith('RACE_CONDITION')) {
+            return res.status(429).json({
+                status: 'error',
+                message: 'Aksi sebelumnya masih diproses. Harap tunggu.'
+            });
+        }
+        
+        return res.status(500).json({
+            status: 'error',
+            message: 'Gagal mengeksekusi aksi.',
+            error_detail: error.message
+        });
+    }
+};
+
+exports.endTurn = async (req, res) => {
+    try {
+        const { bsId } = req.body;
+        if (!bsId) {
+            return res.status(400).json({ status: 'error', message: 'bsId wajib disertakan' });
+        }
+
+        const result = await BattleService.processTurnEnd(bsId);
+
+        return res.status(200).json({
+            status: 'success',
+            message: 'Turn dievaluasi',
+            data: result
+        });
+    } catch (error) {
+        console.error('[endTurn] Error:', error);
+        return res.status(500).json({
+            status: 'error',
+            message: 'Gagal mengevaluasi end turn.',
+            error_detail: error.message
+        });
     }
 };

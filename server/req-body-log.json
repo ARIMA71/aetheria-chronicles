@@ -1,125 +1,40 @@
 {
-  "bsId": 31,
+  "bsId": 41,
   "battleState": {
     "player_party": {
       "characters": [
         {
-          "hp": 4912,
+          "id": "Main Character",
+          "hp": 3239,
           "maxHp": 4912,
-          "activeEffects": [
-            {
-              "effect_name": "ATK Up (Big)",
-              "effect_type": "Buff",
-              "target_stat": "ATK",
-              "value": 0.3,
-              "duration": 1
-            },
-            {
-              "effect_name": "DEF Up (Lohei)",
-              "effect_type": "Buff",
-              "target_stat": "DEF",
-              "value": 0.25,
-              "duration": 1
-            }
-          ]
+          "activeEffects": []
         },
         {
-          "hp": 4275,
+          "id": "Char Slot 1",
+          "hp": 2593,
           "maxHp": 4275,
-          "activeEffects": [
-            {
-              "effect_name": "ATK Up (Big)",
-              "effect_type": "Buff",
-              "target_stat": "ATK",
-              "value": 0.3,
-              "duration": 1
-            },
-            {
-              "effect_name": "DEF Up (Lohei)",
-              "effect_type": "Buff",
-              "target_stat": "DEF",
-              "value": 0.25,
-              "duration": 1
-            }
-          ]
+          "activeEffects": []
         },
         {
+          "id": "Char Slot 2",
           "hp": 4128,
           "maxHp": 4128,
-          "activeEffects": [
-            {
-              "effect_name": "ATK Up (Big)",
-              "effect_type": "Buff",
-              "target_stat": "ATK",
-              "value": 0.3,
-              "duration": 1
-            },
-            {
-              "effect_name": "DEF Up (Lohei)",
-              "effect_type": "Buff",
-              "target_stat": "DEF",
-              "value": 0.25,
-              "duration": 1
-            }
-          ]
+          "activeEffects": []
         },
         {
-          "hp": 2228,
+          "id": "Char Slot 3",
+          "hp": 3029,
           "maxHp": 3029,
-          "activeEffects": [
-            {
-              "effect_name": "ATK Up (Big)",
-              "effect_type": "Buff",
-              "target_stat": "ATK",
-              "value": 0.3,
-              "duration": 1
-            },
-            {
-              "effect_name": "DEF Up (Lohei)",
-              "effect_type": "Buff",
-              "target_stat": "DEF",
-              "value": 0.25,
-              "duration": 1
-            }
-          ]
+          "activeEffects": []
         }
       ]
     },
     "boss": {
-      "hp": 34791,
+      "hp": 72849,
       "maxHp": 304500,
       "phase": "exhausted",
       "isCaReady": false,
-      "activeEffects": [
-        {
-          "effect_name": "DEF Down (25%)",
-          "effect_type": "Debuff",
-          "target_stat": "DEF",
-          "value": -0.25,
-          "duration": 2
-        },
-        {
-          "effect_name": "ATK Up (Medium)",
-          "effect_type": "Buff",
-          "target_stat": "ATK",
-          "value": 0.2,
-          "duration": 2
-        },
-        {
-          "effect_name": "Poison (5%)",
-          "effect_type": "Debuff",
-          "target_stat": "POISON",
-          "value": -0.05,
-          "duration": 2
-        },
-        {
-          "effect_name": "ATK Up (Perci)",
-          "effect_type": "Buff",
-          "target_stat": "ATK",
-          "value": 0.25,
-          "duration": 2
-        }
-      ]
+      "activeEffects": []
     },
     "usedSkills": []
   },

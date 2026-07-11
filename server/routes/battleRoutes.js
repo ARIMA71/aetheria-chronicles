@@ -8,5 +8,7 @@ router.post('/ai-decision', battleController.getBossAction);
 router.get('/active/:playerId', battleController.getActiveBattle);
 router.post('/sync', battleController.syncBattleState);
 router.post('/surrender', battleController.surrenderBattle);
+router.post('/action', battleController.executeAction);
+router.post('/end_turn', battleController.endTurn);
 
 module.exports = router;

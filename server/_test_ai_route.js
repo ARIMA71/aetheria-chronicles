@@ -40,10 +40,11 @@ async function run() {
                 ]
             },
             boss: {
-                hp: 80000,
+                hp: 30000,
                 maxHp: 100000,
                 phase: 'Normal',
-                isCaReady: false
+                current_ca: 0,
+                caMax: 5
             }
         },
         bossSkills: [

@@ -239,8 +239,8 @@ export default class MainMenuScene extends Phaser.Scene {
         });
 
         // Party (Di atas Quest, sejajar kanan)
-        this._createFAB(405, 495, 30, 'Party', THEME.TEXT_MUTED, () => {
-            // Placeholder
+        this._createFAB(405, 495, 30, 'Party', THEME.TEXT_PRIMARY, () => {
+            this.scene.start('LoadingScene', { targetScene: 'PartyScene' });
         });
 
         // Gacha (Di sebelah kiri Quest)
@@ -389,7 +389,7 @@ export default class MainMenuScene extends Phaser.Scene {
         // 3 Button bulat navigasi horizontal (shifted to Y = 125)
         const btnParty = this._createModalRoundBtn(CX - 100, 125, 'PARTY', () => {
             this.toggleMenuModal(false);
-            // Navigasi ke scene Party jika ada
+            this.scene.start('LoadingScene', { targetScene: 'PartyScene' });
         });
         const btnQuest = this._createModalRoundBtn(CX, 125, 'QUEST', () => {
             this.toggleMenuModal(false);
@@ -409,7 +409,8 @@ export default class MainMenuScene extends Phaser.Scene {
         }).setOrigin(0.5);
 
         const btnInventory = this._createModalRectBtn(CX - 90, 215, 160, 30, 'INVENTORY', () => {
-            // Navigasi Inventory
+            this.toggleMenuModal(false);
+            this.scene.start('LoadingScene', { targetScene: 'InventoryScene' });
         });
         const btnShop = this._createModalRectBtn(CX + 90, 215, 160, 30, 'SHOP', () => {
             // Navigasi Shop

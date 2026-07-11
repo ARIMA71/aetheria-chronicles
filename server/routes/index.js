@@ -6,11 +6,13 @@ const authRoutes = require('./authRoutes')
 const playerRoutes = require('./playerRoutes')
 const battleRoutes = require('./battleRoutes')
 const questRoutes = require('./questRoutes')
+const partyRoutes = require('./partyRoutes')
 
 router.use('/auth', authRoutes)
 router.use('/player', playerRoutes)
 router.use('/battle', battleRoutes)
 router.use('/quests', questRoutes)
+router.use('/party', partyRoutes)
 
 router.get('/test', testController.test);
 

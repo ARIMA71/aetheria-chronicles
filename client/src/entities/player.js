@@ -17,6 +17,8 @@ export default class Player extends Phaser.GameObjects.Container {
         scene.add.existing(this);
 
         // ── Data Mapping ──────────────────────────────────────────────────────
+        this.slot = data.slot;
+        this.id = data.id || data.slot;
         this.charName = data.name;
         this.element = data.element || 'None';
         this.level = data.level || 1;

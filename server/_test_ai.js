@@ -26,12 +26,16 @@ function runTests() {
                 { hp: 500, maxHp: 1000, activeEffects: [{ effect_type: 'Debuff' }] } // 50% HP, 1 Debuff
             ]
         },
-        boss: {
-            hp: 80000,
-            maxHp: 100000,
-            phase: 'Normal',
-            activeEffects: [{ effect_type: 'Debuff' }] // 1 Debuff
-        }
+        enemies: [
+            {
+                hp: 80000,
+                maxHp: 100000,
+                phase: 'Normal',
+                current_ca: 5,
+                caMax: 5,
+                activeEffects: [{ effect_type: 'Debuff' }] // 1 Debuff
+            }
+        ]
     };
 
     const skills1 = [
@@ -88,11 +92,15 @@ function runTests() {
         player_party: {
             characters: [{ hp: 1000, maxHp: 1000 }]
         },
-        boss: {
-            hp: 40000,
-            maxHp: 100000,
-            phase: 'Normal'
-        }
+        enemies: [
+            {
+                hp: 40000,
+                maxHp: 100000,
+                phase: 'Normal',
+                current_ca: 5,
+                caMax: 5
+            }
+        ]
     };
 
     const skills3 = [
@@ -126,11 +134,15 @@ function runTests() {
         player_party: {
             characters: [{ hp: 1000, maxHp: 1000 }]
         },
-        boss: {
-            hp: 20000,
-            maxHp: 100000,
-            phase: 'Normal'
-        }
+        enemies: [
+            {
+                hp: 20000,
+                maxHp: 100000,
+                phase: 'Normal',
+                current_ca: 5,
+                caMax: 5
+            }
+        ]
     };
 
     const skills4 = [
@@ -163,12 +175,15 @@ function runTests() {
     // -------------------------------------------------------------------------
     const battleState5 = {
         player_party: { characters: [] },
-        boss: {
-            hp: 100000,
-            maxHp: 100000,
-            phase: 'Normal',
-            isCaReady: false
-        }
+        enemies: [
+            {
+                hp: 100000,
+                maxHp: 100000,
+                phase: 'Normal',
+                current_ca: 0,
+                caMax: 5
+            }
+        ]
     };
     const skills5 = [
         { id: 7, phase: 'Normal', base_utility: 1.0, score_modifiers: {} }
@@ -181,12 +196,15 @@ function runTests() {
     // -------------------------------------------------------------------------
     const battleState6 = {
         player_party: { characters: [] },
-        boss: {
-            hp: 30000,
-            maxHp: 100000,
-            phase: 'Normal',
-            isCaReady: false
-        }
+        enemies: [
+            {
+                hp: 30000,
+                maxHp: 100000,
+                phase: 'Normal',
+                current_ca: 0,
+                caMax: 5
+            }
+        ]
     };
     const skills6 = [
         { id: 8, phase: 'Normal', base_utility: 1.0, score_modifiers: {} }, // normal skill

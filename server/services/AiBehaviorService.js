@@ -79,15 +79,15 @@ class AiBehaviorService {
         });
 
         // Boss references
-        const boss = battleState.boss || {};
+        const boss = (battleState.enemies && battleState.enemies[0]) ? battleState.enemies[0] : (battleState.boss || {});
         const bossCur = (boss.current_hp !== undefined ? boss.current_hp : boss.hp) || 0;
-        const bossMax = (boss.max_hp !== undefined ? boss.max_hp : boss.maxHp) || 0;
+        const bossMax = (boss.final_stats && boss.final_stats.hp !== undefined) ? boss.final_stats.hp : ((boss.max_hp !== undefined ? boss.max_hp : boss.maxHp) || 0);
         
         // Vector 6: boss_hp_pct
-        const boss_hp_pct = bossMax > 0 ? bossCur / bossMax : 0;
+        const boss_hp_pct = bossMax > 0 ? bossCur / bossMax : 1;
 
         // Vector 7 & 8: boss_buff_count & boss_debuff_count
-        const bossEffects = boss.activeEffects || boss.active_effects || [];
+        const bossEffects = boss.activeEffects || boss.active_effects || boss.active_buffs || [];
         const { buffs: boss_buff_count, debuffs: boss_debuff_count } = getEffectCounts(bossEffects);
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -118,7 +118,8 @@ class AiBehaviorService {
 
             // Check one-time use
             const mods = s.score_modifiers || s.modifiers || {};
-            const isOneTime = mods.One_Time_Use === true || mods.one_time_use === true;
+            const isOverride = mods.override_hp_trigger !== undefined || mods.Trigger_HP_Threshold !== undefined;
+            const isOneTime = mods.One_Time_Use === true || mods.one_time_use === true || isOverride;
             if (isOneTime) {
                 if (s.used === true) return false;
                 
@@ -130,15 +131,13 @@ class AiBehaviorService {
                 if (usedSkills instanceof Set && usedSkills.has(skillId)) return false;
             }
 
-            // If CA is not ready, exclude normal skills (non-override skills)
-            const isOverride = mods.override_hp_trigger !== undefined || mods.Trigger_HP_Threshold !== undefined;
+            // If CA is not ready or boss is exhausted, exclude normal skills (non-override skills)
             if (!isOverride) {
-                const isCaReadyVal = boss.is_ca_ready !== undefined ? boss.is_ca_ready :
-                                     boss.isCaReady !== undefined ? boss.isCaReady :
-                                     battleState.isCaReady !== undefined ? battleState.isCaReady :
-                                     battleState.is_ca_ready !== undefined ? battleState.is_ca_ready :
-                                     true;
-                const isCaReady = isCaReadyVal === true || isCaReadyVal === 1;
+                const currentCa = boss.current_ca !== undefined ? boss.current_ca : 0;
+                const caMax = boss.caMax !== undefined ? boss.caMax : 5;
+                const isExhausted = (boss.mode_state || boss.modeState) === 'exhausted';
+                
+                const isCaReady = currentCa >= caMax && !isExhausted;
                 if (!isCaReady) return false;
             } else {
                 // BUG FIX: If it IS an override skill, ensure the HP trigger is ACTUALLY met!

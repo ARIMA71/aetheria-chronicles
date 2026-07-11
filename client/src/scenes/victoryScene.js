@@ -145,8 +145,9 @@ export default class VictoryScene extends Phaser.Scene {
         const pNext = expData.player_next_level_exp || 1;
         const pGained = expData.base_exp || 0;
         const pOldTotal = Math.max(0, pTotal - pGained);
+        const isPlayerMax = expData.player_rank >= 100;
         
-        this.animateProgressBar(rankBarFill, rankText, rankBarW, pOldTotal, pTotal, pBase, pNext, expData.player_rank, 'Rank');
+        this.animateProgressBar(rankBarFill, rankText, rankBarW, pOldTotal, pTotal, pBase, pNext, expData.player_rank, 'Rank', isPlayerMax);
 
         cursorY += 60;
 
@@ -190,8 +191,9 @@ export default class VictoryScene extends Phaser.Scene {
             const cBase = char.current_level_base_exp;
             const cNext = char.next_level_exp;
             const cOld = Math.max(0, cTotal - pGained);
+            const isCharMax = char.current_level >= char.max_level;
 
-            this.animateProgressBar(barFill, lvlTxt, barW, cOld, cTotal, cBase, cNext, char.current_level, 'Lv');
+            this.animateProgressBar(barFill, lvlTxt, barW, cOld, cTotal, cBase, cNext, char.current_level, 'Lv', isCharMax);
         });
 
         cursorY += 100;
@@ -283,8 +285,25 @@ export default class VictoryScene extends Phaser.Scene {
         const totalHeight = Math.max(H, cursorY);
         this.cameras.main.setBounds(0, 0, W, totalHeight);
         
-        // Setup newly unlocked characters queue
-        this.unlockQueue = rewards.filter(r => r.is_new_unlock);
+        // Setup newly unlocked characters and skills queue
+        this.unlockQueue = [];
+        
+        // Priority 1: Characters
+        rewards.filter(r => r.is_new_unlock).forEach(char => {
+            this.unlockQueue.push({ type: 'character', data: char });
+        });
+        
+        // Priority 2: Skills
+        if (expData && expData.party_exp_details) {
+            expData.party_exp_details.forEach(detail => {
+                if (detail.new_skills && detail.new_skills.length > 0) {
+                    detail.new_skills.forEach(skillName => {
+                        this.unlockQueue.push({ type: 'skill', data: { charName: detail.name, skillName: skillName } });
+                    });
+                }
+            });
+        }
+
         if (this.unlockQueue.length > 0) {
             this.time.delayedCall(500, () => this.showNextUnlockModal());
         }
@@ -293,7 +312,7 @@ export default class VictoryScene extends Phaser.Scene {
     showNextUnlockModal() {
         if (!this.unlockQueue || this.unlockQueue.length === 0) return;
 
-        const char = this.unlockQueue.shift();
+        const item = this.unlockQueue.shift();
         const W = this.cameras.main.width;
         const H = this.cameras.main.height;
         const CX = W / 2;
@@ -311,41 +330,60 @@ export default class VictoryScene extends Phaser.Scene {
         bg.setStrokeStyle(2, 0xD4A017); // Gold border
         modal.add(bg);
 
-        // Title
-        modal.add(this.add.text(CX, H / 2 - 160, "NEW CHARACTER UNLOCKED!", {
-            fontSize: "16px", color: "#D4A017", fontStyle: "bold", letterSpacing: 1
-        }).setOrigin(0.5));
+        if (item.type === 'character') {
+            const char = item.data;
+            // Title
+            modal.add(this.add.text(CX, H / 2 - 160, "NEW CHARACTER UNLOCKED!", {
+                fontSize: "16px", color: "#D4A017", fontStyle: "bold", letterSpacing: 1
+            }).setOrigin(0.5));
 
-        // Portrait placeholder
-        const portBg = this.add.rectangle(CX, H / 2 - 20, 160, 200, 0x1E293B);
-        portBg.setStrokeStyle(1, THEME.BORDER);
-        modal.add(portBg);
+            // Portrait placeholder
+            const portBg = this.add.rectangle(CX, H / 2 - 20, 160, 200, 0x1E293B);
+            portBg.setStrokeStyle(1, THEME.BORDER);
+            modal.add(portBg);
 
-        // Wait, check if portrait exists, else show emoji placeholder
-        if (char.portrait_path) {
-            // Placeholder if image logic is added later
             modal.add(this.add.text(CX, H / 2 - 20, "👤", { fontSize: "64px" }).setOrigin(0.5));
-        } else {
-            modal.add(this.add.text(CX, H / 2 - 20, "👤", { fontSize: "64px" }).setOrigin(0.5));
+
+            // Rarity & Element
+            modal.add(this.add.text(CX, H / 2 + 100, `${char.rarity || 'SSR'} | ${char.element || 'Any'}`, {
+                fontSize: "14px", color: THEME.TEXT_MUTED
+            }).setOrigin(0.5));
+
+            // Character Name
+            modal.add(this.add.text(CX, H / 2 + 130, char.name || 'Unknown', {
+                fontSize: "20px", color: THEME.TEXT_PRIMARY, fontStyle: "bold"
+            }).setOrigin(0.5));
+        } else if (item.type === 'skill') {
+            const skillData = item.data;
+            
+            // Clean Flat Vector aesthetics
+            bg.setSize(300, 220); // Smaller modal for skill
+            bg.setStrokeStyle(2, 0x3b82f6); // Blue border for skill unlock
+
+            modal.add(this.add.text(CX, H / 2 - 60, "SKILL UNLOCKED!", {
+                fontSize: "18px", color: "#3b82f6", fontStyle: "bold", letterSpacing: 1
+            }).setOrigin(0.5));
+
+            modal.add(this.add.text(CX, H / 2 - 10, skillData.charName, {
+                fontSize: "14px", color: THEME.TEXT_MUTED
+            }).setOrigin(0.5));
+
+            modal.add(this.add.text(CX, H / 2 + 20, skillData.skillName, {
+                fontSize: "22px", color: THEME.TEXT_PRIMARY, fontStyle: "bold"
+            }).setOrigin(0.5));
+            
+            // Adjust button position
         }
 
-        // Rarity & Element
-        modal.add(this.add.text(CX, H / 2 + 100, `${char.rarity || 'SSR'} | ${char.element || 'Any'}`, {
-            fontSize: "14px", color: THEME.TEXT_MUTED
-        }).setOrigin(0.5));
-
-        // Character Name
-        modal.add(this.add.text(CX, H / 2 + 130, char.name || 'Unknown', {
-            fontSize: "20px", color: THEME.TEXT_PRIMARY, fontStyle: "bold"
-        }).setOrigin(0.5));
-
         // OK Button
-        const btnBg = this.add.rectangle(CX, H / 2 + 175, 120, 36, THEME.PANEL).setInteractive();
+        const btnY = item.type === 'character' ? (H / 2 + 175) : (H / 2 + 75);
+        const btnBg = this.add.rectangle(CX, btnY, 120, 36, THEME.PANEL).setInteractive({useHandCursor:true});
         btnBg.setStrokeStyle(1, THEME.BORDER);
         modal.add(btnBg);
 
-        const btnTxt = this.add.text(CX, H / 2 + 175, "AWESOME!", {
-            fontSize: "14px", color: "#D4A017", fontStyle: "bold"
+        const btnTxtColor = item.type === 'character' ? "#D4A017" : "#3b82f6";
+        const btnTxt = this.add.text(CX, btnY, "AWESOME!", {
+            fontSize: "14px", color: btnTxtColor, fontStyle: "bold"
         }).setOrigin(0.5);
         modal.add(btnTxt);
 
@@ -375,7 +413,7 @@ export default class VictoryScene extends Phaser.Scene {
         });
     }
 
-    animateProgressBar(fillRect, textObj, fullWidth, oldExp, newExp, baseExp, nextExp, finalLevel, labelPrefix) {
+    animateProgressBar(fillRect, textObj, fullWidth, oldExp, newExp, baseExp, nextExp, finalLevel, labelPrefix, isMax = false) {
         // If they leveled up (oldExp < baseExp), we do a two-stage animation
         if (oldExp < baseExp) {
             // Level Up scenario!
@@ -401,34 +439,61 @@ export default class VictoryScene extends Phaser.Scene {
                         yoyo: true,
                         duration: 200,
                         onComplete: () => {
-                            textObj.setText(`${labelPrefix} ${finalLevel}`);
-                            textObj.setColor("#FFFFFF");
+                            if (isMax) {
+                                textObj.setText(`MAX`);
+                                textObj.setColor("#D4A017");
+                            } else {
+                                textObj.setText(`${labelPrefix} ${finalLevel}`);
+                                textObj.setColor("#FFFFFF");
+                            }
                         }
                     });
 
                     // Reset bar to 0 and fill to new percentage
                     fillRect.width = 0;
-                    const newRatio = Math.min(1, Math.max(0, (newExp - baseExp) / (nextExp - baseExp)));
-                    this.tweens.add({
-                        targets: fillRect,
-                        width: fullWidth * newRatio,
-                        duration: 800,
-                        ease: 'Quad.easeOut'
-                    });
+                    if (isMax) {
+                        fillRect.setFillStyle(0xD4A017); // Gold bar
+                        this.tweens.add({
+                            targets: fillRect,
+                            width: fullWidth,
+                            duration: 800,
+                            ease: 'Quad.easeOut'
+                        });
+                    } else {
+                        const newRatio = Math.min(1, Math.max(0, (newExp - baseExp) / (nextExp - baseExp)));
+                        this.tweens.add({
+                            targets: fillRect,
+                            width: fullWidth * newRatio,
+                            duration: 800,
+                            ease: 'Quad.easeOut'
+                        });
+                    }
                 }
             });
         } else {
             // Normal scenario, no level up
-            const oldRatio = Math.min(1, Math.max(0, (oldExp - baseExp) / (nextExp - baseExp)));
-            const newRatio = Math.min(1, Math.max(0, (newExp - baseExp) / (nextExp - baseExp)));
-            
-            fillRect.width = fullWidth * oldRatio;
-            this.tweens.add({
-                targets: fillRect,
-                width: fullWidth * newRatio,
-                duration: 1000,
-                ease: 'Quad.easeOut'
-            });
+            if (isMax) {
+                textObj.setText(`MAX`);
+                textObj.setColor("#D4A017");
+                fillRect.setFillStyle(0xD4A017);
+                this.tweens.add({
+                    targets: fillRect,
+                    width: fullWidth,
+                    duration: 1000,
+                    ease: 'Quad.easeOut'
+                });
+            } else {
+                const oldRatio = Math.min(1, Math.max(0, (oldExp - baseExp) / (nextExp - baseExp)));
+                const newRatio = Math.min(1, Math.max(0, (newExp - baseExp) / (nextExp - baseExp)));
+                
+                fillRect.width = fullWidth * oldRatio;
+                this.tweens.add({
+                    targets: fillRect,
+                    width: fullWidth * newRatio,
+                    duration: 1000,
+                    ease: 'Quad.easeOut'
+                });
+            }
         }
     }
 

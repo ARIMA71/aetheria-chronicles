@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { THEME } from '../main.js';
-import { checkSession, saveCurrentScene } from '../utils/auth.js';
+import { checkSession, saveCurrentScene, clearSession } from '../utils/auth.js';
 import BattleApi from '../services/BattleApi.js';
 
 const W = 450, H = 800, CX = 225;
@@ -35,8 +35,12 @@ export default class QuestScene extends Phaser.Scene {
         this.staminaModalContainer = null;
         this.areaData = [];
 
+        this.musicOn = localStorage.getItem('music_on') !== 'false';
+        this.sfxOn = localStorage.getItem('sfx_on') !== 'false';
+
         this.add.rectangle(CX, H / 2, W, H, THEME.BG);
         this._buildTopBar();
+        this._buildMenuModal();
         this._buildMap();
         this._buildQuestPanel();
         this.fetchQuestData();
@@ -49,6 +53,27 @@ export default class QuestScene extends Phaser.Scene {
         const backBtn = this.add.circle(40, 30, 18, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
         this.add.text(40, 30, '←', { fontSize: '16px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
         backBtn.on('pointerdown', () => this.scene.start('LoadingScene', { targetScene: 'MainMenuScene' }));
+
+        // Pojok kanan atas: Bulat bertulisan MENU
+        const menuBtn = this.add.circle(W - 40, 30, 18, THEME.PANEL, THEME.PANEL_ALPHA);
+        menuBtn.setStrokeStyle(1, THEME.BORDER);
+        menuBtn.setInteractive({ useHandCursor: true });
+
+        const menuText = this.add.text(W - 40, 30, 'MENU', {
+            fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY
+        }).setOrigin(0.5);
+
+        menuBtn.on('pointerover', () => {
+            menuBtn.setFillStyle(0x334155);
+            menuText.setColor('#ffffff');
+        });
+        menuBtn.on('pointerout', () => {
+            menuBtn.setFillStyle(THEME.PANEL);
+            menuText.setColor(THEME.TEXT_PRIMARY);
+        });
+        menuBtn.on('pointerdown', () => {
+            this.toggleMenuModal(true);
+        });
     }
 
     _buildMap() {
@@ -383,9 +408,11 @@ export default class QuestScene extends Phaser.Scene {
 
     async _checkActiveBattle() {
         if (!this.playerData || !this.playerData.player_id) return;
+        
         try {
             const res = await BattleApi.checkActiveBattle(this.playerData.player_id);
             if (res.status === 'success' && res.data && res.data.has_active) {
+                // Tampilkan Pop-up Resume Battle
                 this._showResumeBattleModal(res.data);
             }
         } catch (e) {
@@ -477,5 +504,143 @@ export default class QuestScene extends Phaser.Scene {
         items.push(surrenderBtn, surrenderTxt);
 
         this.resumeContainer.add(items);
+    }
+
+    _buildMenuModal() {
+        this.menuContainer = this.add.container(0, 0).setDepth(95).setVisible(false);
+
+        const backdrop = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.75).setInteractive();
+        backdrop.on('pointerdown', (pointer, localX, localY, event) => {
+            event.stopPropagation();
+            if (pointer.y > 420) this.toggleMenuModal(false);
+        });
+
+        const panel = this.add.rectangle(CX, 210, W, 420, 0x0a0f1d).setInteractive();
+        panel.setStrokeStyle(1, THEME.BORDER);
+        panel.on('pointerdown', (pointer, localX, localY, event) => event.stopPropagation());
+
+        const header = this.add.text(CX, 30, 'MENU & SETTINGS', { fontSize: '14px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY, letterSpacing: 2 }).setOrigin(0.5);
+        const divider = this.add.rectangle(CX, 60, W, 1, THEME.BORDER);
+
+        const s1Label = this.add.text(CX, 85, 'QUICK NAVIGATION', { fontSize: '9px', fontFamily: 'Outfit', color: THEME.TEXT_SECONDARY, letterSpacing: 1 }).setOrigin(0.5);
+        
+        const btnParty = this._createModalRoundBtn(CX - 100, 125, 'PARTY', () => {
+            this.toggleMenuModal(false);
+            this.scene.start('LoadingScene', { targetScene: 'PartyScene' });
+        });
+        const btnQuest = this._createModalRoundBtn(CX, 125, 'QUEST', () => {
+            this.toggleMenuModal(false);
+            this.scene.start('LoadingScene', { targetScene: 'QuestScene' });
+        });
+        const btnGacha = this._createModalRoundBtn(CX + 100, 125, 'GACHA', () => {
+            this.toggleMenuModal(false);
+        });
+
+        const s2Label = this.add.text(CX, 185, 'ITEMS & MARKET', { fontSize: '9px', fontFamily: 'Outfit', color: THEME.TEXT_SECONDARY, letterSpacing: 1 }).setOrigin(0.5);
+        const btnInventory = this._createModalRectBtn(CX - 90, 215, 160, 30, 'INVENTORY', () => {
+            this.toggleMenuModal(false);
+            this.scene.start('LoadingScene', { targetScene: 'InventoryScene' });
+        });
+        const btnShop = this._createModalRectBtn(CX + 90, 215, 160, 30, 'SHOP', () => {});
+
+        const s3Label = this.add.text(CX, 270, 'AUDIO SETTINGS', { fontSize: '9px', fontFamily: 'Outfit', color: THEME.TEXT_SECONDARY, letterSpacing: 1 }).setOrigin(0.5);
+
+        this.musicBtn = this._createModalRectBtn(CX - 90, 300, 160, 30, '', () => this.toggleMusic());
+        this.musicTxt = this.add.text(CX - 90, 300, '', { fontSize: '10px', fontStyle: 'bold', fontFamily: 'Outfit' }).setOrigin(0.5);
+
+        this.sfxBtn = this._createModalRectBtn(CX + 90, 300, 160, 30, '', () => this.toggleSfx());
+        this.sfxTxt = this.add.text(CX + 90, 300, '', { fontSize: '10px', fontStyle: 'bold', fontFamily: 'Outfit' }).setOrigin(0.5);
+
+        this.updateAudioButtonVisuals();
+
+        const btnLogout = this._createModalRectBtn(CX, 360, 340, 32, 'LOGOUT', () => {
+            this.showLogoutConfirmation();
+        }, 0x7f1d1d, 0xef4444);
+
+        const closeBtnCircle = this.add.circle(W - 40, 30, 18, THEME.PANEL, THEME.PANEL_ALPHA);
+        closeBtnCircle.setStrokeStyle(1, THEME.BORDER);
+        closeBtnCircle.setInteractive({ useHandCursor: true });
+        const closeBtnText = this.add.text(W - 40, 30, 'CLOSE', { fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
+
+        closeBtnCircle.on('pointerover', () => { closeBtnCircle.setFillStyle(0x334155); closeBtnText.setColor('#ffffff'); });
+        closeBtnCircle.on('pointerout', () => { closeBtnCircle.setFillStyle(THEME.PANEL); closeBtnText.setColor(THEME.TEXT_PRIMARY); });
+        closeBtnCircle.on('pointerdown', () => this.toggleMenuModal(false));
+
+        this.menuContainer.add([
+            backdrop, panel, header, divider,
+            s1Label, btnParty.circle, btnParty.text, btnQuest.circle, btnQuest.text, btnGacha.circle, btnGacha.text,
+            s2Label, btnInventory.rect, btnInventory.text, btnShop.rect, btnShop.text,
+            s3Label, this.musicBtn.rect, this.musicTxt, this.sfxBtn.rect, this.sfxTxt,
+            btnLogout.rect, btnLogout.text, closeBtnCircle, closeBtnText
+        ]);
+
+        this.confirmContainer = this.add.container(0, 0).setDepth(100).setVisible(false);
+        const cBackdrop = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.8).setInteractive();
+        cBackdrop.on('pointerdown', (p, x, y, e) => e.stopPropagation());
+
+        const cPanel = this.add.rectangle(CX, H / 2, 300, 150, 0x0d1425).setInteractive();
+        cPanel.setStrokeStyle(2, 0xe74c3c);
+        cPanel.on('pointerdown', (p, x, y, e) => e.stopPropagation());
+
+        const cText = this.add.text(CX, H / 2 - 25, 'Apakah Anda yakin ingin logout?', {
+            fontSize: '12px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY, align: 'center', wordWrap: { width: 260 }
+        }).setOrigin(0.5);
+
+        const btnYesObj = this._createModalRectBtn(CX - 65, H / 2 + 30, 100, 32, 'LOGOUT', () => clearSession(this), 0x7f1d1d, 0xef4444);
+        const btnNoObj = this._createModalRectBtn(CX + 65, H / 2 + 30, 100, 32, 'BATAL', () => this.confirmContainer.setVisible(false), THEME.PANEL, THEME.BORDER);
+
+        this.confirmContainer.add([cBackdrop, cPanel, cText, btnYesObj.rect, btnYesObj.text, btnNoObj.rect, btnNoObj.text]);
+    }
+
+    _createModalRoundBtn(x, y, label, onClick) {
+        const circle = this.add.circle(x, y, 22, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
+        const text = this.add.text(x, y, label, { fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
+        circle.on('pointerover', () => circle.setFillStyle(0x334155));
+        circle.on('pointerout', () => circle.setFillStyle(THEME.PANEL));
+        circle.on('pointerdown', onClick);
+        return { circle, text };
+    }
+
+    _createModalRectBtn(x, y, w, h, label, onClick, bgColor = THEME.PANEL, borderColor = THEME.BORDER) {
+        const rect = this.add.rectangle(x, y, w, h, bgColor).setStrokeStyle(1, borderColor).setInteractive({ useHandCursor: true });
+        const text = this.add.text(x, y, label, { fontSize: '10px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
+        rect.on('pointerover', () => rect.setFillStyle(0x334155));
+        rect.on('pointerout', () => rect.setFillStyle(bgColor));
+        rect.on('pointerdown', onClick);
+        return { rect, text };
+    }
+
+    toggleMenuModal(show) {
+        this.menuContainer.setVisible(show);
+        if (show) this.updateAudioButtonVisuals();
+    }
+
+    toggleMusic() {
+        this.musicOn = !this.musicOn;
+        localStorage.setItem('music_on', this.musicOn);
+        this.updateAudioButtonVisuals();
+        this.sound.mute = !this.musicOn && !this.sfxOn;
+    }
+
+    toggleSfx() {
+        this.sfxOn = !this.sfxOn;
+        localStorage.setItem('sfx_on', this.sfxOn);
+        this.updateAudioButtonVisuals();
+        this.sound.mute = !this.musicOn && !this.sfxOn;
+    }
+
+    updateAudioButtonVisuals() {
+        if (!this.musicBtn || !this.sfxBtn) return;
+        this.musicBtn.rect.setFillStyle(this.musicOn ? 0x0d2a1a : 0x2a0d0d);
+        this.musicBtn.rect.setStrokeStyle(1, this.musicOn ? 0x2ecc71 : 0xe74c3c);
+        this.musicTxt.setText(`MUSIC: ${this.musicOn ? 'ON' : 'OFF'}`).setColor(this.musicOn ? '#a8e6cf' : '#ff8a80');
+
+        this.sfxBtn.rect.setFillStyle(this.sfxOn ? 0x0d2a1a : 0x2a0d0d);
+        this.sfxBtn.rect.setStrokeStyle(1, this.sfxOn ? 0x2ecc71 : 0xe74c3c);
+        this.sfxTxt.setText(`SFX: ${this.sfxOn ? 'ON' : 'OFF'}`).setColor(this.sfxOn ? '#a8e6cf' : '#ff8a80');
+    }
+
+    showLogoutConfirmation() {
+        this.confirmContainer.setVisible(true);
     }
 }

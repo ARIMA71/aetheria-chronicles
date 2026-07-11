@@ -105,6 +105,27 @@ export default class BattleApi {
     }
 
     /**
+     * Executes a battle action on the server.
+     * @param {number|string} bsId
+     * @param {object} actionData
+     * @returns {Promise<object>} JSON response from server
+     */
+    static async executeAction(bsId, actionData) {
+        try {
+            const res = await fetch(`${API_BASE}/action`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ bsId, actionData })
+            });
+            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+            return await res.json();
+        } catch (error) {
+            console.error("Failed to execute action:", error);
+            throw error;
+        }
+    }
+
+    /**
      * Player menyerah. Sesi diubah ke FAILED. Stamina hangus.
      * @param {number|string} bsId
      * @param {number} playerId
@@ -121,6 +142,26 @@ export default class BattleApi {
             return await res.json();
         } catch (error) {
             console.error("Failed to surrender battle:", error);
+            throw error;
+        }
+    }
+
+    /**
+     * Ends the current turn and resolves pending server-side state transitions.
+     * @param {number|string} bsId
+     * @returns {Promise<object>} JSON response from server
+     */
+    static async endTurn(bsId) {
+        try {
+            const res = await fetch(`${API_BASE}/end_turn`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ bsId })
+            });
+            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+            return await res.json();
+        } catch (error) {
+            console.error("Failed to end turn:", error);
             throw error;
         }
     }

@@ -1,5 +1,6 @@
 const db = require('../config/db');
 const GridCalculatorService = require('./GridCalculatorService');
+const DamageCalculatorService = require('./DamageCalculatorService');
 const AiBehaviorService = require('./AiBehaviorService');
 const BattleMemoryStore = require('../cache/BattleMemoryStore');
 
@@ -8,12 +9,12 @@ function formatStatusEffect(row, prefix = '') {
     const name = row[`${prefix}effect_name`];
     if (!name) return null;
     return {
-        effect_name:   name,
-        effect_type:   row[`${prefix}effect_type`]   || null,
-        target_stat:   row[`${prefix}target_stat`]   || null,
-        value:         Number(row[`${prefix}effect_value`]) || 0,
-        duration:      row[`${prefix}effect_duration`] !== undefined ? row[`${prefix}effect_duration`] : null,
-        effect_target: row[`${prefix}effect_target`]  || null
+        effect_name: name,
+        effect_type: row[`${prefix}effect_type`] || null,
+        target_stat: row[`${prefix}target_stat`] || null,
+        value: Number(row[`${prefix}effect_value`]) || 0,
+        duration: row[`${prefix}effect_duration`] !== undefined ? row[`${prefix}effect_duration`] : null,
+        effect_target: row[`${prefix}effect_target`] || null
     };
 }
 
@@ -74,10 +75,13 @@ class BattleService {
         FROM player_party_presets ppp
         JOIN player_inventories pi ON ppp.main_char_inv_id = pi.inv_id
         JOIN player_mc_skills pmcs ON ppp.ppp_id = pmcs.ppp_id
+        JOIN item_skills its_mc ON pmcs.ms_id = its_mc.ms_id AND its_mc.item_id = 1 AND its_mc.item_type = 'Character'
         JOIN master_skills ms ON pmcs.ms_id = ms.ms_id
         LEFT JOIN skill_status_effects sse ON ms.ms_id = sse.ms_id
         LEFT JOIN master_status_effects mse ON sse.mse_id = mse.mse_id
         WHERE ppp.player_id = ? AND ppp.preset_slot = ?
+          AND pi.item_level >= its_mc.unlock_level 
+          AND pi.limit_break_level >= its_mc.unlock_limit_break
         UNION ALL
         SELECT pi.inv_id, ms.ms_id, ms.ms_name AS name, ms.ms_category AS category,
             ms.ms_action_type AS type, ms.ms_target_type AS target_type, ms.ms_modifier_value AS modifier,
@@ -93,6 +97,8 @@ class BattleService {
         LEFT JOIN skill_status_effects sse ON ms.ms_id = sse.ms_id
         LEFT JOIN master_status_effects mse ON sse.mse_id = mse.mse_id
         WHERE ppp.player_id = ? AND ppp.preset_slot = ?
+          AND pi.item_level >= its.unlock_level 
+          AND pi.limit_break_level >= its.unlock_limit_break
         UNION ALL
         SELECT pi_mc.inv_id, ms.ms_id, ms.ms_name AS name, ms.ms_category AS category,
             ms.ms_action_type AS type, ms.ms_target_type AS target_type, ms.ms_modifier_value AS modifier,
@@ -128,7 +134,7 @@ class BattleService {
         `;
 
         const queryMonsters = `
-        SELECT mon.mon_id, mon.mon_name, mon.mon_element, mon.mon_base_hp, mon.mon_hp_growth,
+        SELECT mon.mon_id, mon.mon_name, mon.mon_type, mon.mon_element, mon.mon_base_hp, mon.mon_hp_growth,
             mon.mon_base_atk, mon.mon_atk_growth, mon.mon_base_def, mon.mon_def_growth, mon.mon_max_ca,
             mon.mon_icon_path, mon.mon_sprite_path, qe.monster_level,
             mb.mb_id, mb.boss_phase, mb.base_utility, mb.score_modifiers,
@@ -195,7 +201,7 @@ class BattleService {
                 skillMap.set(key, {
                     _inv_id: row.inv_id, id: row.ms_id, name: row.name, category: row.category,
                     type: row.type, target_type: row.target_type, modifier: Number(row.modifier) || 0,
-                    cooldown: row.cooldown, element: row.element, 
+                    cooldown: row.cooldown, element: row.element,
                     trigger_delay: Boolean(row.trigger_delay), trigger_dispel: Boolean(row.trigger_dispel),
                     trigger_heal_pct: Number(row.trigger_heal_pct) || 0, hp_cost_pct: Number(row.hp_cost_pct) || 0,
                     icon_path: row.icon_path, vfx_path: row.vfx_path,
@@ -217,13 +223,16 @@ class BattleService {
                 const finalHp = (Number(row.mon_base_hp) || 0) + (Number(row.mon_hp_growth) || 0) * ((row.monster_level || 1) - 1);
                 monsterMap[row.mon_id] = {
                     id: row.mon_id, name: row.mon_name, element: row.mon_element, level: row.monster_level || 1,
+                    is_boss: (row.mon_type === 'Boss'),
                     final_stats: {
-                        hp:  finalHp,
+                        hp: finalHp,
                         atk: (Number(row.mon_base_atk) || 0) + (Number(row.mon_atk_growth) || 0) * ((row.monster_level || 1) - 1),
                         def: (Number(row.mon_base_def) || 0) + (Number(row.mon_def_growth) || 0) * ((row.monster_level || 1) - 1)
                     },
                     current_hp: finalHp,
                     current_ca: 0,
+                    mode_state: 'normal',
+                    mode_bar: 0,
                     active_buffs: [],
                     caMax: Number(row.mon_max_ca) || 5, icon_path: row.mon_icon_path, sprite_path: row.mon_sprite_path,
                     ai_behaviors: []
@@ -275,10 +284,14 @@ class BattleService {
             player_party: { characters },
             enemies,
             potion_count: potionCount,
-            full_potion_count: fullPotionCount
+            full_potion_count: fullPotionCount,
+            heals_remaining: Math.min(3, potionCount),
+            potions_used: 0
         };
 
-        // Guard: cegah double-init jika sudah ada sesi ACTIVE
+        // [FASE 1: DISABLE DOUBLE INIT CHECK]
+        // Guard: cegah double-init jika sudah ada sesi ACTIVE (Disabled for debugging forced refresh)
+        /*
         const [existingActive] = await db.query(
             'SELECT bs_id FROM battle_sessions WHERE player_id = ? AND bs_status = \'ACTIVE\' LIMIT 1',
             [playerId]
@@ -286,6 +299,7 @@ class BattleService {
         if (existingActive.length > 0) {
             throw new Error('ACTIVE_SESSION_EXISTS: Pemain masih memiliki pertempuran aktif (bs_id: ' + existingActive[0].bs_id + '). Selesaikan dulu sebelum memulai yang baru.');
         }
+        */
 
         // Create Database Anchor Record with status tracking
         const [insertRes] = await db.query(
@@ -314,7 +328,7 @@ class BattleService {
             // RAM Cache miss (biasanya karena server restart/nodemon). Tarik dari DB.
             const [rows] = await db.query('SELECT battle_state_json FROM battle_sessions WHERE bs_id = ?', [bsId]);
             if (rows.length > 0 && rows[0].battle_state_json) {
-                try { originalState = JSON.parse(rows[0].battle_state_json); } catch (e) {}
+                try { originalState = JSON.parse(rows[0].battle_state_json); } catch (e) { }
             }
         }
 
@@ -431,6 +445,660 @@ class BattleService {
         } catch (err) {
             console.error('[BattleService GC] Error during active session sweep:', err.message);
         }
+    }
+
+    /**
+     * Helper to find an entity in the battle state
+     */
+    _findEntity(state, entityId) {
+        if (entityId.startsWith('enemy_')) {
+            const idx = parseInt(entityId.split('_')[1], 10);
+            return state.enemies[idx];
+        }
+        return state.player_party.characters.find(c => c.slot === entityId || c.id === entityId || c.inv_id == entityId);
+    }
+
+    /**
+     * Process a battle action server-side (Phase 2-6)
+     */
+    async processAction(bsId, actionData) {
+        let state = BattleMemoryStore.get(bsId);
+        if (!state) {
+            // Try to load from DB
+            const [rows] = await db.query('SELECT battle_state_json FROM battle_sessions WHERE bs_id = ?', [bsId]);
+            if (rows.length > 0 && rows[0].battle_state_json) {
+                try { state = JSON.parse(rows[0].battle_state_json); } catch (e) { }
+            }
+        }
+
+        if (!state) throw new Error('Battle session not found or expired');
+
+        if (state.is_processing) {
+            throw new Error('RACE_CONDITION: Action is already being processed');
+        }
+        state.is_processing = true;
+
+        try {
+            const events = [];
+            const { sourceId, targetIds, actionType, skillId } = actionData;
+
+            if (actionType === 'use_potion') {
+                if (state.heals_remaining <= 0) throw new Error('No Green Potions remaining in this battle.');
+                
+                const target = this._findEntity(state, targetIds[0]);
+                if (!target) throw new Error('Target not found for potion');
+                if (target.current_hp <= 0) throw new Error('Cannot use Green Potion on a defeated character.');
+
+                state.heals_remaining -= 1;
+                state.potions_used = (state.potions_used || 0) + 1;
+                
+                const maxHp = target.final_stats ? target.final_stats.hp : target.max_hp;
+                const healAmt = Math.floor(maxHp * 0.40);
+                target.current_hp = Math.min((target.current_hp || maxHp) + healAmt, maxHp);
+
+                events.push({
+                    type: 'heal',
+                    sourceId: sourceId,
+                    targetId: targetIds[0],
+                    value: healAmt,
+                    skillName: 'Green Potion'
+                });
+
+                state.is_processing = false;
+                db.query(`UPDATE battle_sessions SET battle_state_json = ? WHERE bs_id = ? AND bs_status = 'ACTIVE'`, [JSON.stringify(state), bsId]).catch(e => console.error(e));
+                return { events, stateSnapshot: state };
+            }
+
+            if (actionType === 'aether_burst') {
+                if ((state.aether_gauge || 0) < 100) throw new Error('Aether Burst not ready! Gauge must be 100%.');
+                
+                const attacker = this._findEntity(state, sourceId);
+                const target = this._findEntity(state, targetIds[0] || 'enemy_0');
+                if (!attacker || !target) throw new Error('Attacker or Target not found');
+
+                state.aether_gauge = 0; // Consume gauge
+
+                // Dummy skill for Aether Burst
+                const aetherSkill = {
+                    name: 'Aether Burst',
+                    type: 'Damage',
+                    modifier: 3.5,
+                    element: attacker.element || 'Neutral'
+                };
+
+                const calcResult = DamageCalculatorService.calculateDamage(attacker, target, aetherSkill);
+                target.current_hp = Math.max(0, (target.current_hp || target.final_stats.hp) - calcResult.damage);
+
+                // Apply DEF Down 25% for 2 turns
+                target.active_buffs = target.active_buffs || [];
+                target.active_buffs.push({
+                    effect_type: 'debuff',
+                    effect_name: 'DEF Down',
+                    target_stat: 'def',
+                    modifier_value: -0.25,
+                    duration_turns: 2
+                });
+
+                events.push({
+                    type: 'damage',
+                    sourceId: sourceId,
+                    targetId: targetIds[0] || 'enemy_0',
+                    value: calcResult.damage,
+                    isCrit: calcResult.isCrit,
+                    mitigation: calcResult.mitigationPercent,
+                    skillName: '✦ Aether Burst'
+                });
+                events.push({
+                    type: 'effect_applied',
+                    targetId: targetIds[0] || 'enemy_0',
+                    effectName: 'DEF Down (-25%)'
+                });
+
+                state.is_processing = false;
+                db.query(`UPDATE battle_sessions SET battle_state_json = ? WHERE bs_id = ? AND bs_status = 'ACTIVE'`, [JSON.stringify(state), bsId]).catch(e => console.error(e));
+                return { events, stateSnapshot: state };
+            }
+
+            const attacker = this._findEntity(state, sourceId);
+            if (!attacker) throw new Error('Attacker not found in state');
+
+            // Find the skill
+            let skill = null;
+            if (actionType === 'skill') {
+                if (attacker.skills) {
+                    skill = attacker.skills.find(s => s.id == skillId);
+                    if (skill && (skill.category || '').toLowerCase() === 'special') {
+                        attacker.current_sa = 0; // Reset Player SA
+                        
+                        // SA Chain Burst & Aether Gauge Tracking
+                        if (!sourceId.startsWith('enemy_')) {
+                            state.current_turn_sa_count = (state.current_turn_sa_count || 0) + 1;
+                            if (state.current_turn_sa_count === 1) {
+                                state.first_sa_element = attacker.element || 'Neutral';
+                                state.first_sa_attacker_id = sourceId;
+                            }
+                            state.aether_gauge = Math.min(100, (state.aether_gauge || 0) + 10);
+                        }
+                    }
+                } else if (attacker.ai_behaviors) {
+                    const b = attacker.ai_behaviors.find(b => b.skill.id == skillId);
+                    if (b) {
+                        skill = b.skill;
+                        if ((skill.category || '').toLowerCase() === 'special') {
+                            attacker.current_ca = 0; // Reset Enemy CA
+                        }
+                    }
+                }
+                if (!skill) throw new Error('Skill not found for entity');
+            } else if (actionType === 'attack') {
+                // Generate a dummy basic attack skill
+                skill = {
+                    name: 'Basic Attack',
+                    type: 'Damage',
+                    modifier: 1.0,
+                    element: attacker.element
+                };
+            }
+
+            const targets = (targetIds || []).map(id => this._findEntity(state, id)).filter(t => t);
+
+            for (const target of targets) {
+                const sType = (skill.type || '').toLowerCase();
+
+                // 1. Process Self HP Cost BEFORE anything else
+                const hpCostPct = parseFloat(skill.hp_cost_pct) || 0;
+                
+                if (hpCostPct > 0 && attacker.current_hp > 0) {
+                    const hpCost = Math.floor((attacker.final_stats ? attacker.final_stats.hp : 1000) * hpCostPct);
+                    attacker.current_hp = Math.max(0, attacker.current_hp - hpCost);
+                    
+                    // Only emit cost once per skill, not per target
+                    if (targets.indexOf(target) === 0) {
+                        events.push({
+                            type: 'damage',
+                            sourceId: sourceId,
+                            targetId: sourceId,
+                            value: hpCost,
+                            skillName: skill.name,
+                            isCost: true
+                        });
+                    }
+                }
+
+                // 2. Process SA Gain (Once per skill)
+                const saGain = parseInt(skill.ms_sa_gain) || 0;
+                if (saGain > 0 && targets.indexOf(target) === 0 && !sourceId.startsWith('enemy_')) {
+                    attacker.current_sa = Math.min(100, (attacker.current_sa || 0) + saGain);
+                    events.push({
+                        type: 'effect_applied',
+                        targetId: sourceId,
+                        effectName: `+${saGain}% SA Bar`
+                    });
+                }
+
+                // 3. Process Target Instant Effects (Delay, Dispel, Heal Pct)
+                if (skill.trigger_delay > 0 && targetIds[targets.indexOf(target)].startsWith('enemy_')) {
+                    if (target.current_ca > 0) {
+                        target.current_ca -= 1;
+                        events.push({ type: 'effect_applied', targetId: targetIds[targets.indexOf(target)], effectName: 'Delay' });
+                    }
+                }
+
+                if (skill.trigger_dispel > 0 && target.active_buffs) {
+                    const buffs = target.active_buffs.filter(e => (e.effect_type || '').toLowerCase() === 'buff');
+                    if (buffs.length > 0) {
+                        // Remove the most recently applied buff (or random)
+                        const removed = buffs.pop();
+                        target.active_buffs = target.active_buffs.filter(b => b !== removed);
+                        events.push({ type: 'effect_applied', targetId: targetIds[targets.indexOf(target)], effectName: 'Dispel' });
+                    }
+                }
+
+                const triggerHealPct = parseFloat(skill.trigger_heal_pct) || 0;
+                if (triggerHealPct > 0 && target.current_hp > 0) {
+                    const healAmt = Math.floor(target.final_stats.hp * triggerHealPct);
+                    target.current_hp = Math.min((target.current_hp || target.final_stats.hp) + healAmt, target.final_stats.hp);
+                    events.push({ type: 'heal', targetId: targetIds[targets.indexOf(target)], value: healAmt, skillName: skill.name });
+                }
+
+                if (sType === 'damage' || actionType === 'attack') {
+                    // Execute 6-Phase Damage Calculation
+                    const calcResult = DamageCalculatorService.calculateDamage(attacker, target, skill);
+
+                    target.current_hp = Math.max(0, (target.current_hp || target.final_stats.hp) - calcResult.damage);
+                    console.log(`[DEBUG] Damage Event: ${sourceId} -> ${targetIds[targets.indexOf(target)]}, skill: ${skill.name}, dmg: ${calcResult.damage}`);
+
+                    // Update Enemy Mode Bar BEFORE pushing damage event
+                    if (targetIds[targets.indexOf(target)].startsWith('enemy_') && target.is_boss) {
+                        const threshold = (target.final_stats.hp || target.max_hp) * 0.20;
+                        const isAttackSequence = actionData.isAttackSequence === true;
+                        const currentState = target.mode_state || 'normal';
+
+                        if (currentState === 'normal') {
+                            target.mode_bar = (target.mode_bar !== undefined ? target.mode_bar : 0) + calcResult.damage;
+                            if (target.mode_bar >= threshold) {
+                                target.mode_bar = threshold;
+                                if (isAttackSequence) {
+                                    target.pending_mode_transition = 'enraged';
+                                } else {
+                                    target.mode_state = 'enraged';
+                                    target.enrage_turns = 3;
+                                    // enrage event will be pushed AFTER damage event
+                                }
+                            }
+                        } else if (currentState === 'enraged') {
+                            // If pending enraged is active, damage still doesn't reduce bar (locked until turn end)
+                            if (target.pending_mode_transition !== 'enraged') {
+                                let currentModeBar = target.mode_bar !== undefined ? target.mode_bar : threshold;
+                                target.mode_bar = currentModeBar - calcResult.damage;
+                                if (target.mode_bar <= 0) {
+                                    target.mode_bar = 0;
+                                    if (isAttackSequence) {
+                                        target.pending_mode_transition = 'exhausted';
+                                    } else {
+                                        target.mode_state = 'exhausted';
+                                        target.exhaust_turns = 2;
+                                        target.enrage_turns = 0;
+                                        // break event will be pushed AFTER damage event
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    events.push({
+                        type: 'damage',
+                        sourceId: sourceId,
+                        targetId: targetIds[targets.indexOf(target)],
+                        value: calcResult.damage,
+                        isCrit: calcResult.isCrit,
+                        mitigation: calcResult.mitigationPercent,
+                        skillName: skill.name,
+                        modeBar: target.mode_bar,
+                        modeState: target.mode_state
+                    });
+                    
+                    // Push mode transition events if triggered immediately (not pending)
+                    if (targetIds[targets.indexOf(target)].startsWith('enemy_') && target.is_boss) {
+                        const isAttackSequence = actionData.isAttackSequence === true;
+                        if (!isAttackSequence) {
+                            if (target.mode_state === 'enraged' && target.mode_bar === (target.final_stats.hp || target.max_hp) * 0.20) {
+                                events.push({ type: 'enrage', targetId: targetIds[targets.indexOf(target)] });
+                            } else if (target.mode_state === 'exhausted' && target.mode_bar === 0) {
+                                events.push({ type: 'break', targetId: targetIds[targets.indexOf(target)] });
+                            }
+                        }
+                    }
+
+                    // CA Bar / SA Bar generation (Only on Basic Attacks)
+                    if (actionType === 'attack') {
+                        if (sourceId.startsWith('enemy_')) {
+                            if (attacker.mode_state !== 'exhausted' && !actionData.skipCaGain) {
+                                attacker.current_ca = Math.min(attacker.caMax, (attacker.current_ca || 0) + 1);
+                            }
+                        } else {
+                            attacker.current_sa = Math.min(100, (attacker.current_sa || 0) + 20);
+                        }
+                    }
+                } else if (sType === 'heal') {
+                    const healAmt = Math.floor(target.final_stats.hp * (skill.modifier || 0.2));
+                    target.current_hp = Math.min((target.current_hp || target.final_stats.hp) + healAmt, target.final_stats.hp);
+                    events.push({
+                        type: 'heal',
+                        sourceId: sourceId,
+                        targetId: targetIds[targets.indexOf(target)],
+                        value: healAmt,
+                        skillName: skill.name
+                    });
+                } else if (sType === 'cleanse') {
+                    if (target.active_buffs) {
+                        target.active_buffs = target.active_buffs.filter(e => (e.effect_type || '').toLowerCase() !== 'debuff');
+                    }
+                    events.push({
+                        type: 'cleanse',
+                        sourceId: sourceId,
+                        targetId: targetIds[targets.indexOf(target)],
+                        skillName: skill.name
+                    });
+                    if (skill.modifier > 0) {
+                        const healAmt = Math.floor(target.final_stats.hp * skill.modifier);
+                        target.current_hp = Math.min((target.current_hp || target.final_stats.hp) + healAmt, target.final_stats.hp);
+                        events.push({ type: 'heal', targetId: targetIds[targets.indexOf(target)], value: healAmt, skillName: skill.name });
+                    }
+                } else if (sType === 'revive') {
+                    if (target.current_hp <= 0) {
+                        const healAmt = Math.floor(target.final_stats.hp * (skill.modifier || 0.3));
+                        target.current_hp = healAmt;
+                        events.push({
+                            type: 'revive',
+                            sourceId: sourceId,
+                            targetId: targetIds[targets.indexOf(target)],
+                            value: healAmt,
+                            skillName: skill.name
+                        });
+                    }
+                } else if (sType === 'support' || sType === 'buff' || sType === 'debuff') {
+                    events.push({
+                        type: 'support',
+                        sourceId: sourceId,
+                        targetId: targetIds[targets.indexOf(target)],
+                        skillName: skill.name
+                    });
+                }
+            } // end of targets loop
+
+            // Apply status effects based on their specific effect_target
+            if (skill && skill.status_effects && skill.status_effects.length > 0) {
+                const isPlayerAttacking = !sourceId.startsWith('enemy_');
+                const allies = isPlayerAttacking ? state.player_party.characters : state.enemies;
+                const enemiesList = isPlayerAttacking ? state.enemies : state.player_party.characters;
+
+                skill.status_effects.forEach(eff => {
+                    let effectTargets = [];
+                    const et = (eff.effect_target || 'Target').toLowerCase();
+
+                    if (et === 'self') {
+                        effectTargets = [attacker];
+                    } else if (et === 'target' || et === 'single_enemy' || et === 'single_ally') {
+                        effectTargets = targets;
+                    } else if (et === 'allies' || et === 'self_party' || et === 'all_allies') {
+                        effectTargets = allies;
+                    } else if (et === 'all_enemies') {
+                        effectTargets = enemiesList;
+                    } else {
+                        effectTargets = targets;
+                    }
+
+                    effectTargets.forEach(effTarget => {
+                        if (effTarget && ((effTarget.current_hp !== undefined && effTarget.current_hp > 0) || (effTarget.hp !== undefined && effTarget.hp > 0))) {
+                            if (!effTarget.active_buffs) effTarget.active_buffs = [];
+                            effTarget.active_buffs.push({ ...eff });
+                            
+                            let tid = 'unknown';
+                            if (effTarget.id !== undefined && state.enemies.find(e => e.id === effTarget.id)) {
+                                tid = `enemy_${state.enemies.indexOf(effTarget)}`;
+                            } else if (effTarget.slot) {
+                                tid = effTarget.slot;
+                            }
+                            
+                            events.push({
+                                type: 'effect_applied',
+                                targetId: tid,
+                                effectName: eff.effect_name || eff.target_stat
+                            });
+                        }
+                    });
+                });
+            }
+
+            // Skill Cooldowns
+            if (skill && skill.cooldown && skill.cooldown > 0) {
+                skill.current_cooldown = skill.cooldown;
+            }
+
+            // Track Used Skills for AI One-Time Use logic
+            if (skill && skill.id) {
+                if (!state.used_skills) state.used_skills = [];
+                if (!state.used_skills.includes(skill.id)) {
+                    state.used_skills.push(skill.id);
+                }
+            }
+
+            // Reset CA / SA Bar if special attack is used
+            if (skill && (skill.category || '').toLowerCase() === 'special') {
+                if (sourceId.startsWith('enemy_')) {
+                    attacker.current_ca = 0;
+                } else {
+                    attacker.current_sa = 0;
+                }
+            }
+
+            state.is_processing = false;
+
+            // Async persist
+            // db.query('UPDATE battle_sessions SET battle_state_json = ? WHERE bs_id = ? AND bs_status = \\'ACTIVE\\'', [JSON.stringify(state), bsId]).catch(e => console.error(e));
+            db.query(`UPDATE battle_sessions SET battle_state_json = ? WHERE bs_id = ? AND bs_status = 'ACTIVE'`, [JSON.stringify(state), bsId]).catch(e => console.error(e));
+
+
+            return {
+                events: events,
+                stateSnapshot: state
+            };
+        } catch (err) {
+            state.is_processing = false;
+            throw err;
+        }
+    }
+
+    async processTurnEnd(bsId) {
+        let state = BattleMemoryStore.get(bsId);
+        if (!state) {
+            // Try to load from DB
+            const [rows] = await db.query('SELECT battle_state_json FROM battle_sessions WHERE bs_id = ?', [bsId]);
+            if (rows.length > 0 && rows[0].battle_state_json) {
+                try { state = JSON.parse(rows[0].battle_state_json); } catch (e) { }
+            }
+        }
+        if (!state) throw new Error("ACTIVE_SESSION_NOT_FOUND");
+
+        const events = [];
+
+        // --- SA Chain Burst Trigger ---
+        if ((state.current_turn_sa_count || 0) >= 2) {
+            let chainMult = 1.5;
+            if (state.current_turn_sa_count === 3) chainMult = 2.0;
+            if (state.current_turn_sa_count >= 4) chainMult = 2.5;
+
+            const attacker = this._findEntity(state, state.first_sa_attacker_id);
+            const target = state.enemies && state.enemies[0];
+            
+            if (attacker && target && target.current_hp > 0) {
+                const chainSkill = {
+                    name: `SA Chain Burst`,
+                    type: 'Damage',
+                    modifier: chainMult,
+                    element: state.first_sa_element || 'Neutral'
+                };
+                
+                const calcResult = DamageCalculatorService.calculateDamage(attacker, target, chainSkill);
+                target.current_hp = Math.max(0, (target.current_hp || target.final_stats.hp) - calcResult.damage);
+                
+                events.push({
+                    type: 'damage',
+                    sourceId: attacker.slot || attacker.id,
+                    targetId: 'enemy_0',
+                    value: calcResult.damage,
+                    isCrit: calcResult.isCrit,
+                    mitigation: calcResult.mitigationPercent,
+                    skillName: `💥 SA Chain Burst (${state.current_turn_sa_count}x)`
+                });
+            }
+        }
+        
+        // Reset SA tracking at end of turn
+        state.current_turn_sa_count = 0;
+        state.first_sa_element = null;
+        state.first_sa_attacker_id = null;
+        // ------------------------------
+
+        if (state.enemies) {
+            for (const enemy of state.enemies) {
+                // 1. Resolve pending transitions (Boss ONLY)
+                if (enemy.is_boss) {
+                    if (enemy.pending_mode_transition === 'enraged') {
+                        enemy.mode_state = 'enraged';
+                        enemy.enrage_turns = 3;
+                        enemy.pending_mode_transition = null;
+                        events.push({ type: 'enrage', targetId: 'enemy_0' });
+                    } else if (enemy.pending_mode_transition === 'exhausted') {
+                        enemy.mode_state = 'exhausted';
+                        enemy.exhaust_turns = 2;
+                        enemy.enrage_turns = 0;
+                        enemy.pending_mode_transition = null;
+                        events.push({ type: 'break', targetId: 'enemy_0' });
+                    } else {
+                        // 2. Tick turn counts if no transition was just resolved
+                        if (enemy.mode_state === 'enraged') {
+                            enemy.enrage_turns = (enemy.enrage_turns || 3) - 1;
+                            if (enemy.enrage_turns <= 0) {
+                                // User rule: Time out Enraged -> Back to Normal (NOT exhausted)
+                                enemy.mode_state = 'normal';
+                                enemy.mode_bar = 0;
+                                enemy.enrage_turns = 0;
+                                events.push({ type: 'effect_applied', targetId: 'enemy_0', effectName: 'Enrage Timeout' });
+                            }
+                        } else if (enemy.mode_state === 'exhausted') {
+                            enemy.exhaust_turns = (enemy.exhaust_turns || 2) - 1;
+                            if (enemy.exhaust_turns <= 0) {
+                                enemy.mode_state = 'normal';
+                                enemy.mode_bar = 0;
+                                enemy.exhaust_turns = 0;
+                                events.push({ type: 'effect_applied', targetId: 'enemy_0', effectName: 'Recovered' });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Tick active buffs duration for everyone
+        const tickBuffs = (entity, entityId) => {
+            if (entity.active_buffs && entity.active_buffs.length > 0) {
+                for (let i = entity.active_buffs.length - 1; i >= 0; i--) {
+                    const buff = entity.active_buffs[i];
+                    const durKey = buff.mse_duration !== undefined ? 'mse_duration' : (buff.duration !== undefined ? 'duration' : null);
+                    if (durKey && buff[durKey] > 0) {
+                        buff[durKey] -= 1;
+                        if (buff[durKey] <= 0) {
+                            events.push({
+                                type: 'effect_removed',
+                                targetId: entityId,
+                                effectName: buff.effect_name || buff.target_stat
+                            });
+                            entity.active_buffs.splice(i, 1);
+                        }
+                    }
+                }
+            }
+        };
+
+        if (state.enemies) {
+            state.enemies.forEach((enemy, idx) => tickBuffs(enemy, `enemy_${idx}`));
+        }
+        if (state.player_party && state.player_party.characters) {
+            state.player_party.characters.forEach(char => tickBuffs(char, char.slot));
+        }
+
+        // Async persist
+        db.query(`UPDATE battle_sessions SET battle_state_json = ? WHERE bs_id = ? AND bs_status = 'ACTIVE'`, [JSON.stringify(state), bsId]).catch(e => console.error(e));
+
+        return {
+            events: events,
+            stateSnapshot: state
+        };
+    }
+    async processEnemyTurn(bsId) {
+        let state = BattleMemoryStore.get(bsId);
+        if (!state) {
+            const [rows] = await db.query('SELECT battle_state_json FROM battle_sessions WHERE bs_id = ?', [bsId]);
+            if (rows.length > 0 && rows[0].battle_state_json) {
+                try { state = JSON.parse(rows[0].battle_state_json); } catch (e) { }
+            }
+        }
+        if (!state) throw new Error("ACTIVE_SESSION_NOT_FOUND");
+        
+        const enemy = state.enemies && state.enemies[0];
+        if (!enemy || (enemy.current_hp !== undefined ? enemy.current_hp : enemy.hp) <= 0) {
+            return { events: [], stateSnapshot: state };
+        }
+        
+        let allEvents = [];
+        const AiBehaviorService = require('./AiBehaviorService');
+        
+        let caSkill = null;
+        
+        if (enemy.is_boss) {
+            // 1. Determine AI Action for Boss
+            caSkill = AiBehaviorService.calculateBossAction(state, enemy.ai_behaviors || enemy.aiBehaviors);
+            
+            // --- FALLBACK MECHANISM ---
+            if (!caSkill) {
+                const currentCa = enemy.current_ca !== undefined ? enemy.current_ca : 0;
+                const caMax = enemy.caMax !== undefined ? enemy.caMax : (enemy.final_stats && enemy.final_stats.caMax) !== undefined ? enemy.final_stats.caMax : 5;
+                const isExhausted = (enemy.mode_state || enemy.modeState) === 'exhausted';
+                
+                if (currentCa >= caMax && !isExhausted) {
+                    const phase = (enemy.mode_state || enemy.modeState || 'Normal').trim().toLowerCase();
+                    console.warn(`[AI WARNING] Boss ID ${enemy.id} has no valid Special Skill mapped for Phase '${phase}' or logic failed. Using Random Fallback.`);
+                    
+                    const specialSkills = (enemy.ai_behaviors || enemy.aiBehaviors || []).filter(b => {
+                        const skill = b.skill || b;
+                        const cat = skill.category || '';
+                        return cat.toLowerCase() === 'special';
+                    });
+                    
+                    if (specialSkills.length > 0) {
+                        caSkill = specialSkills[Math.floor(Math.random() * specialSkills.length)];
+                    }
+                }
+            }
+        } else {
+            // Normal Monster Logic: Cast a random skill from their behavior list if CA is full
+            const currentCa = enemy.current_ca !== undefined ? enemy.current_ca : 0;
+            const caMax = enemy.caMax !== undefined ? enemy.caMax : (enemy.final_stats && enemy.final_stats.caMax) !== undefined ? enemy.final_stats.caMax : 5;
+            
+            const availableSkills = enemy.ai_behaviors || enemy.aiBehaviors || [];
+            
+            if (currentCa >= caMax && availableSkills.length > 0) {
+                caSkill = availableSkills[Math.floor(Math.random() * availableSkills.length)];
+            }
+        }
+        
+        if (caSkill) {
+            // CA Action
+            let targetIds = [];
+            const tType = caSkill.skill ? caSkill.skill.target_type : caSkill.target_type;
+            const alive = (state.player_party.characters || []).filter(p => (p.current_hp !== undefined ? p.current_hp : p.hp) > 0);
+            
+            if (tType === 'All_Enemies' || tType === 'All_Allies') {
+                targetIds = alive.map(p => p.slot || p.id);
+            } else {
+                if (alive.length > 0) targetIds = [alive[Math.floor(Math.random() * alive.length)].slot || alive[0].id];
+            }
+            
+            if (targetIds.length > 0) {
+                const actionData = { sourceId: 'enemy_0', targetIds, actionType: 'skill', skillId: caSkill.skill ? caSkill.skill.id : caSkill.id };
+                const res = await this.processAction(bsId, actionData);
+                allEvents.push({ type: 'log', message: `💀 ENEMY SPECIAL ATTACK: ${caSkill.skill ? caSkill.skill.name : caSkill.name}!` });
+                allEvents.push(...res.events);
+                state = res.stateSnapshot;
+            }
+        } else {
+            // Basic Attack(s)
+            let attacksCount = 1;
+            // Mode State Check for Double Attack
+            const isCaMax = (enemy.current_ca || 0) >= (enemy.caMax !== undefined ? enemy.caMax : (enemy.final_stats && enemy.final_stats.caMax) !== undefined ? enemy.final_stats.caMax : 5);
+            if ((enemy.mode_state === 'enraged' || enemy.modeState === 'enraged') && !isCaMax && Math.random() < 0.3) {
+                attacksCount = 2;
+            }
+            
+            for (let i = 0; i < attacksCount; i++) {
+                let targetIds = [];
+                const alive = (state.player_party.characters || []).filter(p => (p.current_hp !== undefined ? p.current_hp : p.hp) > 0);
+                if (alive.length > 0) {
+                    targetIds = [alive[Math.floor(Math.random() * alive.length)].slot || alive[0].id];
+                }
+                
+                const actionData = { sourceId: 'enemy_0', targetIds, actionType: 'attack', skillId: null, skipCaGain: i > 0 };
+                const res = await this.processAction(bsId, actionData);
+                
+                if (i === 1) allEvents.push({ type: 'log', message: `🔥 ENEMY DOUBLE ATTACK!` });
+                allEvents.push(...res.events);
+                state = res.stateSnapshot;
+            }
+        }
+        
+        return { events: allEvents, stateSnapshot: state };
     }
 }
 

@@ -3,7 +3,12 @@
  * Handles pure calculations for damage, element multipliers, and status effects.
  */
 
-export default class CombatManager {
+export default /**
+ * DEPRECATED: CombatManager is no longer used for logic.
+ * All combat calculations (Phase 2-6) have been moved to the Server-Side
+ * in CombatService / DamageCalculatorService to enforce a Server-Authoritative architecture.
+ */
+class CombatManager {
     /**
      * Calculates the mitigated damage with elemental advantage.
      * @param {number} rawDmg - Base damage (ATK * modifier)
