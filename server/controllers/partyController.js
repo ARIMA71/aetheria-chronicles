@@ -9,6 +9,18 @@ exports.getPartyPresets = async (req, res) => {
 
         let [presets] = await conn.query('SELECT * FROM player_party_presets WHERE player_id = ? ORDER BY preset_slot ASC', [playerId]);
 
+        // Auto-correct main_char_inv_id to ensure MC data is always valid (heals broken states from DB rebuilds)
+        const [mcRows] = await conn.query("SELECT inv_id FROM player_inventories WHERE player_id = ? AND master_item_id = 1 AND item_type = 'Character' LIMIT 1", [playerId]);
+        const trueMcInvId = mcRows.length > 0 ? mcRows[0].inv_id : null;
+        if (trueMcInvId) {
+            for (let p of presets) {
+                if (p.main_char_inv_id !== trueMcInvId) {
+                    await conn.query('UPDATE player_party_presets SET main_char_inv_id = ? WHERE ppp_id = ?', [trueMcInvId, p.ppp_id]);
+                    p.main_char_inv_id = trueMcInvId;
+                }
+            }
+        }
+
         // Inisialisasi Pemain Baru: Generate 1 Preset di Slot 1 jika kosong
         if (presets.length === 0) {
             const [mcRows] = await conn.query("SELECT inv_id FROM player_inventories WHERE player_id = ? AND master_item_id = 1 AND item_type = 'Character' LIMIT 1", [playerId]);
@@ -24,7 +36,7 @@ exports.getPartyPresets = async (req, res) => {
                     VALUES (?, 1, ?, ?)`,
                     [playerId, mcInvId, weapInvId]
                 );
-                
+
                 const pppId = insertRes.insertId;
                 await conn.query(
                     `INSERT INTO player_mc_skills (ppp_id, slot_number, ms_id) VALUES 
@@ -69,7 +81,7 @@ exports.getPlayerInventory = async (req, res) => {
     try {
         // 1. Fetch characters
         const [characters] = await db.query(`
-            SELECT pi.inv_id, pi.master_item_id, pi.item_level, pi.limit_break_level, mc.*,
+            SELECT pi.inv_id, pi.master_item_id, pi.item_level, pi.limit_break_level, pi.item_exp, mc.*,
                    sa.ms_id AS sa_id, sa.ms_name AS sa_name, sa.ms_desc AS sa_desc, sa.ms_category AS sa_category, sa.ms_element AS sa_element
             FROM player_inventories pi
             JOIN master_characters mc ON pi.master_item_id = mc.mc_id
@@ -79,7 +91,7 @@ exports.getPlayerInventory = async (req, res) => {
 
         // 2. Fetch weapons
         const [weapons] = await db.query(`
-            SELECT pi.inv_id, pi.master_item_id, pi.item_level, pi.limit_break_level, mw.*,
+            SELECT pi.inv_id, pi.master_item_id, pi.item_level, pi.limit_break_level, pi.item_exp, mw.*,
                    sa.ms_id AS sa_id, sa.ms_name AS sa_name, sa.ms_desc AS sa_desc, sa.ms_category AS sa_category, sa.ms_element AS sa_element
             FROM player_inventories pi
             JOIN master_weapons mw ON pi.master_item_id = mw.mw_id
@@ -149,6 +161,41 @@ exports.getPlayerInventory = async (req, res) => {
             }
         }
 
+        // 4.5. Eager-load status effects for all fetched skills
+        const allMsIds = new Set();
+        characters.forEach(c => {
+            if (c.skills) c.skills.forEach(s => allMsIds.add(s.ms_id));
+        });
+        weapons.forEach(w => {
+            if (w.skills) w.skills.forEach(s => allMsIds.add(s.ms_id));
+        });
+
+        if (allMsIds.size > 0) {
+            const msIdArray = Array.from(allMsIds);
+            const [effects] = await db.query(`
+                 SELECT sse.ms_id, mse.mse_name AS effect_name, mse.mse_type AS effect_type, mse.modifier_target AS target_stat, mse.modifier_value AS value, mse.mse_duration AS duration, sse.effect_target
+                 FROM skill_status_effects sse
+                 JOIN master_status_effects mse ON sse.mse_id = mse.mse_id
+                 WHERE sse.ms_id IN (?)
+             `, [msIdArray]);
+
+            const effectMap = {};
+            for (const e of effects) {
+                if (!effectMap[e.ms_id]) effectMap[e.ms_id] = [];
+                effectMap[e.ms_id].push({
+                    effect_name: e.effect_name, effect_type: e.effect_type, target_stat: e.target_stat,
+                    value: e.value, duration: e.duration, effect_target: e.effect_target
+                });
+            }
+
+            characters.forEach(c => {
+                if (c.skills) c.skills.forEach(s => s.status_effects = effectMap[s.ms_id] || []);
+            });
+            weapons.forEach(w => {
+                if (w.skills) w.skills.forEach(s => s.status_effects = effectMap[s.ms_id] || []);
+            });
+        }
+
         // 5. Fetch materials
         const [materials] = await db.query(`
             SELECT pm.mat_id, pm.quantity, mm.mat_name, mm.mat_desc, mm.icon_path
@@ -214,7 +261,7 @@ exports.savePartyPreset = async (req, res) => {
             const [owned] = await conn.query(`SELECT inv_id FROM player_inventories WHERE player_id = ? AND inv_id IN (?)`, [playerId, invIds]);
             const ownedIds = owned.map(o => o.inv_id);
             const unowned = invIds.filter(id => !ownedIds.includes(Number(id)));
-            
+
             if (unowned.length > 0) {
                 await conn.rollback();
                 conn.release();
@@ -229,7 +276,7 @@ exports.savePartyPreset = async (req, res) => {
             conn.release();
             return res.status(400).json({ status: 'error', message: 'Tidak boleh menggunakan inv_id senjata yang sama di slot berbeda.' });
         }
-        
+
         // 3. Prevent duplicate inv_ids in characters
         const characters = [char_slot_1_inv_id, char_slot_2_inv_id, char_slot_3_inv_id].filter(id => id != null);
         if (new Set(characters).size !== characters.length) {
@@ -237,7 +284,7 @@ exports.savePartyPreset = async (req, res) => {
             conn.release();
             return res.status(400).json({ status: 'error', message: 'Karakter tidak boleh duplikat di dalam party.' });
         }
-        
+
         // 4. Require at least weap_grid_1_inv_id
         if (!weap_grid_1_inv_id) {
             await conn.rollback();
@@ -254,7 +301,7 @@ exports.savePartyPreset = async (req, res) => {
             // INSERT
             const [mcRows] = await conn.query("SELECT inv_id FROM player_inventories WHERE player_id = ? AND master_item_id = 1 AND item_type = 'Character' LIMIT 1", [playerId]);
             const mcInvId = mcRows.length > 0 ? mcRows[0].inv_id : null;
-            
+
             if (!mcInvId) {
                 await conn.rollback();
                 conn.release();
@@ -338,7 +385,7 @@ exports.limitBreak = async (req, res) => {
             "SELECT master_item_id, item_level, limit_break_level, item_type FROM player_inventories WHERE inv_id = ? AND player_id = ? FOR UPDATE",
             [inv_id, playerId]
         );
-        
+
         if (invRows.length === 0) {
             await conn.rollback();
             conn.release();
@@ -346,7 +393,7 @@ exports.limitBreak = async (req, res) => {
         }
 
         const invItem = invRows[0];
-        
+
         // As per current spec, Limit Break is for characters only? Wait, weapon limit breaks could exist, but the table is char_lb_costs.
         if (invItem.item_type !== 'Character') {
             await conn.rollback();
@@ -383,7 +430,7 @@ exports.limitBreak = async (req, res) => {
         // 4. Check Materials
         const [matRows] = await conn.query("SELECT quantity FROM player_materials WHERE player_id = ? AND mat_id = ? FOR UPDATE", [playerId, lbCost.mat_id]);
         const currentMatQty = matRows.length > 0 ? matRows[0].quantity : 0;
-        
+
         if (currentMatQty < lbCost.mat_qty) {
             await conn.rollback();
             conn.release();
@@ -413,10 +460,10 @@ exports.limitBreak = async (req, res) => {
         await conn.commit();
         conn.release();
 
-        return res.status(200).json({ 
-            status: 'success', 
+        return res.status(200).json({
+            status: 'success',
             message: 'Limit Break berhasil! Skill atau potensi baru mungkin telah terbuka.',
-            data: { 
+            data: {
                 new_limit_break_level: targetLB,
                 char_name: charName,
                 new_skills_unlocked: newSkillsUnlocked
@@ -436,7 +483,7 @@ exports.limitBreak = async (req, res) => {
 exports.upgradeItem = async (req, res) => {
     const { playerId } = req.params;
     const { invId, itemType, quantity, materialId } = req.body;
-    
+
     if (!invId || !itemType || !quantity || !materialId) {
         return res.status(400).json({ status: 'error', message: 'Missing required parameters.' });
     }
@@ -445,7 +492,7 @@ exports.upgradeItem = async (req, res) => {
         return res.status(400).json({ status: 'error', message: 'Quantity must be at least 1.' });
     }
 
-    const costPerItem = 50;
+    const costPerItem = 500;
     const totalCost = costPerItem * quantity;
     const expPerItem = 80000;
     const totalExpGain = expPerItem * quantity;

@@ -83,13 +83,11 @@ export default class Player extends Phaser.GameObjects.Container {
 
         // ── Visual Elements ───────────────────────────────────────────────────
         this._bg = scene.add.rectangle(0, 0, this._W, this._H, 0x12192b);
-        this._bg.setStrokeStyle(2, this._elemColor);
+        this._bg.setStrokeStyle(1, 0x334155);
 
         this._accent = scene.add.rectangle(0, -(this._H / 2) + 5, this._W, 10, this._elemColor);
 
-        this._nameText = scene.add.text(0, -(this._H / 2) + 13, this._shortName(this.charName), {
-            fontSize: '8px', color: '#dddddd', fontStyle: 'bold'
-        }).setOrigin(0.5, 0);
+        // Removed Element Badge and Name Text per user request
 
         // HP Bar
         this._hpBarBg = scene.add.rectangle(0, 32, 60, 10, 0x222222);
@@ -120,7 +118,7 @@ export default class Player extends Phaser.GameObjects.Container {
         this._effectIndicators = scene.add.container(0, -this._H / 2 + 30);
 
         this.add([
-            this._bg, this._accent, this._nameText,
+            this._bg, this._accent,
             this._hpBarBg, this._hpFill, this._hpText,
             this._saBarBg, this._saFill, this._saPctText, this._saReadyGem,
             this._koOverlay, this._koText,
@@ -226,7 +224,7 @@ export default class Player extends Phaser.GameObjects.Container {
             this._bg.setStrokeStyle(3, 0xffffff);
             this._accent.setFillStyle(0xffffff);
         } else {
-            this._bg.setStrokeStyle(2, this._elemColor);
+            this._bg.setStrokeStyle(1, 0x334155);
             this._accent.setFillStyle(this._elemColor);
         }
     }
@@ -265,13 +263,13 @@ export default class Player extends Phaser.GameObjects.Container {
         if (this.hp <= 0) {
             this._koOverlay.setAlpha(0.65);
             this._koText.setAlpha(1);
-            this._bg.setStrokeStyle(2, 0x444444);
+            this._bg.setStrokeStyle(1, 0x444444);
             this._accent.setFillStyle(0x444444);
             this.setSAReady(false);
         } else {
             this._koOverlay.setAlpha(0);
             this._koText.setAlpha(0);
-            this._bg.setStrokeStyle(2, this._elemColor);
+            this._bg.setStrokeStyle(1, 0x334155);
             this._accent.setFillStyle(this._elemColor);
         }
 

@@ -31,8 +31,8 @@ export default class InventoryScene extends Phaser.Scene {
     create() {
         this.playerId = getPlayerId();
         this.currentTab = 'Characters'; // Characters, Weapons, Materials
-        this.sortBy = 'Level'; // Level, ATK, HP, Rarity
-        this.displayMode = 'ATK/HP'; // ATK/HP or Level/LB
+        this.sortBy = localStorage.getItem('inventory_sort') || 'Level'; // Level, ATK, HP, Rarity
+        this.displayMode = localStorage.getItem('inventory_view') || 'ATK/HP'; // ATK/HP, Level/LB, Skills
         
         this.characters = [];
         this.weapons = [];
@@ -42,20 +42,18 @@ export default class InventoryScene extends Phaser.Scene {
         this.add.rectangle(0, 0, W, H, THEME.BG).setOrigin(0);
 
         // Header Fixed
-        const headerBg = this.add.rectangle(0, 0, W, 60, 0x0a0f1d).setOrigin(0).setScrollFactor(0).setDepth(50);
+        const headerBg = this.add.rectangle(0, 0, W, 60, THEME.PANEL, THEME.PANEL_ALPHA).setOrigin(0).setScrollFactor(0).setDepth(50);
         headerBg.setStrokeStyle(1, THEME.BORDER);
         this.add.text(CX, 30, 'INVENTORY', { fontSize: '16px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY, letterSpacing: 1 }).setOrigin(0.5).setScrollFactor(0).setDepth(50);
         
         const backBtn = this.add.circle(40, 30, 18, THEME.PANEL, THEME.PANEL_ALPHA).setScrollFactor(0).setDepth(50);
         backBtn.setStrokeStyle(1, THEME.BORDER);
         backBtn.setInteractive({ useHandCursor: true });
-        this.add.text(40, 30, '←', { fontSize: '16px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5).setScrollFactor(0).setDepth(50);
+        const homeTxt = this.add.text(40, 30, 'HOME', { fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5).setScrollFactor(0).setDepth(50);
+        backBtn.on('pointerover', () => { backBtn.setFillStyle(0x334155); homeTxt.setColor('#ffffff'); });
+        backBtn.on('pointerout', () => { backBtn.setFillStyle(THEME.PANEL, THEME.PANEL_ALPHA); homeTxt.setColor(THEME.TEXT_PRIMARY); });
         backBtn.on('pointerdown', () => {
-            if (this.fromParty) {
-                this.scene.start('LoadingScene', { targetScene: 'PartyScene' });
-            } else {
-                this.scene.start('LoadingScene', { targetScene: 'MainMenuScene' });
-            }
+            this.scene.start('LoadingScene', { targetScene: 'MainMenuScene' });
         });
 
         // MENU Button
@@ -78,31 +76,8 @@ export default class InventoryScene extends Phaser.Scene {
         
         this.loadingText = this.add.text(CX, H / 2, 'Loading Inventory...', { fontSize: '14px', color: THEME.TEXT_MUTED, fontFamily: 'Outfit' }).setOrigin(0.5);
 
-        this.input.on('wheel', (pointer, gameObjects, deltaX, deltaY, deltaZ) => {
-            this.cameras.main.scrollY += deltaY;
-            if (this.cameras.main.scrollY < 0) this.cameras.main.scrollY = 0;
-        });
-
-        let isDragging = false;
-        let startY = 0;
-        let startCamY = 0;
-
-        this.input.on('pointerdown', (pointer) => {
-            if (pointer.y <= 130) return; // Prevent drag on headers
-            isDragging = true;
-            startY = pointer.y;
-            startCamY = this.cameras.main.scrollY;
-        });
-
-        this.input.on('pointermove', (pointer) => {
-            if (isDragging) {
-                const dy = pointer.y - startY;
-                this.cameras.main.scrollY = startCamY - dy;
-                if (this.cameras.main.scrollY < 0) this.cameras.main.scrollY = 0;
-            }
-        });
-
-        this.input.on('pointerup', () => { isDragging = false; });
+        this.currentPage = 1;
+        this.itemsPerPage = 20;
 
         this.loadData();
     }
@@ -153,26 +128,45 @@ export default class InventoryScene extends Phaser.Scene {
         this.uiGroup.clear(true, true);
         this.scrollGroup.clear(true, true);
 
-        // --- Tabs ---
+        // Section 2: Container Background for List (Drawn FIRST to avoid covering UI)
+        const gridBgH = 685; // Increased for extra bottom padding for pagination
+        const gridBg = this.add.rectangle(CX, 105 + gridBgH / 2, W - 16, gridBgH, 0x1e293b).setStrokeStyle(1, 0x334155);
+        this.uiGroup.add(gridBg);
+
+        // --- Tabs (Section 1) ---
         const tabs = ['Characters', 'Weapons', 'Materials'];
-        const tabW = 120;
+        const tabW = 140; // Wider tabs to fit the screen
         
         tabs.forEach((tab, i) => {
             const isSel = this.currentTab === tab;
-            const tx = 95 + i * 130;
-            const ty = 90;
+            const tx = (CX - 144) + i * 144;
+            const ty = 90; // Moved up to give more space
             
             const g = this.add.graphics();
-            g.fillStyle(isSel ? 0x475569 : THEME.PANEL, 1);
-            g.lineStyle(1, isSel ? 0xffffff : THEME.BORDER, 1);
-            g.fillRoundedRect(tx - tabW/2, ty - 15, tabW, 30, 6);
-            g.strokeRoundedRect(tx - tabW/2, ty - 15, tabW, 30, 6);
+            g.fillStyle(isSel ? 0x1e293b : THEME.BG, 1);
+            
+            // Draw custom tab shape (rounded top only), symmetrically centered around ty
+            g.lineStyle(1, isSel ? 0x334155 : THEME.BORDER, 1);
+            g.beginPath();
+            g.moveTo(tx - tabW/2, ty + 15); // Bottom left
+            g.lineTo(tx - tabW/2, ty - 15); // Top left
+            g.lineTo(tx + tabW/2, ty - 15); // Top right
+            g.lineTo(tx + tabW/2, ty + 15); // Bottom right
+            
+            // If selected, we don't draw the bottom border so it blends seamlessly
+            if (!isSel) {
+                g.lineTo(tx - tabW/2, ty + 15);
+            }
+            g.fillPath();
+            g.strokePath();
+            
             g.setScrollFactor(0);
             this.uiGroup.add(g);
 
             const z = this.add.zone(tx, ty, tabW, 30).setInteractive({useHandCursor:true}).setScrollFactor(0);
             z.on('pointerdown', () => { 
                 this.currentTab = tab; 
+                this.currentPage = 1;
                 this.cameras.main.scrollY = 0;
                 this.renderUI(); 
             });
@@ -185,35 +179,38 @@ export default class InventoryScene extends Phaser.Scene {
 
         // --- Sort & Filter Bar ---
         if (this.currentTab !== 'Materials') {
-            const barBg = this.add.rectangle(CX, 140, W-40, 44, THEME.PANEL, 0.5).setScrollFactor(0);
-            barBg.setStrokeStyle(1, THEME.BORDER);
-            this.uiGroup.add(barBg);
-            
             // Sort Button
-            const sortBtnBg = this.add.rectangle(120, 140, 140, 30, THEME.PANEL, 1).setScrollFactor(0);
+            const sortBtnBg = this.add.rectangle(120, 150, 140, 26, THEME.PANEL, 1).setScrollFactor(0);
             sortBtnBg.setStrokeStyle(1, THEME.BORDER);
-            const sortZone = this.add.zone(120, 140, 140, 30).setInteractive({useHandCursor:true}).setScrollFactor(0);
-            const sortTxt = this.add.text(120, 140, `SORT: ${this.sortBy}`, { fontSize: '11px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0);
+            const sortZone = this.add.zone(120, 150, 140, 26).setInteractive({useHandCursor:true}).setScrollFactor(0);
+            const sortTxt = this.add.text(120, 150, `SORT: ${this.sortBy}`, { fontSize: '11px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0);
             
             sortZone.on('pointerover', () => sortBtnBg.setFillStyle(0x334155));
             sortZone.on('pointerout', () => sortBtnBg.setFillStyle(THEME.PANEL));
             sortZone.on('pointerdown', () => {
                 const s = ['Level', 'ATK', 'HP', 'Rarity'];
                 this.sortBy = s[(s.indexOf(this.sortBy) + 1) % s.length];
+                localStorage.setItem('inventory_sort', this.sortBy);
                 this.renderUI();
             });
             this.uiGroup.addMultiple([sortBtnBg, sortZone, sortTxt]);
 
             // Display Toggle Button
-            const dispBtnBg = this.add.rectangle(W - 120, 140, 140, 30, THEME.PANEL, 1).setScrollFactor(0);
+            const dispBtnBg = this.add.rectangle(W - 120, 150, 140, 26, THEME.PANEL, 1).setScrollFactor(0);
             dispBtnBg.setStrokeStyle(1, THEME.BORDER);
-            const dispZone = this.add.zone(W - 120, 140, 140, 30).setInteractive({useHandCursor:true}).setScrollFactor(0);
-            const dispTxt = this.add.text(W - 120, 140, `VIEW: ${this.displayMode || 'ATK/HP'}`, { fontSize: '11px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0);
+            const dispZone = this.add.zone(W - 120, 150, 140, 26).setInteractive({useHandCursor:true}).setScrollFactor(0);
+            const effMode = (this.currentTab === 'Characters' && this.displayMode === 'Skills') ? 'ATK/HP' : (this.displayMode || 'ATK/HP');
+            const dispTxt = this.add.text(W - 120, 150, `VIEW: ${effMode}`, { fontSize: '11px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0);
             
             dispZone.on('pointerover', () => dispBtnBg.setFillStyle(0x334155));
             dispZone.on('pointerout', () => dispBtnBg.setFillStyle(THEME.PANEL));
             dispZone.on('pointerdown', () => {
-                this.displayMode = this.displayMode === 'ATK/HP' ? 'Level/LB' : 'ATK/HP';
+                let modes = ['ATK/HP', 'Level/LB', 'Skills'];
+                if (this.currentTab === 'Characters') {
+                    modes = ['ATK/HP', 'Level/LB'];
+                }
+                this.displayMode = modes[(modes.indexOf(effMode) + 1) % modes.length];
+                localStorage.setItem('inventory_view', this.displayMode);
                 this.renderUI();
             });
             this.uiGroup.addMultiple([dispBtnBg, dispZone, dispTxt]);
@@ -253,25 +250,30 @@ export default class InventoryScene extends Phaser.Scene {
         }
 
         let cols = 4;
-        let boxW = 85;
-        let boxH = 85;
-        let paddingX = 15;
-        let paddingY = 40;
+        let boxW = 84;
+        let boxH = 100;
+        let paddingX = 12;
+        let paddingY = 10;
 
         if (this.currentTab !== 'Materials') {
             cols = 4;
             boxW = 84;
-            boxH = 112; // Portrait ratio
-            paddingX = 15;
-            paddingY = 15;
+            boxH = 100; // Portrait ratio
+            paddingX = 12;
+            paddingY = 10;
         }
 
         const gridW = (cols * boxW) + ((cols - 1) * paddingX);
         const startX = (W - gridW) / 2 + (boxW / 2);
-        let startYGrid = this.currentTab === 'Materials' ? 140 : 180;
+        let startYGrid = this.currentTab === 'Materials' ? 140 : 200;
         let bottomY = startYGrid;
 
-        items.forEach((item, index) => {
+        // Pagination Logic
+        const totalPages = Math.max(1, Math.ceil(items.length / this.itemsPerPage));
+        const startIndex = (this.currentPage - 1) * this.itemsPerPage;
+        const pagedItems = items.slice(startIndex, startIndex + this.itemsPerPage);
+
+        pagedItems.forEach((item, index) => {
             const col = index % cols;
             const row = Math.floor(index / cols);
             
@@ -308,9 +310,9 @@ export default class InventoryScene extends Phaser.Scene {
             this.scrollGroup.add(zone);
 
             if (this.currentTab === 'Materials') {
-                this.scrollGroup.add(this.add.text(ix, iy - 10, "📦", { fontSize: "32px" }).setOrigin(0.5));
-                this.scrollGroup.add(this.add.text(ix, iy + 25, item.mat_name.substring(0, 10), { fontSize: '10px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5));
-                this.scrollGroup.add(this.add.text(ix, iy + 55, `x${item.quantity}`, { fontSize: '12px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5));
+                this.scrollGroup.add(this.add.text(ix, iy - 15, "📦", { fontSize: "32px" }).setOrigin(0.5));
+                this.scrollGroup.add(this.add.text(ix, iy + 20, item.mat_name.substring(0, 10), { fontSize: '10px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5));
+                this.scrollGroup.add(this.add.text(ix, iy + 35, `x${item.quantity}`, { fontSize: '12px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5));
             } else {
                 // Character / Weapon Custom Layout
                 // Art Placeholder (Top 45%)
@@ -343,9 +345,31 @@ export default class InventoryScene extends Phaser.Scene {
                 }
                 
                 // Display Info below art box
-                if (this.displayMode === 'Level/LB') {
+                const effMode = (this.currentTab === 'Characters' && this.displayMode === 'Skills') ? 'ATK/HP' : this.displayMode;
+
+                if (effMode === 'Level/LB') {
                     this.scrollGroup.add(this.add.text(ix, iy + 12, `Lv: ${item.item_level}`, { fontSize: '10px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5));
                     this.scrollGroup.add(this.add.text(ix, iy + 30, `LB: ${item.limit_break_level}`, { fontSize: '10px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5));
+                } else if (effMode === 'Skills') {
+                    const skills = (item.skills || []).filter(s => s.ms_category === 'Passive');
+                    skills.slice(0, 2).forEach((skill, i) => {
+                        const sx = ix + (i===0 && skills.length>1 ? -15 : (i===1 ? 15 : 0));
+                        const sy = iy + 20;
+                        
+                        const isLocked = (item.item_level < skill.unlock_level) || (item.limit_break_level < skill.unlock_limit_break);
+                        const sBox = this.add.graphics().fillStyle(isLocked ? 0x555555 : 0x458B74, 1).fillRoundedRect(sx-10, sy-10, 20, 20, 4);
+                        const sZone = this.add.zone(sx, sy, 20, 20).setInteractive({useHandCursor:true});
+                        sZone.on('pointerdown', (ptr, lx, ly, ev) => { 
+                            ev.stopPropagation();
+                            this.showSkillReadOnlyModal(skill, isLocked); 
+                        });
+                        
+                        this.scrollGroup.addMultiple([sBox, sZone]);
+                        this.scrollGroup.add(this.add.text(sx, sy, 'P', { fontSize: '10px', color: isLocked ? '#999' : '#fff' }).setOrigin(0.5));
+                    });
+                    if (skills.length === 0) {
+                        this.scrollGroup.add(this.add.text(ix, iy + 20, 'No Passives', { fontSize: '9px', color: THEME.TEXT_MUTED }).setOrigin(0.5));
+                    }
                 } else {
                     const atk = this.calculateBaseStat(item, 'atk', isWeapon);
                     const hp = this.calculateBaseStat(item, 'hp', isWeapon);
@@ -355,7 +379,45 @@ export default class InventoryScene extends Phaser.Scene {
             }
         });
 
-        this.cameras.main.setBounds(0, 0, W, Math.max(H, bottomY + 100));
+        // --- Pagination Controls ---
+        const pageY = 765; // perfectly centered vertically in the bottom padding space
+        
+        // Prev Button
+        const prevActive = this.currentPage > 1;
+        const prevBtn = this.add.rectangle(CX - 80, pageY, 60, 25, prevActive ? 0x1e293b : 0x0f172a).setStrokeStyle(1, THEME.BORDER);
+        const prevTxt = this.add.text(CX - 80, pageY, '< PREV', { fontSize: '10px', fontStyle: 'bold', color: prevActive ? '#ffffff' : THEME.TEXT_MUTED }).setOrigin(0.5);
+        if (prevActive) {
+            prevBtn.setInteractive({ useHandCursor: true });
+            prevBtn.on('pointerdown', () => {
+                this.currentPage--;
+                this.renderUI();
+            });
+            prevBtn.on('pointerover', () => prevBtn.setFillStyle(0x334155));
+            prevBtn.on('pointerout', () => prevBtn.setFillStyle(0x1e293b));
+        }
+        
+        // Page Info
+        this.add.text(CX, pageY, `${this.currentPage} / ${totalPages}`, { fontSize: '12px', fontStyle: 'bold', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
+
+        // Next Button
+        const nextActive = this.currentPage < totalPages;
+        const nextBtn = this.add.rectangle(CX + 80, pageY, 60, 25, nextActive ? 0x1e293b : 0x0f172a).setStrokeStyle(1, THEME.BORDER);
+        const nextTxt = this.add.text(CX + 80, pageY, 'NEXT >', { fontSize: '10px', fontStyle: 'bold', color: nextActive ? '#ffffff' : THEME.TEXT_MUTED }).setOrigin(0.5);
+        if (nextActive) {
+            nextBtn.setInteractive({ useHandCursor: true });
+            nextBtn.on('pointerdown', () => {
+                this.currentPage++;
+                this.renderUI();
+            });
+            nextBtn.on('pointerover', () => nextBtn.setFillStyle(0x334155));
+            nextBtn.on('pointerout', () => nextBtn.setFillStyle(0x1e293b));
+        }
+
+        this.scrollGroup.addMultiple([prevBtn, prevTxt, nextBtn, nextTxt]);
+
+        // Fix camera bounds to prevent drag scrolling issues, since we now use pagination
+        this.cameras.main.setBounds(0, 0, W, H);
+        this.cameras.main.scrollY = 0;
     }
 
     _buildMenuModal() {
@@ -460,6 +522,49 @@ export default class InventoryScene extends Phaser.Scene {
         rect.on('pointerout', () => rect.setFillStyle(bgColor));
         rect.on('pointerdown', onClick);
         return { rect, text };
+    }
+
+    showSkillReadOnlyModal(skill, isLocked) {
+        const container = this.add.container(0, 0).setDepth(200);
+        
+        const bg = this.add.rectangle(CX, H/2, W, H, 0x000000, 0.8).setInteractive();
+        container.add(bg);
+        bg.on('pointerdown', () => container.destroy());
+
+        const CY = H / 2;
+        const mBox = this.add.graphics().fillStyle(THEME.PANEL, 1).lineStyle(1, 0x475569).fillRoundedRect(20, CY - 60, W-40, 100, 4).strokeRoundedRect(20, CY - 60, W-40, 100, 4);
+        container.add(mBox);
+
+        // Icon
+        const iconColor = skill.ms_category === 'Special' ? 0xd97706 : 0x4f46e5;
+        const iconBox = this.add.graphics().fillStyle(iconColor, 1).fillRoundedRect(35, CY - 45, 45, 45, 8);
+        const init = skill.ms_name.substring(0, 2).toUpperCase();
+        const iconTxt = this.add.text(57, CY - 22, init, { fontSize: '16px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
+
+        container.add([iconBox, iconTxt]);
+
+        if (isLocked) {
+            const lockBox = this.add.graphics().fillStyle(0x000000, 0.6).fillRoundedRect(35, CY - 45, 45, 45, 8);
+            const lockTxt = this.add.text(57, CY - 22, '🔒', { fontSize: '16px' }).setOrigin(0.5);
+            container.add([lockBox, lockTxt]);
+        }
+
+        const titleColor = isLocked ? THEME.TEXT_MUTED : (skill.ms_category === 'Special' ? THEME.GOLD : '#60a5fa');
+        container.add(this.add.text(95, CY - 45, skill.ms_name, { fontSize: '14px', color: titleColor, fontStyle: 'bold' }));
+        
+        // Cooldown (Hide for Passive skills)
+        if (skill.ms_category !== 'Passive') {
+            container.add(this.add.text(W - 35, CY - 45, `CD: ${skill.ms_cooldown}T`, { fontSize: '10px', color: THEME.TEXT_MUTED }).setOrigin(1, 0));
+        }
+
+        // Desc
+        container.add(this.add.text(95, CY - 20, skill.ms_desc, { fontSize: '11px', color: '#ffffff', wordWrap: { width: W - 140 }, lineSpacing: 4 }));
+
+        if (isLocked) {
+            const warningBox = this.add.graphics().fillStyle(0x000000, 0.8).lineStyle(1, THEME.DANGER).fillRoundedRect(20, CY + 50, W-40, 40, 4).strokeRoundedRect(20, CY + 50, W-40, 40, 4);
+            const warningTxt = this.add.text(CX, CY + 70, `🔒 Syarat Level: ${skill.unlock_level}  |  Syarat LB: ${skill.unlock_limit_break}`, { fontSize: '12px', color: THEME.GOLD, fontStyle: 'bold' }).setOrigin(0.5);
+            container.add([warningBox, warningTxt]);
+        }
     }
 
     toggleMenuModal(show) {

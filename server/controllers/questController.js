@@ -25,7 +25,7 @@ exports.getQuests = async (req, res) => {
 
         // Query enemy info for each quest
         const [enemies] = await db.query(`
-            SELECT qe.mq_id, m.mon_name AS name, m.mon_element AS element, qe.monster_level AS level
+            SELECT qe.mq_id, m.mon_name AS name, COALESCE(qe.override_element, m.mon_element) AS element, qe.monster_level AS level
             FROM quest_enemies qe
             JOIN master_monsters m ON qe.mon_id = m.mon_id
         `);

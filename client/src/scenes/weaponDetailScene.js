@@ -26,7 +26,7 @@ export default class WeaponDetailScene extends Phaser.Scene {
         const fireUrl = URL.createObjectURL(new Blob([fireRaw], { type: 'image/svg+xml' }));
         const windUrl = URL.createObjectURL(new Blob([windRaw], { type: 'image/svg+xml' }));
         const earthUrl = URL.createObjectURL(new Blob([earthRaw], { type: 'image/svg+xml' }));
-        
+
         this.load.svg('element_fire', fireUrl, { width: 20, height: 20 });
         this.load.svg('element_wind', windUrl, { width: 20, height: 20 });
         this.load.svg('element_earth', earthUrl, { width: 20, height: 20 });
@@ -84,8 +84,8 @@ export default class WeaponDetailScene extends Phaser.Scene {
         return 1;
     }
 
-    calculateBaseStat(statType) {
-        const level = this.weap.item_level || 1;
+    calculateBaseStat(statType, customLevel = null) {
+        const level = customLevel !== null ? customLevel : (this.weap.item_level || 1);
         if (statType === 'hp') return this.weap.mw_base_hp + (this.weap.mw_hp_growth * (level - 1));
         if (statType === 'atk') return this.weap.mw_base_atk + (this.weap.mw_atk_growth * (level - 1));
         return 0;
@@ -100,18 +100,15 @@ export default class WeaponDetailScene extends Phaser.Scene {
         const headerBg = this.add.rectangle(0, 0, W, 60, 0x0a0f1d).setOrigin(0).setScrollFactor(0).setDepth(50);
         headerBg.setStrokeStyle(1, THEME.BORDER);
         this.add.text(CX, 30, 'WEAPON DETAIL', { fontSize: '16px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY, letterSpacing: 1 }).setOrigin(0.5).setScrollFactor(0).setDepth(50);
-        
+
         const backBtn = this.add.circle(40, 30, 18, THEME.PANEL, THEME.PANEL_ALPHA).setScrollFactor(0).setDepth(50);
         backBtn.setStrokeStyle(1, THEME.BORDER);
         backBtn.setInteractive({ useHandCursor: true });
-        this.add.text(40, 30, '←', { fontSize: '16px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5).setScrollFactor(0).setDepth(50);
-        backBtn.on('pointerdown', () => {
-            if (this.fromParty) {
-                this.scene.start('LoadingScene', { targetScene: 'PartyScene', targetData: { partyState: this.partyState } });
-            } else {
-                this.scene.start('LoadingScene', { targetScene: 'InventoryScene' });
-            }
-        });
+        const homeTxt = this.add.text(40, 30, 'HOME', { fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5).setScrollFactor(0).setDepth(50);
+        
+        backBtn.on('pointerover', () => { backBtn.setFillStyle(0x334155); homeTxt.setColor('#ffffff'); });
+        backBtn.on('pointerout', () => { backBtn.setFillStyle(THEME.PANEL); homeTxt.setColor(THEME.TEXT_PRIMARY); });
+        backBtn.on('pointerdown', () => this.scene.start('LoadingScene', { targetScene: 'MainMenuScene' }));
 
         // MENU Button
         const menuBtn = this.add.circle(W - 40, 30, 18, THEME.PANEL, THEME.PANEL_ALPHA).setScrollFactor(0).setDepth(50);
@@ -123,64 +120,91 @@ export default class WeaponDetailScene extends Phaser.Scene {
         menuBtn.on('pointerout', () => { menuBtn.setFillStyle(THEME.PANEL); menuText.setColor(THEME.TEXT_PRIMARY); });
         menuBtn.on('pointerdown', () => this.toggleMenuModal(true));
 
+        const bannerW = W - 60; // Added padding
         cy += 70;
+
+        // PORTRAIT PLACEHOLDER
+        const portraitH = 160;
+        const portraitBox = this.add.rectangle(CX, cy + portraitH/2, bannerW, portraitH, 0x0a0f1d, 0.5).setStrokeStyle(1, THEME.BORDER);
+        this.scrollGroup.add(portraitBox);
+
+        // Rarity at top right of portrait container
+        const rarity = weap.mw_rarity;
+        let rarityColor = '#ffffff';
+        if (rarity === 'SSR') rarityColor = '#ffd700'; // Kuning
+        else if (rarity === 'SR') rarityColor = '#3b82f6'; // Biru
+        else if (rarity === 'R') rarityColor = '#10b981'; // Hijau
+
+        this.scrollGroup.add(this.add.text(CX + bannerW/2 - 10, cy + 15, rarity, { fontSize: '16px', color: rarityColor, fontStyle: 'bold', stroke: '#000', strokeThickness: 2 }).setOrigin(1, 0.5));
+
+        cy += portraitH;
 
         // BANNER
         const color = this.getElementColor(weap.mw_element);
-        const bannerW = W - 60; // Added padding
-        const banner = this.add.rectangle(CX, cy + 60, bannerW, 120, THEME.PANEL).setStrokeStyle(1, THEME.BORDER);
+        const banner = this.add.rectangle(CX, cy + 60, bannerW, 110, THEME.PANEL).setStrokeStyle(1, THEME.BORDER);
         this.scrollGroup.add(banner);
 
-        // Name & Rarity
-        this.scrollGroup.add(this.add.text(CX - bannerW/2 + 20, cy + 20, `[${weap.mw_rarity}] ${weap.mw_name}`, { fontSize: '18px', color: '#fff', fontStyle: 'bold' }).setOrigin(0, 0.5));
-        
-        // Element Logo at top right
+        // Name
+        this.scrollGroup.add(this.add.text(CX - bannerW / 2 + 20, cy + 25, weap.mw_name, { fontSize: '18px', color: '#fff', fontStyle: 'bold' }).setOrigin(0, 0.5));
+
+        // Element Logo on the left
         const elKey = weap.mw_element ? `element_${weap.mw_element.toLowerCase()}` : '';
-        const elX = CX + bannerW/2 - 20;
-        const elY = cy + 20;
-        
+        const elX = CX - bannerW / 2 + 29;
+        const elY = cy + 55;
+
         if (this.textures.exists(elKey)) {
-            const iconImg = this.add.image(elX, elY, elKey).setDisplaySize(24, 24);
+            const iconImg = this.add.image(elX, elY, elKey).setDisplaySize(18, 18);
             const shape = this.make.graphics();
-            shape.fillCircle(elX, elY, 12);
+            shape.fillCircle(elX, elY, 9);
             iconImg.setMask(shape.createGeometryMask());
-            
-            const strokeCircle = this.add.circle(elX, elY, 12).setStrokeStyle(1, THEME.PANEL);
+
+            const strokeCircle = this.add.circle(elX, elY, 9).setStrokeStyle(1, THEME.PANEL);
             this.scrollGroup.addMultiple([iconImg, strokeCircle]);
         } else {
-            const elCircle = this.add.circle(elX, elY, 12, color).setStrokeStyle(1, THEME.PANEL);
-            const elLetter = weap.mw_element ? weap.mw_element.charAt(0).toUpperCase() : '?';
-            const elTxt = this.add.text(elX, elY, elLetter, { fontSize: '14px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5);
-            this.scrollGroup.addMultiple([elCircle, elTxt]);
+            const elCircle = this.add.circle(elX, elY, 9, color).setStrokeStyle(1, THEME.PANEL);
+            this.scrollGroup.add(elCircle);
         }
 
-        // Element & Level
+        // Element Name (colored)
+        const elNameStr = weap.mw_element ? weap.mw_element.toUpperCase() : '?';
+        this.scrollGroup.add(this.add.text(elX + 15, elY, elNameStr, { fontSize: '13px', color: color, fontStyle: 'bold' }).setOrigin(0, 0.5));
+
+        // Level (white)
         const maxLevel = this.calculateMaxLevel();
-        this.scrollGroup.add(this.add.text(CX - bannerW/2 + 20, cy + 50, `Element: ${weap.mw_element}`, { fontSize: '13px', color: color, fontStyle: 'bold' }).setOrigin(0, 0.5));
-        this.scrollGroup.add(this.add.text(CX - bannerW/2 + 20, cy + 70, `Lv ${weap.item_level} / ${maxLevel}`, { fontSize: '14px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold' }).setOrigin(0, 0.5));
-        
-        // Stats
+        this.scrollGroup.add(this.add.text(CX - bannerW / 2 + 20, cy + 80, `Lv ${weap.item_level} / ${maxLevel}`, { fontSize: '14px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0, 0.5));
+
+        // EXP Bar (1/3 of banner width)
+        const barW = bannerW / 3;
+        const barX = CX - bannerW / 2 + 20;
+        const barY = cy + 96;
+
+        // Bordered Background
+        const expBg = this.add.rectangle(barX, barY, barW, 6, 0x0f172a).setOrigin(0, 0.5).setStrokeStyle(1, 0x64748b);
+        this.scrollGroup.add(expBg);
+
+        let expPct = weap.item_level >= maxLevel ? 1 : 0.5; // Visual placeholder if max exp logic isn't on client
+        if (weap.item_exp !== undefined && expPct !== 1) {
+             expPct = (weap.item_exp % 10000) / 10000;
+        }
+        const expFill = this.add.rectangle(barX, barY, barW * expPct, 6, 0x3b82f6).setOrigin(0, 0.5);
+        this.scrollGroup.add(expFill);
+
+        // Stats (white)
         const atk = this.calculateBaseStat('atk');
         const hp = this.calculateBaseStat('hp');
-        this.scrollGroup.add(this.add.text(CX + bannerW/2 - 20, cy + 50, `ATK: ${atk}`, { fontSize: '14px', color: THEME.DAMAGE, fontStyle: 'bold' }).setOrigin(1, 0.5));
-        this.scrollGroup.add(this.add.text(CX + bannerW/2 - 20, cy + 70, `HP:  ${hp}`, { fontSize: '14px', color: THEME.HEALTH, fontStyle: 'bold' }).setOrigin(1, 0.5));
+        this.scrollGroup.add(this.add.text(CX + bannerW / 2 - 20, cy + 60, `ATK: ${atk}`, { fontSize: '14px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(1, 0.5));
+        this.scrollGroup.add(this.add.text(CX + bannerW / 2 - 20, cy + 85, `HP:  ${hp}`, { fontSize: '14px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(1, 0.5));
 
         cy += 140;
 
         // ACTION BUTTONS
-        const btnW = 160;
-        
-        // Upgrade Btn
-        const upgZone = this.add.zone(120, cy + 20, btnW, 40).setInteractive({useHandCursor:true});
-        const upgBg = this.add.rectangle(120, cy + 20, btnW, 40, THEME.PANEL).setStrokeStyle(1, 0x10b981);
-        upgZone.on('pointerdown', () => this.showUpgradeModal());
-        this.scrollGroup.addMultiple([upgBg, upgZone, this.add.text(120, cy + 20, 'UPGRADE', { fontSize: '14px', color: '#10b981', fontStyle: 'bold' }).setOrigin(0.5)]);
+        const btnW = W - 60; // Widen upgrade button to fill space
 
-        // Uncap Btn
-        const uncapZone = this.add.zone(W - 120, cy + 20, btnW, 40).setInteractive({useHandCursor:true});
-        const uncapBg = this.add.rectangle(W - 120, cy + 20, btnW, 40, THEME.PANEL).setStrokeStyle(1, 0x3b82f6);
-        uncapZone.on('pointerdown', () => this.showLimitBreakModal());
-        this.scrollGroup.addMultiple([uncapBg, uncapZone, this.add.text(W - 120, cy + 20, 'UNCAP', { fontSize: '14px', color: '#3b82f6', fontStyle: 'bold' }).setOrigin(0.5)]);
+        // Upgrade Btn
+        const upgZone = this.add.zone(CX, cy + 20, btnW, 40).setInteractive({ useHandCursor: true });
+        const upgBg = this.add.rectangle(CX, cy + 20, btnW, 40, THEME.PANEL).setStrokeStyle(1, 0x10b981);
+        upgZone.on('pointerdown', () => this.showUpgradeModal());
+        this.scrollGroup.addMultiple([upgBg, upgZone, this.add.text(CX, cy + 20, 'UPGRADE', { fontSize: '14px', color: '#10b981', fontStyle: 'bold' }).setOrigin(0.5)]);
 
         cy += 70;
 
@@ -196,8 +220,8 @@ export default class WeaponDetailScene extends Phaser.Scene {
         if (specialSkill) {
             this.scrollGroup.add(this.add.text(35, cy + 15, specialSkill.ms_name, { fontSize: '14px', color: '#f59e0b', fontStyle: 'bold' }).setOrigin(0, 0.5));
             const spDesc = specialSkill.ms_desc || `Massive ${specialSkill.ms_element || 'elemental'} damage to a foe.`;
-            this.scrollGroup.add(this.add.text(35, cy + 30, spDesc, { 
-                fontSize: '11px', 
+            this.scrollGroup.add(this.add.text(35, cy + 30, spDesc, {
+                fontSize: '11px',
                 color: THEME.TEXT_PRIMARY,
                 wordWrap: { width: W - 70, useAdvancedWrap: true }
             }).setOrigin(0, 0));
@@ -214,10 +238,10 @@ export default class WeaponDetailScene extends Phaser.Scene {
         if (activeSkills.length > 0) {
             activeSkills.forEach((skill, i) => {
                 const isLocked = (weap.item_level < skill.unlock_level) || (weap.limit_break_level < skill.unlock_limit_break);
-                
+
                 const boxH = isLocked ? 80 : 90;
-                const skBox = this.add.rectangle(CX, cy + (boxH/2), W - 30, boxH, THEME.PANEL);
-                
+                const skBox = this.add.rectangle(CX, cy + (boxH / 2), W - 30, boxH, THEME.PANEL);
+
                 if (isLocked) {
                     skBox.setStrokeStyle(2, 0xe74c3c); // Red highlight for locked
                     skBox.setFillStyle(0x1a0505);
@@ -233,14 +257,14 @@ export default class WeaponDetailScene extends Phaser.Scene {
                     this.scrollGroup.add(this.add.text(35, cy + 20, skill.ms_name, { fontSize: '14px', color: '#3b82f6', fontStyle: 'bold' }).setOrigin(0, 0.5));
                     // Actual Description from Database
                     const desc = skill.ms_desc || `Memberikan efek khusus untuk senjata elemen ${skill.ms_element}.`;
-                    this.scrollGroup.add(this.add.text(35, cy + 35, desc, { 
-                        fontSize: '11px', 
+                    this.scrollGroup.add(this.add.text(35, cy + 35, desc, {
+                        fontSize: '11px',
                         color: THEME.TEXT_PRIMARY,
                         wordWrap: { width: W - 70, useAdvancedWrap: true }
                     }).setOrigin(0, 0));
                     this.scrollGroup.add(this.add.text(35, cy + 65, `Category: ${skill.ms_category}`, { fontSize: '10px', color: THEME.TEXT_MUTED }).setOrigin(0, 0.5));
                 }
-                
+
                 cy += boxH + 15;
             });
         } else {
@@ -274,28 +298,26 @@ export default class WeaponDetailScene extends Phaser.Scene {
 
         this.modalGroup.add(this.add.text(CX, CY - 130, 'UPGRADE LEVEL', { fontSize: '18px', color: '#10b981', fontStyle: 'bold', letterSpacing: 2 }).setOrigin(0.5));
 
-        const closeBtn = this.add.text(W - 40, CY - 130, '✖', { fontSize: '20px', color: THEME.TEXT_MUTED }).setOrigin(0.5).setInteractive({useHandCursor:true});
-        closeBtn.on('pointerdown', () => this.modalGroup.clear(true, true));
-        this.modalGroup.add(closeBtn);
+                // X button removed and replaced with a Cancel button below.
 
         // Fetch latest inventory to get Gold and Materials
         const loadingText = this.add.text(CX, CY, 'Loading data...', { fontSize: '12px', color: THEME.TEXT_MUTED }).setOrigin(0.5);
         this.modalGroup.add(loadingText);
-        
+
         try {
             const res = await fetch(`http://localhost:3000/api/party/${playerId}/inventory/all`);
             const data = await res.json();
-            
+
             if (data.status === 'success') {
                 loadingText.destroy();
 
                 const materials = data.data.materials || [];
                 const gold = data.data.gold || 0;
-                
+
                 // Weapon Whetstone is mat_id = 5
                 const whetstone = materials.find(m => m.mat_id === 5);
                 const whetstoneCount = whetstone ? whetstone.quantity : 0;
-                
+
                 this.modalGroup.add(this.add.text(CX, CY - 90, `${weap.mw_name}`, { fontSize: '14px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5));
                 this.modalGroup.add(this.add.text(CX, CY - 70, `Level: ${weap.item_level}`, { fontSize: '14px', color: '#f59e0b', fontStyle: 'bold' }).setOrigin(0.5));
 
@@ -303,15 +325,30 @@ export default class WeaponDetailScene extends Phaser.Scene {
                 this.modalGroup.add(this.add.text(W - 40, CY - 30, `${whetstoneCount} dimiliki`, { fontSize: '12px', color: THEME.TEXT_PRIMARY }).setOrigin(1, 0.5));
 
                 let qty = 1;
-                const costPerItem = 50;
-                
+                const costPerItem = 500;
+
                 const qtyText = this.add.text(CX, CY + 20, `${qty}`, { fontSize: '24px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
-                
-                const minusBtn = this.add.text(CX - 50, CY + 20, '-', { fontSize: '24px', color: THEME.TEXT_PRIMARY, backgroundColor: '#334155', padding: { x: 10, y: 5 } }).setOrigin(0.5).setInteractive({useHandCursor:true});
-                const plusBtn = this.add.text(CX + 50, CY + 20, '+', { fontSize: '24px', color: THEME.TEXT_PRIMARY, backgroundColor: '#334155', padding: { x: 10, y: 5 } }).setOrigin(0.5).setInteractive({useHandCursor:true});
-                
+
+                const minusBtn = this.add.text(CX - 50, CY + 20, '-', { fontSize: '24px', color: THEME.TEXT_PRIMARY, backgroundColor: '#334155', padding: { x: 10, y: 5 } }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+                const plusBtn = this.add.text(CX + 50, CY + 20, '+', { fontSize: '24px', color: THEME.TEXT_PRIMARY, backgroundColor: '#334155', padding: { x: 10, y: 5 } }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+                const targetLevelText = this.add.text(CX, CY + 50, 'Target Level: ?', { fontSize: '13px', color: '#10b981', fontStyle: 'bold' }).setOrigin(0.5);
                 const costText = this.add.text(CX, CY + 70, `Biaya: ${qty * costPerItem} Gold`, { fontSize: '12px', color: '#f59e0b' }).setOrigin(0.5);
                 const goldText = this.add.text(CX, CY + 90, `Gold Anda: ${gold}`, { fontSize: '11px', color: THEME.TEXT_MUTED }).setOrigin(0.5);
+
+                const currentExp = weap.item_exp || 0;
+                const calculateTargetLvl = (q) => {
+                    const totalExp = currentExp + (q * 80000);
+                    const maxLevel = this.calculateMaxLevel();
+                    let weaponTotal = 0;
+                    let tLevel = 1;
+                    for (let i = 2; i <= maxLevel; i++) {
+                        weaponTotal += Math.floor(20 * Math.pow(i, 1.5));
+                        if (totalExp >= weaponTotal) tLevel = i;
+                        else break;
+                    }
+                    return tLevel;
+                };
 
                 const updateQty = (delta) => {
                     qty += delta;
@@ -319,38 +356,53 @@ export default class WeaponDetailScene extends Phaser.Scene {
                     if (qty > whetstoneCount) qty = whetstoneCount > 0 ? whetstoneCount : 1;
                     qtyText.setText(`${qty}`);
                     costText.setText(`Biaya: ${qty * costPerItem} Gold`);
+
+                    const tLvl = calculateTargetLvl(qty);
+                    targetLevelText.setText(`Target Level: ${tLvl}${tLvl === this.calculateMaxLevel() ? ' (MAX)' : ''}`);
                 };
+                updateQty(0); // Initialize text
 
                 minusBtn.on('pointerdown', () => updateQty(-1));
                 plusBtn.on('pointerdown', () => updateQty(1));
-                
-                const plus10Btn = this.add.text(CX + 100, CY + 20, '+10', { fontSize: '16px', color: THEME.TEXT_PRIMARY, backgroundColor: '#334155', padding: { x: 5, y: 5 } }).setOrigin(0.5).setInteractive({useHandCursor:true});
+
+                const plus10Btn = this.add.text(CX + 100, CY + 20, '+10', { fontSize: '16px', color: THEME.TEXT_PRIMARY, backgroundColor: '#334155', padding: { x: 5, y: 5 } }).setOrigin(0.5).setInteractive({ useHandCursor: true });
                 plus10Btn.on('pointerdown', () => updateQty(10));
 
-                const minus10Btn = this.add.text(CX - 100, CY + 20, '-10', { fontSize: '16px', color: THEME.TEXT_PRIMARY, backgroundColor: '#334155', padding: { x: 5, y: 5 } }).setOrigin(0.5).setInteractive({useHandCursor:true});
+                const minus10Btn = this.add.text(CX - 100, CY + 20, '-10', { fontSize: '16px', color: THEME.TEXT_PRIMARY, backgroundColor: '#334155', padding: { x: 5, y: 5 } }).setOrigin(0.5).setInteractive({ useHandCursor: true });
                 minus10Btn.on('pointerdown', () => updateQty(-10));
 
-                this.modalGroup.addMultiple([qtyText, minusBtn, plusBtn, plus10Btn, minus10Btn, costText, goldText]);
+                this.modalGroup.addMultiple([qtyText, minusBtn, plusBtn, plus10Btn, minus10Btn, targetLevelText, costText, goldText]);
+
+                // Cancel Button
+                const btnW = 120;
+                const cancelZone = this.add.zone(CX - 70, CY + 130, btnW, 40).setInteractive({ useHandCursor: true });
+                const cancelBg = this.add.rectangle(CX - 70, CY + 130, btnW, 40, THEME.PANEL).setStrokeStyle(1, THEME.BORDER);
+                const cancelTxt = this.add.text(CX - 70, CY + 130, 'CANCEL', { fontSize: '14px', color: THEME.TEXT_MUTED, fontStyle: 'bold' }).setOrigin(0.5);
+
+                cancelZone.on('pointerover', () => cancelBg.setFillStyle(0x334155));
+                cancelZone.on('pointerout', () => cancelBg.setFillStyle(THEME.PANEL));
+                cancelZone.on('pointerdown', () => this.modalGroup.clear(true, true));
 
                 // Enhance Button
-                const btnW = 200;
-                const enhZone = this.add.zone(CX, CY + 130, btnW, 40).setInteractive({useHandCursor:true});
-                const enhBg = this.add.rectangle(CX, CY + 130, btnW, 40, THEME.PANEL).setStrokeStyle(1, 0x10b981);
-                const enhTxt = this.add.text(CX, CY + 130, 'ENHANCE', { fontSize: '14px', color: '#10b981', fontStyle: 'bold' }).setOrigin(0.5);
+                const enhZone = this.add.zone(CX + 70, CY + 130, btnW, 40).setInteractive({ useHandCursor: true });
+                const enhBg = this.add.rectangle(CX + 70, CY + 130, btnW, 40, THEME.PANEL).setStrokeStyle(1, 0x10b981);
+                const enhTxt = this.add.text(CX + 70, CY + 130, 'ENHANCE', { fontSize: '14px', color: '#10b981', fontStyle: 'bold' }).setOrigin(0.5);
 
                 enhZone.on('pointerover', () => enhBg.setFillStyle(0x064e3b));
                 enhZone.on('pointerout', () => enhBg.setFillStyle(THEME.PANEL));
                 enhZone.on('pointerdown', async () => {
                     if (whetstoneCount < qty) {
-                        alert('Weapon Whetstone tidak cukup!');
+                        enhTxt.setText('NOT ENOUGH WHETSTONE').setColor('#ef4444');
+                        setTimeout(() => enhTxt.setText('ENHANCE').setColor('#10b981'), 2000);
                         return;
                     }
                     if (gold < qty * costPerItem) {
-                        alert('Gold tidak cukup!');
+                        enhTxt.setText('NOT ENOUGH GOLD').setColor('#ef4444');
+                        setTimeout(() => enhTxt.setText('ENHANCE').setColor('#10b981'), 2000);
                         return;
                     }
 
-                    enhTxt.setText('UPGRADING...');
+                    enhTxt.setText('UPGRADING...').setColor('#f59e0b');
                     try {
                         const upgRes = await fetch(`http://localhost:3000/api/party/${playerId}/upgrade`, {
                             method: 'POST',
@@ -365,20 +417,19 @@ export default class WeaponDetailScene extends Phaser.Scene {
                         const upgData = await upgRes.json();
 
                         if (upgData.status === 'success') {
-                            alert(`Upgrade Berhasil! Level Baru: ${upgData.data.new_level}`);
-                            this.scene.start('LoadingScene', { targetScene: 'InventoryScene' }); 
+                            this.showUpgradeSuccessModal(weap.item_level, upgData.data.new_level, upgData.data.new_exp);
                         } else {
-                            alert(upgData.message || 'Upgrade gagal');
-                            enhTxt.setText('ENHANCE');
+                            enhTxt.setText('UPGRADE FAILED').setColor('#ef4444');
+                            setTimeout(() => enhTxt.setText('ENHANCE').setColor('#10b981'), 2000);
                         }
                     } catch (e) {
                         console.error(e);
-                        alert('Terjadi kesalahan jaringan.');
-                        enhTxt.setText('ENHANCE');
+                        enhTxt.setText('NETWORK ERROR').setColor('#ef4444');
+                        setTimeout(() => enhTxt.setText('ENHANCE').setColor('#10b981'), 2000);
                     }
                 });
 
-                this.modalGroup.addMultiple([enhBg, enhZone, enhTxt]);
+                this.modalGroup.addMultiple([cancelBg, cancelZone, cancelTxt, enhBg, enhZone, enhTxt]);
 
             } else {
                 this.modalGroup.add(this.add.text(CX, CY, 'Gagal memuat data inventory.', { fontSize: '12px', color: THEME.DANGER }).setOrigin(0.5));
@@ -393,10 +444,10 @@ export default class WeaponDetailScene extends Phaser.Scene {
     showLimitBreakModal() {
         const weap = this.weap;
         this.modalGroup.clear(true, true);
-        const bg = this.add.rectangle(CX, H/2, W, H, 0x000000, 0.9).setInteractive();
+        const bg = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.9).setInteractive();
         this.modalGroup.add(bg);
 
-        const mBox = this.add.graphics().fillStyle(THEME.PANEL, 1).lineStyle(2, 0x3b82f6).fillRoundedRect(40, 250, W-80, 250, 12).strokeRoundedRect(40, 250, W-80, 250, 12);
+        const mBox = this.add.graphics().fillStyle(THEME.PANEL, 1).lineStyle(2, 0x3b82f6).fillRoundedRect(40, 250, W - 80, 250, 12).strokeRoundedRect(40, 250, W - 80, 250, 12);
         this.modalGroup.add(mBox);
 
         this.modalGroup.add(this.add.text(CX, 280, 'LIMIT BREAK (UNCAP)', { fontSize: '16px', color: '#3b82f6', fontStyle: 'bold' }).setOrigin(0.5));
@@ -404,28 +455,25 @@ export default class WeaponDetailScene extends Phaser.Scene {
 
         this.modalGroup.add(this.add.text(CX, 340, 'Syarat Material:', { fontSize: '12px', color: THEME.TEXT_MUTED }).setOrigin(0.5));
         this.modalGroup.add(this.add.text(CX, 360, 'Membutuhkan Gold & Orb Elemen.', { fontSize: '12px', color: THEME.TEXT_PRIMARY, align: 'center' }).setOrigin(0.5));
-        
-        const closeZone = this.add.zone(140, 440, 100, 40).setInteractive({useHandCursor:true});
+
+        const closeZone = this.add.zone(140, 440, 100, 40).setInteractive({ useHandCursor: true });
         const closeBg = this.add.graphics().fillStyle(THEME.BG, 1).lineStyle(1, THEME.BORDER).fillRoundedRect(90, 420, 100, 40, 6).strokeRoundedRect(90, 420, 100, 40, 6);
         closeZone.on('pointerdown', () => this.modalGroup.clear(true, true));
         this.modalGroup.addMultiple([closeBg, closeZone, this.add.text(140, 440, 'Cancel', { fontSize: '12px', color: THEME.TEXT_MUTED }).setOrigin(0.5)]);
 
-        const confirmZone = this.add.zone(310, 440, 100, 40).setInteractive({useHandCursor:true});
+        const confirmZone = this.add.zone(310, 440, 100, 40).setInteractive({ useHandCursor: true });
         const confirmBg = this.add.graphics().fillStyle(0x3b82f6, 1).fillRoundedRect(260, 420, 100, 40, 6);
         confirmZone.on('pointerdown', async () => {
             confirmZone.disableInteractive();
             this.modalGroup.add(this.add.text(CX, 390, 'Processing...', { fontSize: '12px', color: THEME.GOLD }).setOrigin(0.5));
-            
+
             const res = await PartyApi.limitBreak(this.playerId, weap.inv_id);
             if (res.status === 'success') {
-                this.modalGroup.clear(true, true);
-                alert('Limit Break Berhasil! Status senjata diperbarui.');
-                // Update local data to reflect LB
                 this.weap.limit_break_level += 1;
-                this.renderUI();
+                this.showLimitBreakSuccessModal();
             } else {
-                alert(res.message);
-                this.modalGroup.clear(true, true);
+                this.modalGroup.add(this.add.text(CX, 410, res.message || 'Error', { fontSize: '12px', color: THEME.DANGER }).setOrigin(0.5));
+                setTimeout(() => confirmZone.setInteractive(), 2000);
             }
         });
         this.modalGroup.addMultiple([confirmBg, confirmZone, this.add.text(310, 440, 'Confirm', { fontSize: '12px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5)]);
@@ -448,7 +496,7 @@ export default class WeaponDetailScene extends Phaser.Scene {
         const divider = this.add.rectangle(CX, 60, W, 1, THEME.BORDER);
 
         const s1Label = this.add.text(CX, 85, 'QUICK NAVIGATION', { fontSize: '9px', fontFamily: 'Outfit', color: THEME.TEXT_SECONDARY, letterSpacing: 1 }).setOrigin(0.5);
-        
+
         const btnParty = this._createModalRoundBtn(CX - 100, 125, 'PARTY', () => {
             this.toggleMenuModal(false);
             this.scene.start('LoadingScene', { targetScene: 'PartyScene' });
@@ -466,7 +514,7 @@ export default class WeaponDetailScene extends Phaser.Scene {
             this.toggleMenuModal(false);
             this.scene.start('LoadingScene', { targetScene: 'InventoryScene' });
         });
-        const btnShop = this._createModalRectBtn(CX + 90, 215, 160, 30, 'SHOP', () => {});
+        const btnShop = this._createModalRectBtn(CX + 90, 215, 160, 30, 'SHOP', () => { });
 
         const s3Label = this.add.text(CX, 270, 'AUDIO SETTINGS', { fontSize: '9px', fontFamily: 'Outfit', color: THEME.TEXT_SECONDARY, letterSpacing: 1 }).setOrigin(0.5);
 
@@ -567,5 +615,61 @@ export default class WeaponDetailScene extends Phaser.Scene {
 
     showLogoutConfirmation() {
         this.confirmContainer.setVisible(true);
+    }
+
+    showUpgradeSuccessModal(oldLevel, newLevel, newExp) {
+        this.modalGroup.clear(true, true);
+        const W = this.cameras.main.width, H = this.cameras.main.height, CX = W / 2, CY = H / 2;
+
+        const overlay = this.add.rectangle(0, 0, W, H, 0x000000, 0.9).setOrigin(0).setInteractive();
+        const modalBg = this.add.rectangle(CX, CY, W - 60, 260, THEME.PANEL).setStrokeStyle(1, 0x10b981);
+
+        const title = this.add.text(CX, CY - 90, 'UPGRADE SUCCESS!', { fontSize: '20px', color: '#10b981', fontStyle: 'bold', letterSpacing: 1 }).setOrigin(0.5);
+
+        const oldAtk = this.calculateBaseStat('atk', oldLevel);
+        const newAtk = this.calculateBaseStat('atk', newLevel);
+        const oldHp = this.calculateBaseStat('hp', oldLevel);
+        const newHp = this.calculateBaseStat('hp', newLevel);
+
+        const lvlTxt = this.add.text(CX, CY - 40, `Level: ${oldLevel}  ➔  ${newLevel}`, { fontSize: '16px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
+        const atkTxt = this.add.text(CX, CY - 10, `ATK: ${oldAtk}  ➔  ${newAtk}`, { fontSize: '14px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
+        const hpTxt = this.add.text(CX, CY + 15, `HP:  ${oldHp}  ➔  ${newHp}`, { fontSize: '14px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
+
+        const okZone = this.add.zone(CX, CY + 80, 120, 40).setInteractive({ useHandCursor: true });
+        const okBg = this.add.rectangle(CX, CY + 80, 120, 40, THEME.PANEL).setStrokeStyle(1, 0x3b82f6);
+        const okTxt = this.add.text(CX, CY + 80, 'OK', { fontSize: '14px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
+
+        okZone.on('pointerover', () => okBg.setFillStyle(0x334155));
+        okZone.on('pointerout', () => okBg.setFillStyle(THEME.PANEL));
+        okZone.on('pointerdown', () => {
+            this.weap.item_level = newLevel;
+            this.weap.item_exp = newExp;
+            this.scene.start('LoadingScene', { targetScene: 'WeaponDetailScene', targetData: this.targetData });
+        });
+
+        this.modalGroup.addMultiple([overlay, modalBg, title, lvlTxt, atkTxt, hpTxt, okBg, okZone, okTxt]);
+    }
+
+    showLimitBreakSuccessModal() {
+        this.modalGroup.clear(true, true);
+        const W = this.cameras.main.width, H = this.cameras.main.height, CX = W / 2, CY = H / 2;
+
+        const overlay = this.add.rectangle(0, 0, W, H, 0x000000, 0.9).setOrigin(0).setInteractive();
+        const modalBg = this.add.rectangle(CX, CY, W - 60, 200, THEME.PANEL).setStrokeStyle(1, 0x3b82f6);
+
+        const title = this.add.text(CX, CY - 60, 'LIMIT BREAK SUCCESS!', { fontSize: '18px', color: '#3b82f6', fontStyle: 'bold', letterSpacing: 1 }).setOrigin(0.5);
+        const desc = this.add.text(CX, CY - 20, 'Max Level cap has been increased!', { fontSize: '14px', color: '#fff' }).setOrigin(0.5);
+
+        const okZone = this.add.zone(CX, CY + 50, 120, 40).setInteractive({ useHandCursor: true });
+        const okBg = this.add.rectangle(CX, CY + 50, 120, 40, THEME.PANEL).setStrokeStyle(1, 0x10b981);
+        const okTxt = this.add.text(CX, CY + 50, 'OK', { fontSize: '14px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
+
+        okZone.on('pointerover', () => okBg.setFillStyle(0x334155));
+        okZone.on('pointerout', () => okBg.setFillStyle(THEME.PANEL));
+        okZone.on('pointerdown', () => {
+            this.scene.start('LoadingScene', { targetScene: 'WeaponDetailScene', targetData: this.targetData });
+        });
+
+        this.modalGroup.addMultiple([overlay, modalBg, title, desc, okBg, okZone, okTxt]);
     }
 }

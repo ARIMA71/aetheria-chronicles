@@ -1,10 +1,14 @@
 import Player from "../entities/player";
 import Enemy from "../entities/enemy";
 import { THEME } from "../main.js";
-import { checkSession, saveCurrentScene } from "../utils/auth.js";
+import { checkSession, saveCurrentScene, getPlayerUsername } from "../utils/auth.js";
 import BattleApi from "../services/BattleApi.js";
 // import CombatManager from "../services/CombatManager.js"; // DEPRECATED
 import BattleMenu from "../ui/BattleMenu.js";
+import fireRaw from '../../assets/icons/elements/fire.svg?raw';
+import windRaw from '../../assets/icons/elements/wind.svg?raw';
+import earthRaw from '../../assets/icons/elements/rock.svg?raw';
+
 const W = 450, H = 800, CX = 225;
 export default class BattleScene extends Phaser.Scene {
     constructor() { super("BattleScene"); }
@@ -12,6 +16,15 @@ export default class BattleScene extends Phaser.Scene {
         // Accept data from QuestScene if available
         this._sceneData = data || {};
         saveCurrentScene(this.scene.key, this._sceneData);
+    }
+    preload() {
+        const fireUrl = URL.createObjectURL(new Blob([fireRaw], { type: 'image/svg+xml' }));
+        const windUrl = URL.createObjectURL(new Blob([windRaw], { type: 'image/svg+xml' }));
+        const earthUrl = URL.createObjectURL(new Blob([earthRaw], { type: 'image/svg+xml' }));
+        
+        this.load.svg('element_fire', fireUrl, { width: 16, height: 16 });
+        this.load.svg('element_wind', windUrl, { width: 16, height: 16 });
+        this.load.svg('element_earth', earthUrl, { width: 16, height: 16 });
     }
     setTurn(newTurn) {
         this.turn = newTurn;
@@ -40,8 +53,7 @@ export default class BattleScene extends Phaser.Scene {
 
         this.add.rectangle(CX, H / 2, W, H, THEME.BG);
         this.add.rectangle(CX, 26, W, 52, THEME.PANEL, THEME.PANEL_ALPHA);
-        this.add.rectangle(CX, 435, W, 2, THEME.BORDER);
-        this.add.rectangle(CX, 550, W, 2, THEME.BORDER);
+        // Removed unnecessary borders
 
         // === RESUME PATH: data resume dari MainMenu Pop-up ===
         if (this._sceneData.resumeData) {
@@ -88,7 +100,7 @@ export default class BattleScene extends Phaser.Scene {
             this.players.push(p);
         });
         this.activePlayer = null;
-        this.enemy = new Enemy(this, CX, 270, j.data.enemies[0]);
+        this.enemy = new Enemy(this, CX, 260, j.data.enemies[0]);
         this._setupUI();
     }
 
@@ -147,7 +159,7 @@ export default class BattleScene extends Phaser.Scene {
 
         // Build enemy entity with resume state
         const eData = state.enemies[0];
-        this.enemy = new Enemy(this, CX, 250, eData);
+        this.enemy = new Enemy(this, CX, 260, eData);
         if (eData.current_hp !== undefined) this.enemy.hp = eData.current_hp;
         if (eData.current_ca !== undefined) this.enemy.chargeBar = eData.current_ca;
         if (eData.active_buffs && Array.isArray(eData.active_buffs)) this.enemy.activeEffects = [...eData.active_buffs];
@@ -155,8 +167,6 @@ export default class BattleScene extends Phaser.Scene {
         this.enemy.modeBar = eData.mode_bar || 0;
         this.enemy.isBoss = eData.is_boss === true;
 
-        this._buildEnemyHUD();
-        this._refreshEnemyHUD();
         this._setupUI();
 
         this.enemy.on("pointerdown", () => {
@@ -164,7 +174,7 @@ export default class BattleScene extends Phaser.Scene {
         });
 
         // Update turn text setelah UI dibangun
-        if (this.turnText) this.turnText.setText("TURN " + this.currentTurn);
+        if (this.turnText) this._updateTurnText();
 
         // Refresh visual semua entity setelah state di-inject
         this.players.forEach(p => p.refreshVisual());
@@ -187,9 +197,15 @@ export default class BattleScene extends Phaser.Scene {
         this._startTimer(); this._refreshEnemyHUD();
         this._playStartAnimation();
     }
+    _updateTurnText() {
+        if (!this.turnText) return;
+        let txt = "TURN " + this.currentTurn;
+        if (this.currentWaveLabel) txt += "  |  " + this.currentWaveLabel;
+        this.turnText.setText(txt);
+    }
     _buildLayer1() {
-        this.turnText = this.add.text(20, 15, "TURN 1", { fontSize: "13px", color: THEME.TEXT_SECONDARY, fontStyle: "bold" }).setOrigin(0, 0);
-        this.timerText = this.add.text(CX, 15, "44:59", { fontSize: "18px", color: THEME.TEXT_PRIMARY, fontStyle: "bold" }).setOrigin(0.5, 0);
+        this.turnText = this.add.text(20, 26, "TURN 1  |  (1/1)", { fontSize: "13px", color: THEME.TEXT_SECONDARY, fontStyle: "bold" }).setOrigin(0, 0.5);
+        this.timerText = this.add.text(CX, 26, "44:59", { fontSize: "18px", color: THEME.TEXT_PRIMARY, fontStyle: "bold" }).setOrigin(0.5, 0.5);
         const mb = this.add.rectangle(405, 26, 50, 34, THEME.PANEL).setInteractive();
         mb.setStrokeStyle(1, THEME.BORDER);
         this.add.text(405, 26, "☰", { fontSize: "18px", color: THEME.TEXT_SECONDARY }).setOrigin(0.5);
@@ -199,37 +215,42 @@ export default class BattleScene extends Phaser.Scene {
         });
     }
     _buildEnemyHUD() {
-        this.add.rectangle(CX, 96, W, 88, THEME.PANEL, THEME.PANEL_ALPHA);
-        this.add.rectangle(CX, 140, W, 1, THEME.BORDER);
         const ec = this._elemColor(this.enemy.element);
         this._enemyIcon = this.add.rectangle(45, 96, 50, 50, THEME.PANEL);
         this._enemyIcon.setStrokeStyle(2, ec);
-        this.add.text(45, 96, this.enemy.element.substring(0, 2).toUpperCase(), { fontSize: "9px", color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
-        this._hpPct = this.add.text(85, 80, "100%", { fontSize: "11px", color: "#CD5C5C", fontStyle: "bold" }).setOrigin(0, 1);
-        this._hpBarBg = this.add.rectangle(85, 92, 340, 14, THEME.BG).setOrigin(0, 0.5);
-        this._hpBarBg.setStrokeStyle(2, THEME.BORDER);
-        this._hpFill = this.add.rectangle(85, 92, 336, 12, THEME.DAMAGE).setOrigin(0, 0.5);
-        this._hpEnrage = this.add.rectangle(85, 92, 340, 14, 0, 0).setOrigin(0, 0.5).setAlpha(0);
+        this._elemText = this.add.text(45, 96, this.enemy.element.substring(0, 2).toUpperCase(), { fontSize: "9px", color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
+        this._hpPct = this.add.text(85, 78, "100%", { fontSize: "11px", color: "#ffffff", fontStyle: "bold" }).setOrigin(0, 1);
         
-        // Mode Gauge (Bar tipis di bawah HP)
-        this._modeBarBg = this.add.rectangle(85, 100, 340, 4, THEME.BG).setOrigin(0, 0.5);
+        // HP Bar
+        this._hpBarBg = this.add.rectangle(85, 88, 340, 14, THEME.BG).setOrigin(0, 0.5);
+        this._hpBarBg.setStrokeStyle(2, THEME.BORDER);
+        this._hpFill = this.add.rectangle(85, 88, 336, 12, THEME.DAMAGE).setOrigin(0, 0.5);
+        this._hpEnrage = this.add.rectangle(85, 88, 340, 14, 0, 0).setOrigin(0, 0.5).setAlpha(0);
+        
+        // Mode Gauge (Spaced from HP bar)
+        this._modeBarBg = this.add.rectangle(85, 102, 340, 4, THEME.BG).setOrigin(0, 0.5);
         this._modeBarBg.setStrokeStyle(1, THEME.BORDER);
-        this._modeFill = this.add.rectangle(85, 100, 0, 4, 0xffffff).setOrigin(0, 0.5);
+        this._modeFill = this.add.rectangle(85, 102, 0, 4, 0xffffff).setOrigin(0, 0.5);
 
         if (!this.enemy.isBoss) {
             this._hpEnrage.setVisible(false);
             this._modeBarBg.setVisible(false);
             this._modeFill.setVisible(false);
         }
-        this.add.text(85, 115, "CA", { fontSize: "9px", color: "#ffaa00" }).setOrigin(0, 0.5);
+        
+        // CA Bar (Removed CA text, moved left)
+        this._caSegmentsBg = [];
         this._caSegments = [];
         for (let i = 0; i < this.enemy.caMax; i++) {
-            const bg = this.add.rectangle(105 + i * 16, 115, 12, 12, THEME.BG).setOrigin(0, 0.5);
+            const bg = this.add.rectangle(85 + i * 16, 118, 12, 12, THEME.BG).setOrigin(0, 0.5);
             bg.setStrokeStyle(1, THEME.BORDER);
-            const f = this.add.rectangle(105 + i * 16, 115, 10, 10, THEME.GOLD).setOrigin(0, 0.5).setAlpha(0);
+            const f = this.add.rectangle(85 + i * 16, 118, 10, 10, THEME.GOLD).setOrigin(0, 0.5).setAlpha(0);
+            this._caSegmentsBg.push(bg);
             this._caSegments.push(f);
         }
-        this.add.text(CX, 338, this.enemy.charName + " \nLv." + this.enemy.level, { fontSize: "13px", color: "#CD5C5C", fontStyle: "bold" }).setOrigin(0.5, 0);
+        
+        // Enemy Name and Level moved to Section 3 (handled in Enemy entity or _buildArenaButtons? Let's move it to _buildLayer3 or update it in Enemy.js)
+        this._nameText = this.add.text(CX, 340, this.enemy.charName + " \nLv." + this.enemy.level, { fontSize: "13px", color: "#ffffff", fontStyle: "bold", align: "center" }).setOrigin(0.5, 0);
     }
     _refreshEnemyHUD() {
         if (!this._hpFill) return;
@@ -241,10 +262,41 @@ export default class BattleScene extends Phaser.Scene {
         const mr = Math.min(1, this.enemy.modeBar / this.enemy.modeMax);
         this._modeFill.setSize(340 * mr, 4);
 
+        if (this._caSegments && this._caSegments.length !== this.enemy.caMax) {
+            // Rebuild CA segments if caMax changed (e.g. wave transition)
+            this._caSegments.forEach(f => f.destroy());
+            this._caSegments = [];
+            if (this._caSegmentsBg) {
+                this._caSegmentsBg.forEach(bg => bg.destroy());
+                this._caSegmentsBg = [];
+            } else {
+                this._caSegmentsBg = [];
+            }
+            
+            for (let i = 0; i < this.enemy.caMax; i++) {
+                const bg = this.add.rectangle(85 + i * 16, 118, 12, 12, THEME.BG).setOrigin(0, 0.5);
+                bg.setStrokeStyle(1, THEME.BORDER);
+                if (this.enemy) bg.setAlpha(this.enemy.alpha);
+                const f = this.add.rectangle(85 + i * 16, 118, 10, 10, THEME.GOLD).setOrigin(0, 0.5).setAlpha(0);
+                this._caSegmentsBg.push(bg);
+                this._caSegments.push(f);
+            }
+        }
+
         if (this._caSegments) {
             const caColor = (this.enemy.modeState === "exhausted") ? 0x3498db : 0xffaa00;
             this._caSegments.forEach((f, i) => { f.setFillStyle(caColor); f.setAlpha(i < this.enemy.caBar ? 1 : 0); });
         }
+        if (this._nameText) {
+            this._nameText.setText(this.enemy.charName + " \nLv." + this.enemy.level);
+        }
+        if (this._enemyIcon) {
+            this._enemyIcon.setStrokeStyle(2, this._elemColor(this.enemy.element));
+            if (this._elemText) {
+                this._elemText.setText(this.enemy.element.substring(0, 2).toUpperCase());
+            }
+        }
+
         this._updateEnrageHUD(); this.enemy.updateEnrageVisual();
     }
     _updateEnrageHUD() {
@@ -282,9 +334,9 @@ export default class BattleScene extends Phaser.Scene {
     }
     _buildArenaButtons() {
         this._attackBtnContainer = this.add.container(0, 0);
-        const ab = this.add.rectangle(380, 400, 100, 45, THEME.DAMAGE).setDepth(10);
+        const ab = this.add.rectangle(375, 460, 100, 40, THEME.DAMAGE).setDepth(10);
         ab.setStrokeStyle(1, THEME.BORDER);
-        const text = this.add.text(380, 400, "ATTACK ⚔", { fontSize: "16px", color: THEME.TEXT_PRIMARY, fontStyle: "bold", align: "center" }).setOrigin(0.5).setDepth(10);
+        const text = this.add.text(375, 460, "ATTACK ⚔", { fontSize: "14px", color: THEME.TEXT_PRIMARY, fontStyle: "bold", align: "center" }).setOrigin(0.5).setDepth(10);
         this._attackBtnContainer.add([ab, text]);
         ab.setInteractive(); ab.on("pointerdown", () => { 
             if (this.turn === "player" && !this.attackBtnLocked) this.playerAttack(); 
@@ -292,6 +344,7 @@ export default class BattleScene extends Phaser.Scene {
         this._attackBtnContainer.setVisible(this.turn === "player");
     }
     _buildPartySprites() {
+        this.add.rectangle(CX, 535, W, 1, THEME.BORDER);
         const cW = 85, gap = 15, total = this.players.length, totalW = total * cW + (total - 1) * gap, sx = (W - totalW) / 2 + cW / 2;
         this.players.forEach((p, i) => {
             const px = sx + i * (cW + gap);
@@ -365,13 +418,25 @@ export default class BattleScene extends Phaser.Scene {
         }
         this._sbBtns.removeAll(true);
         if (!this.activePlayer) return;
-        const p = this.activePlayer, skills = p.skills;
+        const p = this.activePlayer;
+        const skills = [...p.skills].sort((a, b) => {
+            const isSaA = (a.category || '').toLowerCase() === 'special';
+            const isSaB = (b.category || '').toLowerCase() === 'special';
+            if (isSaA && !isSaB) return 1;
+            if (!isSaA && isSaB) return -1;
+            return 0;
+        });
 
         // --- SECTION 1: Portrait & Stats ---
         const portBg = this.add.rectangle(0, -260, 180, 180, THEME.PANEL);
         portBg.setStrokeStyle(3, p._elemColor); // Border tebal berwarna elemen
 
-        const nameText = this.add.text(-75, -335, p.charName, { fontSize: "13px", fontStyle: "bold", color: THEME.TEXT_PRIMARY }).setOrigin(0, 0.5);
+        let displayName = p.charName;
+        if (displayName === 'Main Character (MC)' || displayName.includes('MC') || displayName === 'Main Character') {
+            displayName = getPlayerUsername();
+        }
+
+        const nameText = this.add.text(-75, -335, displayName, { fontSize: "13px", fontStyle: "bold", color: THEME.TEXT_PRIMARY }).setOrigin(0, 0.5);
         const lvlText = this.add.text(75, -335, "Lv." + p.level, { fontSize: "10px", fontStyle: "bold", color: THEME.TEXT_SECONDARY }).setOrigin(1, 0.5);
 
         // Placeholder Area untuk Splash Art (Subtle Background)
@@ -600,6 +665,13 @@ export default class BattleScene extends Phaser.Scene {
     }
 
     _playStartAnimation() {
+        // Fallback: Check if party is already wiped out upon resuming battle
+        const allDead = this.players.every(p => p.hp <= 0);
+        if (allDead) {
+            this.triggerDefeat(false);
+            return;
+        }
+
         const cx = this.cameras.main.width / 2;
         const cy = this.cameras.main.height / 2;
         const startText = this.add.text(cx, cy, "START!", {
@@ -673,7 +745,7 @@ export default class BattleScene extends Phaser.Scene {
             }
 
             this.currentTurn++;
-            this.turnText.setText("TURN " + this.currentTurn);
+            this._updateTurnText();
             if (this._sidebarOpen) this._renderSidebar();
 
             // Auto-skip giliran player jika semua yang hidup terkena STUN
@@ -829,10 +901,21 @@ export default class BattleScene extends Phaser.Scene {
         };
     }
     async _playActionEvents(events) {
+        let waveChanged = false;
         for (const ev of events) {
             await new Promise(resolve => {
                 let delay = 500;
-                const target = this.players.find(p => p.slot === ev.targetId) || (this.enemy.monsterId == ev.targetId || ev.targetId.startsWith('enemy_') ? this.enemy : null);
+                
+                let target = null;
+                if (ev.targetId !== undefined && ev.targetId !== null) {
+                    target = this.players.find(p => p.slot === ev.targetId);
+                    if (!target) {
+                        const tIdStr = String(ev.targetId);
+                        if (this.enemy.monsterId == ev.targetId || tIdStr.startsWith('enemy_') || tIdStr === 'enemy') {
+                            target = this.enemy;
+                        }
+                    }
+                }
                 
                 if (ev.type === 'damage') {
                     if (target) {
@@ -903,13 +986,72 @@ export default class BattleScene extends Phaser.Scene {
                 } else if (ev.type === 'log') {
                     this.showLog(ev.message);
                     delay = 600;
+                } else if (ev.type === 'wave_change') {
+                    waveChanged = true;
+                    // this.showLog(`WAVE ${ev.waveNum} START!`);
+                    
+                    delay = -1; // Flag for manual resolve
+                    
+                    // 1. Fade out the dying enemy
+                    if (this.enemy) {
+                        const targetAlphas = [this.enemy, this._hpBarBg, this._hpFill, this._hpPct, this._enemyIcon];
+                        if (this._caSegmentsBg) targetAlphas.push(...this._caSegmentsBg);
+                        if (this._caSegments) targetAlphas.push(...this._caSegments);
+                        
+                        this.tweens.add({
+                            targets: targetAlphas,
+                            alpha: 0,
+                            duration: 1000,
+                            onComplete: () => {
+                                // 2. Resolve immediately so _syncState runs and updates the invisible enemy
+                                resolve();
+                                
+                                // Big WAVE Text
+                                const waveTxt = this.add.text(CX, H/2, `WAVE ${ev.waveNum}`, {
+                                    fontSize: '48px', color: THEME.GOLD, fontStyle: 'bold', fontFamily: 'Outfit'
+                                }).setOrigin(0.5).setAlpha(0).setDepth(201);
+                                
+                                this.tweens.add({
+                                    targets: waveTxt,
+                                    alpha: 1,
+                                    duration: 600,
+                                    yoyo: true,
+                                    hold: 800,
+                                    onComplete: () => {
+                                        waveTxt.destroy();
+                                        
+                                        // 3. Fade IN the new enemy and HUD
+                                        const newTargetAlphas = [this.enemy, this._hpBarBg, this._hpFill, this._hpPct, this._enemyIcon];
+                                        if (this._caSegmentsBg) newTargetAlphas.push(...this._caSegmentsBg);
+                                        // caSegments fills will be faded based on enemy charge by _refreshEnemyHUD later
+                                        if (this._modeFill && this.enemy.isBoss) newTargetAlphas.push(this._modeFill);
+                                        if (this._modeBarBg && this.enemy.isBoss) newTargetAlphas.push(this._modeBarBg);
+                                        
+                                        this.tweens.add({
+                                            targets: newTargetAlphas,
+                                            alpha: 1,
+                                            duration: 800,
+                                            onComplete: () => {
+                                                this._refreshEnemyHUD();
+                                            }
+                                        });
+                                    }
+                                });
+                            }
+                        });
+                    } else {
+                        resolve();
+                    }
                 } else {
                     delay = 100;
                 }
                 
-                this.time.delayedCall(delay, resolve);
+                if (delay >= 0) {
+                    this.time.delayedCall(delay, resolve);
+                }
             });
         }
+        return waveChanged;
     }
 
     async playerAttack() {
@@ -939,10 +1081,11 @@ export default class BattleScene extends Phaser.Scene {
                 p.setSAReady(false);
             }
 
+            let waveChanged = false;
             try {
                 const res = await BattleApi.executeAction(this.bsId, actionData);
                 if (res.status === 'success') {
-                    await this._playActionEvents(res.data.events);
+                    waveChanged = await this._playActionEvents(res.data.events);
                     this._syncState(res.data.stateSnapshot);
                 }
             } catch (err) {
@@ -951,13 +1094,21 @@ export default class BattleScene extends Phaser.Scene {
 
             await new Promise(resolve => this.time.delayedCall(500, resolve));
 
-            if (this.enemy.hp <= 0) break;
+            // Stop attack sequence if wave changed or enemy is dead
+            if (waveChanged || this.enemy.hp <= 0) {
+                if (waveChanged) this.setTurn("player"); // Give control back to player
+                break;
+            }
         }
 
         if (this.enemy.hp <= 0) {
             this.checkVictory();
             return;
         }
+        
+        // If turn was reset due to wave change, do not end turn
+        if (this.turn === "player") return;
+
         this.time.delayedCall(800, () => this.processTurnEnd('player'));
     }
 
@@ -1107,6 +1258,20 @@ export default class BattleScene extends Phaser.Scene {
         if (state.enemies && this.enemy) {
             const enemyData = state.enemies[0];
             if (enemyData) {
+                // Ensure base stats are updated during wave transitions
+                if (enemyData.final_stats) {
+                    this.enemy.finalStats = enemyData.final_stats;
+                    this.enemy.maxHp = enemyData.final_stats.hp;
+                    this.enemy.atk = enemyData.final_stats.atk;
+                    this.enemy.def = enemyData.final_stats.def || 500;
+                }
+                this.enemy.monsterId = enemyData.id;
+                this.enemy.charName = enemyData.name;
+                this.enemy.element = enemyData.element || 'None';
+                this.enemy.level = enemyData.level || 1;
+                this.enemy.isBoss = enemyData.is_boss === true;
+                this.enemy.caMax = enemyData.caMax || 3;
+
                 this.enemy.hp = enemyData.current_hp !== undefined ? enemyData.current_hp : this.enemy.maxHp;
                 this.enemy.modeBar = enemyData.mode_bar || 0;
                 this.enemy.modeState = enemyData.mode_state || 'normal';
@@ -1125,6 +1290,17 @@ export default class BattleScene extends Phaser.Scene {
                 this._refreshEnemyHUD();
             }
         }
+
+        // Sync Wave Info
+        if (state.waves && state.current_wave_index !== undefined) {
+            this.currentWaveLabel = `(${state.current_wave_index + 1}/${state.waves.length})`;
+        }
+        
+        // Sync Turn Count
+        if (state.current_turn !== undefined) {
+            this.currentTurn = state.current_turn;
+        }
+        this._updateTurnText();
         
         // Sync Aether Gauge
         if (state.aether_gauge !== undefined) {
@@ -1359,22 +1535,36 @@ export default class BattleScene extends Phaser.Scene {
 
     triggerDefeat(isRetreat = false) {
         this.turn = "none";
-        // Check if player has Full Potions for revive
-        if (!isRetreat && this.fullPotionCount > this.fullPotionsUsed) {
+        
+        if (isRetreat) {
+            this.showLog("RETREATED");
             this.time.delayedCall(1500, () => {
-                this._showReviveModal();
+                this.scene.pause();
+                this.scene.launch('DefeatScene', {
+                    questId: this.questId,
+                    playerId: this.playerId,
+                    isRetreat: isRetreat,
+                    bsId: this.bsId
+                });
             });
             return;
         }
-        this.showLog(isRetreat ? "RETREATED" : "DEFEAT... 💀");
+
+        // Wipeout flow: always show the Revive Modal
         this.time.delayedCall(1500, () => {
-            this.scene.pause();
-            this.scene.launch('DefeatScene', {
-                questId: this.questId,
-                playerId: this.playerId,
-                isRetreat: isRetreat,
-                bsId: this.bsId
-            });
+            if (this.fullPotionsUsed >= 1) {
+                // Langsung defeat jika sudah revive 1x
+                this.showLog("DEFEAT... 💀");
+                this.scene.pause();
+                this.scene.launch('DefeatScene', {
+                    questId: this.questId,
+                    playerId: this.playerId,
+                    isRetreat: false,
+                    bsId: this.bsId
+                });
+            } else {
+                this._showReviveModal();
+            }
         });
     }
 
@@ -1393,25 +1583,9 @@ export default class BattleScene extends Phaser.Scene {
         items.push(this.add.text(CX, H / 2 - 60, `Full Potion tersedia: ${remaining}x`, { fontSize: '12px', color: THEME.TEXT_PRIMARY, fontFamily: 'Outfit' }).setOrigin(0.5));
         items.push(this.add.text(CX, H / 2 - 30, 'Gunakan 1x Full Potion untuk\nmenghidupkan seluruh party\ndengan 100% HP & cooldown reset?', { fontSize: '10px', color: THEME.TEXT_SECONDARY, fontFamily: 'Outfit', align: 'center' }).setOrigin(0.5));
 
-        const useBtn = this.add.rectangle(CX, H / 2 + 30, 280, 42, 0x1a3a2a).setStrokeStyle(2, THEME.HEALTH).setInteractive({ useHandCursor: true });
-        const useTxt = this.add.text(CX, H / 2 + 30, '🧪 Revive Party (Full Potion)', { fontSize: '12px', fontStyle: 'bold', color: '#a8e6cf', fontFamily: 'Outfit' }).setOrigin(0.5);
-        useBtn.on('pointerdown', () => {
-            mc.destroy();
-            this.fullPotionsUsed++;
-            // Revive all characters to 100% HP and reset cooldowns
-            this.players.forEach(p => {
-                p.hp = p.maxHp;
-                p.cooldowns = {};
-                p.activeEffects = [];
-                p.refreshVisual();
-            });
-            this.showLog('🧪 Full Potion! Party revived at 100% HP!');
-            this.setTurn('player');
-        });
-        items.push(useBtn, useTxt);
-
-        const giveUpBtn = this.add.rectangle(CX, H / 2 + 85, 140, 34, 0x2a0d0d).setStrokeStyle(1, 0xe74c3c).setInteractive({ useHandCursor: true });
-        const giveUpTxt = this.add.text(CX, H / 2 + 85, 'MENYERAH', { fontSize: '11px', fontStyle: 'bold', color: '#ff8a80', fontFamily: 'Outfit' }).setOrigin(0.5);
+        // Button Give Up
+        const giveUpBtn = this.add.rectangle(CX, H / 2 + 80, 280, 42, 0x2a1a1a).setStrokeStyle(2, THEME.DAMAGE).setInteractive({ useHandCursor: true });
+        const giveUpTxt = this.add.text(CX, H / 2 + 80, '🏳️ Menyerah', { fontSize: '12px', fontStyle: 'bold', color: '#ffaaaa', fontFamily: 'Outfit' }).setOrigin(0.5);
         giveUpBtn.on('pointerdown', () => {
             mc.destroy();
             this.turn = "none";
@@ -1424,6 +1598,36 @@ export default class BattleScene extends Phaser.Scene {
             });
         });
         items.push(giveUpBtn, giveUpTxt);
+        // Button Revive
+        const canRevive = remaining > 0 && this.fullPotionsUsed < 1;
+        const useBtn = this.add.rectangle(CX, H / 2 + 30, 280, 42, canRevive ? 0x1a3a2a : 0x111111).setStrokeStyle(2, canRevive ? THEME.HEALTH : 0x333333);
+        const useTxt = this.add.text(CX, H / 2 + 30, '🧪 Revive Party (Full Potion)', { fontSize: '12px', fontStyle: 'bold', color: canRevive ? '#a8e6cf' : '#555555', fontFamily: 'Outfit' }).setOrigin(0.5);
+        
+        if (canRevive) {
+            useBtn.setInteractive({ useHandCursor: true });
+            useBtn.on('pointerdown', async () => {
+                useBtn.disableInteractive();
+                try {
+                    const res = await BattleApi.executeAction(this.bsId, { actionType: 'revive_party' });
+                    if (res.status === 'success') {
+                        mc.destroy();
+                        this.fullPotionsUsed++;
+                        await this._playActionEvents(res.data.events);
+                        if (res.data.state) this._syncState(res.data.state);
+                        this.setTurn('player');
+                    } else {
+                        this.showLog("Revive gagal!");
+                        useBtn.setInteractive({ useHandCursor: true });
+                    }
+                } catch (e) {
+                    console.error("Revive Error:", e);
+                    this.showLog("Network Error saat Revive");
+                    useBtn.setInteractive({ useHandCursor: true });
+                }
+            });
+        }
+        
+        items.push(useBtn, useTxt);
         mc.add(items);
     }
 

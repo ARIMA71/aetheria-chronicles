@@ -35,9 +35,9 @@ exports.initBattle = async (req, res) => {
         const playerStamina = playerRows[0] ? playerRows[0].stamina : 0;
 
         if (playerStamina < staminaCost) {
-            // Ambil stok Full Potion (mat_id = 8)
+            // Ambil stok Full Potion (mat_id = 7)
             const [potionRows] = await conn.query(
-                'SELECT quantity FROM player_materials WHERE player_id = ? AND mat_id = 8',
+                'SELECT quantity FROM player_materials WHERE player_id = ? AND mat_id = 7',
                 [playerId]
             );
             const potionCount = potionRows[0] ? potionRows[0].quantity : 0;
@@ -148,13 +148,9 @@ exports.saveBattleResult = async (req, res) => {
             );
         }
 
-        // Kurangi full potion yang telah digunakan untuk revive
+        // Update stamina if full potion was used (potion deduction is already handled in BattleService.js)
         if (fullPotionsUsed && Number(fullPotionsUsed) > 0) {
-            await conn.query(
-                'UPDATE player_materials SET quantity = GREATEST(0, quantity - ?) WHERE player_id = ? AND mat_id = 8',
-                [Number(fullPotionsUsed), playerId]
-            );
-            // Full Potion refills stamina to max too
+            // Full Potion refills stamina to max
             await conn.query(
                 'UPDATE players SET stamina = 100, stamina_last_updated = CURRENT_TIMESTAMP WHERE player_id = ?',
                 [playerId]
@@ -206,14 +202,23 @@ exports.saveBattleResult = async (req, res) => {
         for (const item of obtainedRaw) {
             const type = item.reward_type;
 
-            if (type === 'Currency') {
+            if (type === 'Gold') {
                 await conn.query(
                     'UPDATE players SET gold = gold + ? WHERE player_id = ?',
                     [item.quantity, playerId]
                 );
                 obtainedRewards.push({
-                    reward_type: 'Currency', reward_item_id: 0, quantity: item.quantity,
+                    reward_type: 'Gold', reward_item_id: 0, quantity: item.quantity,
                     name: 'Gold', description: 'Mata uang utama permainan.', rarity: null, element: null
+                });
+            } else if (type === 'Diamond') {
+                await conn.query(
+                    'UPDATE players SET diamond = diamond + ? WHERE player_id = ?',
+                    [item.quantity, playerId]
+                );
+                obtainedRewards.push({
+                    reward_type: 'Diamond', reward_item_id: 0, quantity: item.quantity,
+                    name: 'Diamond', description: 'Mata uang premium.', rarity: null, element: null
                 });
             } else if (type === 'Material') {
                 await conn.query(

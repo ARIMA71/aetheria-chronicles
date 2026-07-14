@@ -25,8 +25,10 @@ export default class PartyScene extends Phaser.Scene {
         this.add.text(CX, 30, 'PARTY SETTINGS', { fontSize: '15px', fontStyle: 'bold', color: THEME.TEXT_PRIMARY, fontFamily: 'Outfit', letterSpacing: 2 }).setOrigin(0.5);
         
         const backBtn = this.add.circle(40, 30, 18, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
-        this.add.text(40, 30, '←', { fontSize: '16px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
-        backBtn.on('pointerdown', () => this.scene.start('LoadingScene', { targetScene: 'LoadingScene', targetData: { targetScene: 'MainMenuScene' } }));
+        const homeTxt = this.add.text(40, 30, 'HOME', { fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
+        backBtn.on('pointerover', () => { backBtn.setFillStyle(0x334155); homeTxt.setColor('#ffffff'); });
+        backBtn.on('pointerout', () => { backBtn.setFillStyle(THEME.PANEL); homeTxt.setColor(THEME.TEXT_PRIMARY); });
+        backBtn.on('pointerdown', () => this.scene.start('LoadingScene', { targetScene: 'MainMenuScene' }));
 
         // Pojok kanan atas: Bulat bertulisan MENU
         const menuBtn = this.add.circle(W - 40, 30, 18, THEME.PANEL, THEME.PANEL_ALPHA);
@@ -86,21 +88,20 @@ export default class PartyScene extends Phaser.Scene {
 
         // Setup 5 local slots
         this.localPresets = [];
-        let mcInvId = null;
-        if (this.presets.length > 0) mcInvId = this.presets[0].main_char_inv_id;
-        else {
-            const mcChar = this.characters.find(c => c.mc_id === 1);
-            mcInvId = mcChar ? mcChar.inv_id : null;
-        }
+        // Force MC to always be present and valid
+        const mcChar = this.characters.find(c => c.mc_id === 1);
+        const actualMcInvId = mcChar ? mcChar.inv_id : null;
 
         for (let i = 1; i <= 5; i++) {
             const existing = this.presets.find(p => p.preset_slot === i);
             if (existing) {
-                this.localPresets.push(JSON.parse(JSON.stringify(existing)));
+                const presetCopy = JSON.parse(JSON.stringify(existing));
+                if (actualMcInvId) presetCopy.main_char_inv_id = actualMcInvId;
+                this.localPresets.push(presetCopy);
             } else {
                 this.localPresets.push({
                     preset_slot: i,
-                    main_char_inv_id: mcInvId,
+                    main_char_inv_id: actualMcInvId,
                     char_slot_1_inv_id: null,
                     char_slot_2_inv_id: null,
                     char_slot_3_inv_id: null,
@@ -364,8 +365,8 @@ export default class PartyScene extends Phaser.Scene {
                     });
 
                 } else {
-                    this.uiGroup.add(this.add.text(70, slot.y, 'open |>', { fontSize: '12px', color: THEME.TEXT_MUTED }).setOrigin(0.5));
-                    this.uiGroup.add(this.add.text(120, slot.y, 'Empty Slot', { fontSize: '14px', color: THEME.TEXT_MUTED, fontStyle: 'italic' }));
+                    this.uiGroup.add(this.add.text(70, slot.y, '+', { fontSize: '24px', color: THEME.TEXT_MUTED }).setOrigin(0.5));
+                    this.uiGroup.add(this.add.text(120, slot.y, 'Tap to assign character...', { fontSize: '14px', color: THEME.TEXT_MUTED, fontStyle: 'italic' }).setOrigin(0, 0.5));
                 }
         });
     }
@@ -398,17 +399,19 @@ export default class PartyScene extends Phaser.Scene {
                 this.uiGroup.add(this.add.text(slot.x, slot.y - (slot.h/2) + (artH/2) + 5, weap.mw_name.split(' ')[0], { fontSize: slot.isMain ? '12px' : '10px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5));
                 
                 if (slot.isMain) {
-                    this.uiGroup.add(this.add.text(slot.x, slot.y - (slot.h/2) + 15, 'MAIN', { fontSize: '10px', color: THEME.GOLD, fontStyle: 'bold', backgroundColor: '#000' }).setOrigin(0.5).setPadding(4));
+                    const labelY = slot.y - (slot.h/2) - 12;
+                    const bgMain = this.add.rectangle(slot.x, labelY, 84, 18, 0x0a0f1d).setStrokeStyle(1, 0xD4A017);
+                    const txtMain = this.add.text(slot.x, labelY, 'MAIN WEAPON', { fontSize: '9px', color: '#D4A017', fontStyle: 'bold', fontFamily: 'Outfit' }).setOrigin(0.5);
+                    this.uiGroup.addMultiple([bgMain, txtMain]);
                 }
 
                 // Middle Stats
                 const atk = this.calculateBaseStat(weap, 'atk', true);
                 const hp = this.calculateBaseStat(weap, 'hp', true);
-                this.uiGroup.add(this.add.text(slot.x, slot.y + 10, `ATK: ${atk}`, { fontSize: '11px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5));
-                this.uiGroup.add(this.add.text(slot.x, slot.y + 25, `HP: ${hp}`, { fontSize: '11px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5));
+                this.uiGroup.add(this.add.text(slot.x, slot.y + 15, `🗡️ ${atk}  |  ❤️ ${hp}`, { fontSize: '10px', color: THEME.TEXT_PRIMARY, fontFamily: 'Outfit' }).setOrigin(0.5));
 
                 // Bottom Skills
-                const skills = weap.skills || [];
+                const skills = (weap.skills || []).filter(s => s.ms_category === 'Passive');
                 skills.slice(0, 2).forEach((skill, i) => {
                     const sx = slot.x + (i===0 && skills.length>1 ? -15 : (i===1 ? 15 : 0));
                     const sy = slot.y + (slot.h/2) - 20;
@@ -451,43 +454,68 @@ export default class PartyScene extends Phaser.Scene {
     }
 
     showSkillReadOnlyModal(skill, isLocked) {
-        this.modalGroup.clear(true, true);
+        const container = this.add.container(0, 0).setDepth(200);
+        
         const bg = this.add.rectangle(CX, H/2, W, H, 0x000000, 0.8).setInteractive();
-        this.modalGroup.add(bg);
-        bg.on('pointerdown', () => this.modalGroup.clear(true, true)); // Click anywhere to close
+        container.add(bg);
 
         const CY = H / 2;
-        const mBox = this.add.graphics().fillStyle(THEME.PANEL, 1).lineStyle(1, 0x475569).fillRoundedRect(20, CY - 60, W-40, 100, 4).strokeRoundedRect(20, CY - 60, W-40, 100, 4);
-        this.modalGroup.add(mBox);
+        
+        let headerText = 'SKILL DETAIL';
+        if (skill.ms_category === 'Special') headerText = 'SPECIAL ATTACK';
+        else if (skill.ms_category === 'Active') headerText = 'ACTIVE SKILL';
+        else if (skill.ms_category === 'Passive') headerText = 'PASSIVE SKILL';
+
+        // Calculate height
+        let modalH = 160;
+        if (isLocked) modalH += 60;
+
+        const modalBg = this.add.rectangle(CX, CY, W - 40, modalH, THEME.PANEL).setStrokeStyle(1, 0x3b82f6);
+        container.add(modalBg);
+
+        container.add(this.add.text(CX, CY - modalH/2 + 25, headerText, { fontSize: '16px', color: '#3b82f6', fontStyle: 'bold', letterSpacing: 1 }).setOrigin(0.5));
+
+        // Skill Container bg
+        const sBg = this.add.rectangle(CX, CY - modalH/2 + 75, W - 80, 50, 0x1e293b).setStrokeStyle(1, 0x334155);
+        container.add(sBg);
 
         // Icon
-        const iconColor = skill.ms_category === 'Special' ? 0xd97706 : 0x4f46e5;
-        const iconBox = this.add.graphics().fillStyle(iconColor, 1).fillRoundedRect(35, CY - 45, 45, 45, 8);
-        const init = skill.ms_name.substring(0, 2).toUpperCase();
-        const iconTxt = this.add.text(57, CY - 22, init, { fontSize: '16px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
+        const iconColor = skill.ms_category === 'Special' ? 0xd97706 : (skill.ms_category === 'Passive' ? 0x10b981 : 0x4f46e5);
+        const iconBox = this.add.graphics().fillStyle(iconColor, 1).fillRoundedRect(CX - (W - 80)/2 + 10, CY - modalH/2 + 55, 40, 40, 8);
+        const init = skill.ms_name ? skill.ms_name.substring(0, 2).toUpperCase() : 'SK';
+        const iconTxt = this.add.text(CX - (W - 80)/2 + 30, CY - modalH/2 + 75, init, { fontSize: '14px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
 
-        this.modalGroup.addMultiple([iconBox, iconTxt]);
+        container.add([iconBox, iconTxt]);
 
         if (isLocked) {
-            const lockBox = this.add.graphics().fillStyle(0x000000, 0.6).fillRoundedRect(35, CY - 45, 45, 45, 8);
-            const lockTxt = this.add.text(57, CY - 22, '🔒', { fontSize: '16px' }).setOrigin(0.5);
-            this.modalGroup.addMultiple([lockBox, lockTxt]);
+            const lockBox = this.add.graphics().fillStyle(0x000000, 0.6).fillRoundedRect(CX - (W - 80)/2 + 10, CY - modalH/2 + 55, 40, 40, 8);
+            const lockTxt = this.add.text(CX - (W - 80)/2 + 30, CY - modalH/2 + 75, '🔒', { fontSize: '14px' }).setOrigin(0.5);
+            container.add([lockBox, lockTxt]);
         }
 
         const titleColor = isLocked ? THEME.TEXT_MUTED : (skill.ms_category === 'Special' ? THEME.GOLD : '#60a5fa');
-        this.modalGroup.add(this.add.text(95, CY - 45, skill.ms_name, { fontSize: '14px', color: titleColor, fontStyle: 'bold' }));
+        container.add(this.add.text(CX - (W - 80)/2 + 60, CY - modalH/2 + 62, skill.ms_name || 'Unknown Skill', { fontSize: '13px', color: titleColor, fontStyle: 'bold' }).setOrigin(0, 0.5));
         
-        // Cooldown
-        this.modalGroup.add(this.add.text(W - 35, CY - 45, `CD: ${skill.ms_cooldown}T`, { fontSize: '10px', color: THEME.TEXT_MUTED }).setOrigin(1, 0));
+        container.add(this.add.text(CX - (W - 80)/2 + 60, CY - modalH/2 + 82, skill.ms_desc || '', { fontSize: '10px', color: '#ffffff', wordWrap: { width: W - 160 }, lineSpacing: 2 }).setOrigin(0, 0.5));
 
-        // Desc
-        this.modalGroup.add(this.add.text(95, CY - 20, skill.ms_desc, { fontSize: '11px', color: '#ffffff', wordWrap: { width: W - 140 }, lineSpacing: 4 }));
+        // Cooldown (Hide for Passive skills)
+        if (skill.ms_category !== 'Passive' && skill.ms_cooldown !== undefined) {
+            container.add(this.add.text(CX + (W - 80)/2 - 10, CY - modalH/2 + 62, `CD: ${skill.ms_cooldown}T`, { fontSize: '10px', color: THEME.TEXT_MUTED }).setOrigin(1, 0.5));
+        }
 
         if (isLocked) {
-            const warningBox = this.add.graphics().fillStyle(0x000000, 0.8).lineStyle(1, THEME.DANGER).fillRoundedRect(20, CY + 50, W-40, 40, 4).strokeRoundedRect(20, CY + 50, W-40, 40, 4);
-            const warningTxt = this.add.text(CX, CY + 70, `🔒 Syarat Level: ${skill.unlock_level}  |  Syarat LB: ${skill.unlock_limit_break}`, { fontSize: '12px', color: THEME.GOLD, fontStyle: 'bold' }).setOrigin(0.5);
-            this.modalGroup.addMultiple([warningBox, warningTxt]);
+            const warningBox = this.add.graphics().fillStyle(0x000000, 0.8).lineStyle(1, THEME.DANGER).fillRoundedRect(CX - (W - 40)/2 + 20, CY - modalH/2 + 110, W - 80, 40, 4).strokeRoundedRect(CX - (W - 40)/2 + 20, CY - modalH/2 + 110, W - 80, 40, 4);
+            const warningTxt = this.add.text(CX, CY - modalH/2 + 130, `🔒 Syarat Level: ${skill.unlock_level || '?'}  |  Syarat LB: ${skill.unlock_limit_break || '?'}`, { fontSize: '11px', color: THEME.GOLD, fontStyle: 'bold' }).setOrigin(0.5);
+            container.add([warningBox, warningTxt]);
         }
+
+        // OK Button at bottom
+        const okBtn = this.add.rectangle(CX, CY + modalH/2 - 25, 100, 30, 0x1e293b).setStrokeStyle(1, 0x3b82f6).setInteractive({ useHandCursor: true });
+        okBtn.on('pointerdown', () => container.destroy());
+        container.add([
+            okBtn,
+            this.add.text(CX, CY + modalH/2 - 25, 'OK', { fontSize: '14px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold' }).setOrigin(0.5)
+        ]);
     }
 
     showMcSkillsManagerModal() {
@@ -688,7 +716,9 @@ export default class PartyScene extends Phaser.Scene {
         });
     }
 
-    showItemSelectionModal(type, slotId) {
+    showItemSelectionModal(type, slotId, page = 1, sortBy = null, displayMode = null) {
+        sortBy = sortBy || localStorage.getItem('party_sort') || 'Level';
+        displayMode = displayMode || localStorage.getItem('party_view') || 'ATK/HP';
         this.modalGroup.clear(true, true);
         const bg = this.add.rectangle(CX, H/2, W, H, 0x000000, 0.95).setInteractive();
         this.modalGroup.add(bg);
@@ -700,15 +730,50 @@ export default class PartyScene extends Phaser.Scene {
         this.modalGroup.add(closeBtn);
 
         // Render unequip button
-        const unequipZone = this.add.zone(CX, 100, 200, 40).setInteractive({useHandCursor: true});
-        const unBg = this.add.graphics().fillStyle(THEME.DANGER, 1).fillRoundedRect(CX-100, 80, 200, 40, 8);
+        const unequipZone = this.add.zone(CX, 95, 200, 32).setInteractive({useHandCursor: true});
+        const unBg = this.add.graphics().fillStyle(THEME.DANGER, 1).fillRoundedRect(CX-100, 79, 200, 32, 8);
         unequipZone.on('pointerdown', () => {
             this.localPresets[this.currentSlot - 1][slotId] = null;
             this.saveCurrentPreset();
             this.modalGroup.clear(true, true);
             this.renderUI();
         });
-        this.modalGroup.addMultiple([unBg, unequipZone, this.add.text(CX, 100, 'Unequip / Clear', { fontSize: '14px', color: '#fff', fontStyle:'bold' }).setOrigin(0.5)]);
+        this.modalGroup.addMultiple([unBg, unequipZone, this.add.text(CX, 95, 'Unequip / Clear', { fontSize: '12px', color: '#fff', fontStyle:'bold' }).setOrigin(0.5)]);
+
+        // --- Sort & Filter Bar ---
+        const sortBtnBg = this.add.rectangle(120, 140, 140, 26, THEME.PANEL, 1);
+        sortBtnBg.setStrokeStyle(1, THEME.BORDER);
+        const sortZone = this.add.zone(120, 140, 140, 26).setInteractive({useHandCursor:true});
+        const sortTxt = this.add.text(120, 140, `SORT: ${sortBy}`, { fontSize: '11px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
+        
+        sortZone.on('pointerover', () => sortBtnBg.setFillStyle(0x334155));
+        sortZone.on('pointerout', () => sortBtnBg.setFillStyle(THEME.PANEL));
+        sortZone.on('pointerdown', () => {
+            const s = ['Level', 'ATK', 'HP', 'Rarity'];
+            const nextSort = s[(s.indexOf(sortBy) + 1) % s.length];
+            localStorage.setItem('party_sort', nextSort);
+            this.showItemSelectionModal(type, slotId, 1, nextSort, displayMode);
+        });
+        this.modalGroup.addMultiple([sortBtnBg, sortZone, sortTxt]);
+
+        const isChar = type === 'Character';
+        const effMode = (isChar && displayMode === 'Skills') ? 'ATK/HP' : displayMode;
+
+        const dispBtnBg = this.add.rectangle(W - 120, 140, 140, 26, THEME.PANEL, 1);
+        dispBtnBg.setStrokeStyle(1, THEME.BORDER);
+        const dispZone = this.add.zone(W - 120, 140, 140, 26).setInteractive({useHandCursor:true});
+        const dispTxt = this.add.text(W - 120, 140, `VIEW: ${effMode}`, { fontSize: '11px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
+        
+        dispZone.on('pointerover', () => dispBtnBg.setFillStyle(0x334155));
+        dispZone.on('pointerout', () => dispBtnBg.setFillStyle(THEME.PANEL));
+        dispZone.on('pointerdown', () => {
+            let modes = ['ATK/HP', 'Level/LB', 'Skills'];
+            if (isChar) modes = ['ATK/HP', 'Level/LB'];
+            const nextDisp = modes[(modes.indexOf(effMode) + 1) % modes.length];
+            localStorage.setItem('party_view', nextDisp);
+            this.showItemSelectionModal(type, slotId, page, sortBy, nextDisp);
+        });
+        this.modalGroup.addMultiple([dispBtnBg, dispZone, dispTxt]);
 
         let list = type === 'Character' ? this.characters.filter(c => c.mc_id !== 1) : this.weapons;
         
@@ -719,33 +784,155 @@ export default class PartyScene extends Phaser.Scene {
         ].filter(id => id != null);
         
         list = list.filter(item => !equipped.includes(item.inv_id));
+        const isWeapon = type === 'Weapon';
+        
+        list.sort((a, b) => {
+            const rarityScore = { 'SSR': 3, 'SR': 2, 'R': 1 };
+            if (sortBy === 'Rarity') {
+                const rA = rarityScore[isWeapon ? a.mw_rarity : a.mc_rarity] || 0;
+                const rB = rarityScore[isWeapon ? b.mw_rarity : b.mc_rarity] || 0;
+                if (rA !== rB) return rB - rA;
+            } else if (sortBy === 'ATK') {
+                return this.calculateBaseStat(b, 'atk', isWeapon) - this.calculateBaseStat(a, 'atk', isWeapon);
+            } else if (sortBy === 'HP') {
+                return this.calculateBaseStat(b, 'hp', isWeapon) - this.calculateBaseStat(a, 'hp', isWeapon);
+            }
+            return (b.item_level || 1) - (a.item_level || 1);
+        });
 
-        // Simple render top items
-        let y = 160;
-        list.slice(0, 8).forEach(item => {
-            const name = type === 'Character' ? item.mc_name : item.mw_name;
-            const rarity = type === 'Character' ? item.mc_rarity : item.mw_rarity;
-            const element = type === 'Character' ? item.mc_element : item.mw_element;
-            const color = this.getElementColor(element);
+        // --- Grid Render ---
+        const cols = 4;
+        const boxW = 84;
+        const boxH = 100;
+        const paddingX = 12;
+        const paddingY = 10;
+        
+        const gridW = (cols * boxW) + ((cols - 1) * paddingX);
+        const startX = (W - gridW) / 2 + (boxW / 2);
+        const startYGrid = 200;
+
+        const itemsPerPage = 20; // 4x5 grid
+        const totalPages = Math.max(1, Math.ceil(list.length / itemsPerPage));
+        const pagedItems = list.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+
+        pagedItems.forEach((item, index) => {
+            const col = index % cols;
+            const row = Math.floor(index / cols);
             
-            const card = this.add.graphics().fillStyle(THEME.PANEL, 1).lineStyle(2, color).fillRoundedRect(30, y-25, W-60, 60, 8).strokeRoundedRect(30, y-25, W-60, 60, 8);
-            const zone = this.add.zone(CX, y+5, W-60, 60).setInteractive({useHandCursor: true});
-            
-            zone.on('pointerdown', () => {
+            const ix = startX + col * (boxW + paddingX);
+            const iy = startYGrid + row * (boxH + paddingY) + (boxH / 2);
+
+            let color = THEME.BORDER;
+            const rarity = isWeapon ? item.mw_rarity : item.mc_rarity;
+            if (rarity === 'SSR') color = 0xffd700;
+            else if (rarity === 'SR') color = 0xc0c0c0;
+            else if (rarity === 'R') color = 0xcd7f32;
+
+            const cardBg = this.add.graphics();
+            cardBg.fillStyle(THEME.PANEL, 1);
+            cardBg.lineStyle(2, color);
+            cardBg.fillRoundedRect(ix - boxW/2, iy - boxH/2, boxW, boxH, 8);
+            cardBg.strokeRoundedRect(ix - boxW/2, iy - boxH/2, boxW, boxH, 8);
+            this.modalGroup.add(cardBg);
+
+            // Click Zone
+            const zone = this.add.zone(ix, iy, boxW, boxH).setInteractive({useHandCursor:true});
+            zone.on('pointerdown', (p, x, y, e) => {
+                e.stopPropagation();
                 this.localPresets[this.currentSlot - 1][slotId] = item.inv_id;
                 this.saveCurrentPreset();
                 this.modalGroup.clear(true, true);
                 this.renderUI();
             });
+            this.modalGroup.add(zone);
 
-            this.modalGroup.addMultiple([
-                card, zone,
-                this.add.text(45, y-5, `[${rarity}] ${name}`, { fontSize: '14px', color: '#fff', fontStyle:'bold' }).setOrigin(0, 0.5),
-                this.add.text(W-50, y-5, `Lv ${item.item_level}`, { fontSize: '12px', color: THEME.TEXT_PRIMARY }).setOrigin(1, 0.5),
-                this.add.text(45, y+15, `Element: ${element}`, { fontSize: '11px', color: THEME.TEXT_MUTED }).setOrigin(0, 0.5)
-            ]);
-            y += 70;
+            // Art Placeholder (Top 45%)
+            const artH = boxH * 0.45;
+            const artBg = this.add.graphics().fillStyle(THEME.BG, 1).fillRoundedRect(ix - boxW/2 + 4, iy - boxH/2 + 4, boxW - 8, artH, 6);
+            this.modalGroup.add(artBg);
+            
+            const itemName = isWeapon ? item.mw_name : item.mc_name;
+            this.modalGroup.add(this.add.text(ix, iy - boxH/2 + 4 + artH/2, itemName.split(' ')[0], { fontSize: '10px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold' }).setOrigin(0.5));
+
+            const element = isWeapon ? item.mw_element : item.mc_element;
+            const elColor = this.getElementColor(element);
+            const elKey = element ? `element_${element.toLowerCase()}` : '';
+
+            // ELEMENT Indicator at top right
+            if (this.textures.exists(elKey)) {
+                const iconImg = this.add.image(ix + boxW/2 - 10, iy - boxH/2 + 10, elKey).setDisplaySize(14, 14);
+                const shape = this.make.graphics();
+                shape.fillCircle(ix + boxW/2 - 10, iy - boxH/2 + 10, 7);
+                iconImg.setMask(shape.createGeometryMask());
+                
+                // Stroke overlay
+                const strokeCircle = this.add.circle(ix + boxW/2 - 10, iy - boxH/2 + 10, 7).setStrokeStyle(1, THEME.PANEL);
+                this.modalGroup.addMultiple([iconImg, strokeCircle]);
+            } else {
+                const elCircle = this.add.circle(ix + boxW/2 - 10, iy - boxH/2 + 10, 7, elColor).setStrokeStyle(1, THEME.PANEL);
+                const elLetter = element ? element.charAt(0).toUpperCase() : '?';
+                const elTxt = this.add.text(ix + boxW/2 - 10, iy - boxH/2 + 10, elLetter, { fontSize: '9px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5);
+                this.modalGroup.addMultiple([elCircle, elTxt]);
+            }
+            
+            // Display Info below art box
+            if (effMode === 'Level/LB') {
+                this.modalGroup.add(this.add.text(ix, iy + 12, `Lv: ${item.item_level}`, { fontSize: '10px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5));
+                this.modalGroup.add(this.add.text(ix, iy + 30, `LB: ${item.limit_break_level}`, { fontSize: '10px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5));
+            } else if (effMode === 'Skills') {
+                const skills = (item.skills || []).filter(s => s.ms_category === 'Passive');
+                skills.slice(0, 2).forEach((skill, i) => {
+                    const sx = ix + (i===0 && skills.length>1 ? -15 : (i===1 ? 15 : 0));
+                    const sy = iy + 20;
+                    
+                    const isLocked = (item.item_level < skill.unlock_level) || (item.limit_break_level < skill.unlock_limit_break);
+                    const sBox = this.add.graphics().fillStyle(isLocked ? 0x555555 : 0x458B74, 1).fillRoundedRect(sx-10, sy-10, 20, 20, 4);
+                    const sZone = this.add.zone(sx, sy, 20, 20).setInteractive({useHandCursor:true});
+                    sZone.on('pointerdown', (ptr, lx, ly, ev) => { 
+                        ev.stopPropagation();
+                        this.showSkillReadOnlyModal(skill, isLocked); 
+                    });
+                    
+                    this.modalGroup.addMultiple([sBox, sZone]);
+                    this.modalGroup.add(this.add.text(sx, sy, 'P', { fontSize: '10px', color: isLocked ? '#999' : '#fff' }).setOrigin(0.5));
+                });
+                if (skills.length === 0) {
+                    this.modalGroup.add(this.add.text(ix, iy + 20, 'No Passives', { fontSize: '9px', color: THEME.TEXT_MUTED }).setOrigin(0.5));
+                }
+            } else {
+                const atk = this.calculateBaseStat(item, 'atk', isWeapon);
+                const hp = this.calculateBaseStat(item, 'hp', isWeapon);
+                this.modalGroup.add(this.add.text(ix, iy + 12, `ATK: ${atk}`, { fontSize: '10px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold' }).setOrigin(0.5));
+                this.modalGroup.add(this.add.text(ix, iy + 30, `HP:  ${hp}`, { fontSize: '10px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold' }).setOrigin(0.5));
+            }
         });
+
+        // --- Pagination Controls ---
+        const pageY = 765;
+        
+        const prevActive = page > 1;
+        const prevBtn = this.add.rectangle(CX - 80, pageY, 60, 25, prevActive ? 0x1e293b : 0x0f172a).setStrokeStyle(1, THEME.BORDER);
+        const prevTxt = this.add.text(CX - 80, pageY, '< PREV', { fontSize: '10px', fontStyle: 'bold', color: prevActive ? '#ffffff' : THEME.TEXT_MUTED }).setOrigin(0.5);
+        if (prevActive) {
+            prevBtn.setInteractive({ useHandCursor: true });
+            prevBtn.on('pointerdown', () => this.showItemSelectionModal(type, slotId, page - 1, sortBy, displayMode));
+            prevBtn.on('pointerover', () => prevBtn.setFillStyle(0x334155));
+            prevBtn.on('pointerout', () => prevBtn.setFillStyle(0x1e293b));
+        }
+        
+        this.modalGroup.add(this.add.text(CX, pageY, `${page} / ${totalPages}`, { fontSize: '12px', fontStyle: 'bold', color: THEME.TEXT_PRIMARY }).setOrigin(0.5));
+
+        const nextActive = page < totalPages;
+        const nextBtn = this.add.rectangle(CX + 80, pageY, 60, 25, nextActive ? 0x1e293b : 0x0f172a).setStrokeStyle(1, THEME.BORDER);
+        const nextTxt = this.add.text(CX + 80, pageY, 'NEXT >', { fontSize: '10px', fontStyle: 'bold', color: nextActive ? '#ffffff' : THEME.TEXT_MUTED }).setOrigin(0.5);
+        if (nextActive) {
+            nextBtn.setInteractive({ useHandCursor: true });
+            nextBtn.on('pointerdown', () => this.showItemSelectionModal(type, slotId, page + 1, sortBy, displayMode));
+            nextBtn.on('pointerover', () => nextBtn.setFillStyle(0x334155));
+            nextBtn.on('pointerout', () => nextBtn.setFillStyle(0x1e293b));
+        }
+
+        this.modalGroup.addMultiple([prevBtn, prevTxt, nextBtn, nextTxt]);
     }
 
     showAutoSelectElementModal() {
@@ -879,6 +1066,7 @@ export default class PartyScene extends Phaser.Scene {
         const res = await PartyApi.savePreset(this.playerId, this.currentSlot, payload);
         if (res.status !== 'success') {
             console.error('Failed to auto-save party: ' + res.message);
+            alert(res.message || 'Gagal menyimpan party preset.');
         }
     }
 

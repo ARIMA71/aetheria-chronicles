@@ -51,7 +51,9 @@ export default class QuestScene extends Phaser.Scene {
         this.add.rectangle(CX, 30, W, 60, THEME.PANEL, THEME.PANEL_ALPHA).setStrokeStyle(1, THEME.BORDER);
         this.add.text(CX, 30, 'QUEST MAP', { fontSize: '15px', fontStyle: 'bold', color: THEME.TEXT_PRIMARY, fontFamily: 'Outfit', letterSpacing: 2 }).setOrigin(0.5);
         const backBtn = this.add.circle(40, 30, 18, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
-        this.add.text(40, 30, '←', { fontSize: '16px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
+        const homeTxt = this.add.text(40, 30, 'HOME', { fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
+        backBtn.on('pointerover', () => { backBtn.setFillStyle(0x334155); homeTxt.setColor('#ffffff'); });
+        backBtn.on('pointerout', () => { backBtn.setFillStyle(THEME.PANEL); homeTxt.setColor(THEME.TEXT_PRIMARY); });
         backBtn.on('pointerdown', () => this.scene.start('LoadingScene', { targetScene: 'MainMenuScene' }));
 
         // Pojok kanan atas: Bulat bertulisan MENU
@@ -217,82 +219,132 @@ export default class QuestScene extends Phaser.Scene {
 
         const items = [];
 
-        const overlay = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.8).setInteractive();
+        const overlay = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.85).setInteractive();
         overlay.on('pointerdown', (p, x, y, e) => e.stopPropagation());
         items.push(overlay);
 
-        const panel = this.add.rectangle(CX, H / 2, W - 30, 580, 0x0d1b2a).setStrokeStyle(2, THEME.AETHER).setInteractive();
-        panel.on('pointerdown', (p, x, y, e) => e.stopPropagation());
-        items.push(panel);
+        let currentY = 130; // Starting Y coordinate for content
+        const topY = currentY;
 
-        // Title
-        items.push(this.add.text(CX, 140, 'PRE-BATTLE', { fontSize: '16px', fontStyle: 'bold', color: '#A5B4FC', fontFamily: 'Outfit', letterSpacing: 2 }).setOrigin(0.5));
-        items.push(this.add.text(CX, 162, quest.name, { fontSize: '12px', color: THEME.TEXT_PRIMARY, fontFamily: 'Outfit' }).setOrigin(0.5));
+        // --- SECTION 1: HEADER ---
+        items.push(this.add.text(CX, currentY, 'PRE-BATTLE', { fontSize: '16px', fontStyle: 'bold', color: '#A5B4FC', fontFamily: 'Outfit', letterSpacing: 2 }).setOrigin(0.5));
+        currentY += 22;
+        items.push(this.add.text(CX, currentY, quest.name, { fontSize: '12px', color: THEME.TEXT_PRIMARY, fontFamily: 'Outfit' }).setOrigin(0.5));
+        currentY += 25;
+        
+        items.push(this.add.rectangle(CX, currentY, W - 70, 1, 0x334155)); // Divider
+        currentY += 20;
 
-        // Enemy Info
-        items.push(this.add.text(50, 190, 'ENEMY INFO', { fontSize: '10px', fontStyle: 'bold', color: THEME.TEXT_SECONDARY, fontFamily: 'Outfit', letterSpacing: 1 }).setOrigin(0, 0.5));
-        quest.enemies.forEach((e, i) => {
-            const ey = 215 + i * 30;
+        // --- SECTION 2: ENEMY INFO ---
+        items.push(this.add.text(50, currentY, 'ENEMY INFO', { fontSize: '10px', fontStyle: 'bold', color: THEME.TEXT_SECONDARY, fontFamily: 'Outfit', letterSpacing: 1 }).setOrigin(0, 0.5));
+        currentY += 25;
+        
+        // Use a Set to filter unique enemies based on name and level
+        const uniqueEnemiesMap = new Map();
+        quest.enemies.forEach(e => {
+            const key = `${e.name}_${e.level}_${e.element}`;
+            if (!uniqueEnemiesMap.has(key)) uniqueEnemiesMap.set(key, e);
+        });
+        const uniqueEnemies = Array.from(uniqueEnemiesMap.values());
+
+        uniqueEnemies.forEach((e) => {
             const elemColor = { Fire: '#CD5C5C', Wind: '#458B74', Earth: '#D4A017' }[e.element] || '#aaa';
             items.push(
-                this.add.text(50, ey, `👹 ${e.name}`, { fontSize: '11px', color: THEME.TEXT_PRIMARY, fontFamily: 'Outfit' }),
-                this.add.text(250, ey, `Lv.${e.level}`, { fontSize: '10px', color: '#CD5C5C', fontFamily: 'Outfit' }),
-                this.add.text(310, ey, e.element, { fontSize: '10px', color: elemColor, fontFamily: 'Outfit' })
+                this.add.text(50, currentY, `👹 ${e.name}`, { fontSize: '11px', color: THEME.TEXT_PRIMARY, fontFamily: 'Outfit', fontStyle: 'bold' }).setOrigin(0, 0.5),
+                this.add.text(250, currentY, `Lv.${e.level}`, { fontSize: '10px', color: '#ffffff', fontFamily: 'Outfit' }).setOrigin(0, 0.5),
+                this.add.text(310, currentY, e.element, { fontSize: '10px', color: elemColor, fontFamily: 'Outfit' }).setOrigin(0, 0.5)
             );
+            currentY += 25;
         });
 
-        // Drop Loot
-        const lootY = 260;
-        items.push(this.add.text(50, lootY, 'DROP LOOT', { fontSize: '10px', fontStyle: 'bold', color: THEME.TEXT_SECONDARY, fontFamily: 'Outfit', letterSpacing: 1 }).setOrigin(0, 0.5));
+        currentY += 10;
+        items.push(this.add.rectangle(CX, currentY, W - 70, 1, 0x334155)); // Divider
+        currentY += 20;
+
+        // --- SECTION 3: DROP LOOT ---
+        items.push(this.add.text(50, currentY, 'DROP LOOT', { fontSize: '10px', fontStyle: 'bold', color: THEME.TEXT_SECONDARY, fontFamily: 'Outfit', letterSpacing: 1 }).setOrigin(0, 0.5));
+        currentY += 25;
+        
         const loots = quest.rewards.slice(0, 4);
-        loots.forEach((r, i) => {
-            const ly = lootY + 22 + i * 18;
+        loots.forEach((r) => {
             const chance = Math.round(r.drop_chance * 100);
-            items.push(this.add.text(50, ly, `• ${r.item_name} x${r.quantity} (${chance}%)`, { fontSize: '9px', color: THEME.TEXT_PRIMARY, fontFamily: 'Outfit' }));
+            items.push(this.add.text(50, currentY, `• ${r.item_name} x${r.quantity} (${chance}%)`, { fontSize: '9px', color: THEME.TEXT_PRIMARY, fontFamily: 'Outfit' }).setOrigin(0, 0.5));
+            currentY += 20;
         });
 
-        // Stamina cost
-        items.push(this.add.text(50, 355, `⚡ Stamina Cost: ${quest.stamina_cost}`, { fontSize: '11px', color: '#f39c12', fontFamily: 'Outfit' }));
-        items.push(this.add.text(50, 375, `💪 Rec. Power: ${quest.power_level}`, { fontSize: '11px', color: THEME.TEXT_SECONDARY, fontFamily: 'Outfit' }));
+        currentY += 10;
+        items.push(this.add.rectangle(CX, currentY, W - 70, 1, 0x334155)); // Divider
+        currentY += 20;
 
-        // Preset selection
-        items.push(this.add.text(CX, 410, 'SELECT PARTY PRESET', { fontSize: '10px', fontStyle: 'bold', color: THEME.TEXT_SECONDARY, fontFamily: 'Outfit', letterSpacing: 1 }).setOrigin(0.5));
+        // --- SECTION 4: STAMINA & POWER ---
+        items.push(this.add.text(50, currentY, `⚡ Stamina Cost: ${quest.stamina_cost}`, { fontSize: '11px', color: '#f39c12', fontFamily: 'Outfit', fontStyle: 'bold' }).setOrigin(0, 0.5));
+        currentY += 20;
+        items.push(this.add.text(50, currentY, `💪 Rec. Power: ${quest.power_level}`, { fontSize: '11px', color: THEME.TEXT_SECONDARY, fontFamily: 'Outfit' }).setOrigin(0, 0.5));
+        
+        currentY += 20;
+        items.push(this.add.rectangle(CX, currentY, W - 70, 1, 0x334155)); // Divider
+        currentY += 25;
+
+        // --- SECTION 5: PARTY PRESET ---
+        items.push(this.add.text(CX, currentY, 'SELECT PARTY PRESET', { fontSize: '10px', fontStyle: 'bold', color: THEME.TEXT_SECONDARY, fontFamily: 'Outfit', letterSpacing: 1 }).setOrigin(0.5));
+        currentY += 30;
 
         this._presetBtns = [];
         for (let s = 1; s <= 3; s++) {
             const bx = CX - 100 + (s - 1) * 100;
             const active = s === this.selectedPresetSlot;
-            const btn = this.add.rectangle(bx, 445, 80, 36, active ? 0x1a2744 : THEME.PANEL).setStrokeStyle(2, active ? THEME.AETHER : THEME.BORDER).setInteractive({ useHandCursor: true });
-            const txt = this.add.text(bx, 445, `Slot ${s}`, { fontSize: '11px', fontStyle: 'bold', color: active ? '#A5B4FC' : THEME.TEXT_SECONDARY, fontFamily: 'Outfit' }).setOrigin(0.5);
+            const btn = this.add.rectangle(bx, currentY, 80, 36, active ? 0x1a2744 : THEME.PANEL).setStrokeStyle(2, active ? THEME.AETHER : THEME.BORDER).setInteractive({ useHandCursor: true });
+            const txt = this.add.text(bx, currentY, `Slot ${s}`, { fontSize: '11px', fontStyle: 'bold', color: active ? '#A5B4FC' : THEME.TEXT_SECONDARY, fontFamily: 'Outfit' }).setOrigin(0.5);
             btn.on('pointerdown', () => { this.selectedPresetSlot = s; this._showPreBattleModal(quest); });
             this._presetBtns.push({ btn, txt });
             items.push(btn, txt);
         }
 
+        currentY += 30;
+
         // Power display
-        this.presetPowerText = this.add.text(CX, 475, 'Loading power...', { fontSize: '10px', color: THEME.TEXT_MUTED, fontFamily: 'Outfit' }).setOrigin(0.5);
+        this.presetPowerText = this.add.text(CX, currentY, 'Loading power...', { fontSize: '10px', color: THEME.TEXT_MUTED, fontFamily: 'Outfit' }).setOrigin(0.5);
         this._fetchPresetPower();
         items.push(this.presetPowerText);
+        
+        currentY += 40;
 
-        // Atur Party button
-        const partyBtn = this.add.rectangle(CX - 85, 530, 150, 40, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
-        const partyTxt = this.add.text(CX - 85, 530, '⚙ Atur Party', { fontSize: '11px', fontStyle: 'bold', color: THEME.TEXT_PRIMARY, fontFamily: 'Outfit' }).setOrigin(0.5);
+        // --- SECTION 6: ACTION BUTTONS ---
+        const partyBtn = this.add.rectangle(CX - 85, currentY, 150, 40, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
+        const partyTxt = this.add.text(CX - 85, currentY, '⚙ Atur Party', { fontSize: '11px', fontStyle: 'bold', color: THEME.TEXT_PRIMARY, fontFamily: 'Outfit' }).setOrigin(0.5);
         partyBtn.on('pointerover', () => partyBtn.setFillStyle(0x334155));
         partyBtn.on('pointerout', () => partyBtn.setFillStyle(THEME.PANEL));
         partyBtn.on('pointerdown', () => { this.preBattleContainer.destroy(); this.scene.start('LoadingScene', { targetScene: 'PartyScene' }); });
         items.push(partyBtn, partyTxt);
 
-        // Mulai Battle button
-        const startBtn = this.add.rectangle(CX + 85, 530, 150, 40, 0x1a3a2a).setStrokeStyle(2, THEME.HEALTH).setInteractive({ useHandCursor: true });
-        const startTxt = this.add.text(CX + 85, 530, '⚔ Mulai Battle', { fontSize: '11px', fontStyle: 'bold', color: '#a8e6cf', fontFamily: 'Outfit' }).setOrigin(0.5);
+        const startBtn = this.add.rectangle(CX + 85, currentY, 150, 40, 0x1a3a2a).setStrokeStyle(2, THEME.HEALTH).setInteractive({ useHandCursor: true });
+        const startTxt = this.add.text(CX + 85, currentY, '⚔ Mulai Battle', { fontSize: '11px', fontStyle: 'bold', color: '#a8e6cf', fontFamily: 'Outfit' }).setOrigin(0.5);
         startBtn.on('pointerover', () => startBtn.setFillStyle(0x245a3a));
         startBtn.on('pointerout', () => startBtn.setFillStyle(0x1a3a2a));
         startBtn.on('pointerdown', () => this._startBattle(quest));
         items.push(startBtn, startTxt);
 
-        // Close button
-        const closeBtn = this.add.circle(W - 40, 140, 16, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
-        const closeTxt = this.add.text(W - 40, 140, '✕', { fontSize: '14px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
+        currentY += 20;
+
+        // --- BACKGROUND PANEL ---
+        const topPadding = 40;
+        const bottomPadding = 30;
+        const totalHeight = (currentY - topY) + topPadding + bottomPadding;
+        const panelCenterY = (topY - topPadding) + (totalHeight / 2);
+        
+        const panel = this.add.rectangle(CX, panelCenterY, W - 30, totalHeight, 0x0d1b2a).setStrokeStyle(2, THEME.AETHER).setInteractive();
+        panel.on('pointerdown', (p, x, y, e) => e.stopPropagation());
+        
+        // Insert panel immediately behind content (index 1, right after overlay)
+        items.splice(1, 0, panel);
+
+        // Close button (Top-Right relative to panel)
+        const panelTop = topY - topPadding;
+        const panelRight = CX + (W - 30) / 2;
+        const closeBtn = this.add.circle(panelRight - 25, panelTop + 25, 14, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
+        const closeTxt = this.add.text(panelRight - 25, panelTop + 25, '✕', { fontSize: '12px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
+        closeBtn.on('pointerover', () => closeBtn.setFillStyle(0x334155));
+        closeBtn.on('pointerout', () => closeBtn.setFillStyle(THEME.PANEL));
         closeBtn.on('pointerdown', () => this.preBattleContainer.destroy());
         items.push(closeBtn, closeTxt);
 

@@ -139,3 +139,14 @@ export function getPlayerId() {
         return null;
     }
 }
+
+export function getPlayerUsername() {
+    const raw = localStorage.getItem('aetheria_player');
+    if (!raw) return 'Main Character';
+    try {
+        const player = JSON.parse(raw);
+        return player.username || 'Main Character';
+    } catch (e) {
+        return 'Main Character';
+    }
+}

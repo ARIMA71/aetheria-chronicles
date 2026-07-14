@@ -72,7 +72,7 @@ class AiBehaviorService {
         let party_buff_count = 0;
         let party_debuff_count = 0;
         characters.forEach(c => {
-            const effects = c.activeEffects || c.active_effects || [];
+            const effects = c.activeEffects || c.active_effects || c.active_buffs || [];
             const { buffs, debuffs } = getEffectCounts(effects);
             party_buff_count += buffs;
             party_debuff_count += debuffs;

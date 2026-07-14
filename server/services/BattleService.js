@@ -136,9 +136,9 @@ class BattleService {
         const queryMonsters = `
         SELECT mon.mon_id, mon.mon_name, mon.mon_type, mon.mon_element, mon.mon_base_hp, mon.mon_hp_growth,
             mon.mon_base_atk, mon.mon_atk_growth, mon.mon_base_def, mon.mon_def_growth, mon.mon_max_ca,
-            mon.mon_icon_path, mon.mon_sprite_path, qe.monster_level,
+            mon.mon_icon_path, mon.mon_sprite_path, qe.monster_level, qe.wave_num, qe.override_element,
             mb.mb_id, mb.boss_phase, mb.base_utility, mb.score_modifiers,
-            ms.ms_id AS skill_id, ms.ms_name AS skill_name, ms.ms_category AS skill_category,
+            ms.ms_id AS skill_id, ms.ms_name AS skill_name, ms.ms_category AS skill_category, ms.ms_element AS skill_element,
             ms.ms_action_type AS skill_type, ms.ms_target_type AS skill_target_type, ms.ms_modifier_value AS skill_modifier,
             ms.ms_cooldown AS skill_cooldown, ms.ms_icon_path AS skill_icon_path, ms.ms_vfx_path AS skill_vfx_path,
             ms.trigger_delay AS skill_trigger_delay, ms.trigger_dispel AS skill_trigger_dispel, 
@@ -152,7 +152,7 @@ class BattleService {
         LEFT JOIN skill_status_effects sse ON ms.ms_id = sse.ms_id
         LEFT JOIN master_status_effects mse ON sse.mse_id = mse.mse_id
         WHERE qe.mq_id = ?
-        ORDER BY mon.mon_id, mb.mb_id, mse.mse_id
+        ORDER BY qe.wave_num, mon.mon_id, mb.mb_id, mse.mse_id
         `;
 
         const queryWeapons = `
@@ -215,14 +215,40 @@ class BattleService {
         // Delegate to GridCalculatorService
         const characters = GridCalculatorService.calculatePartyStats(charRows, weaponRows, weaponPassiveRows, skillMap);
 
-        // Map Enemies
-        const monsterMap = {};
+        // Map Enemies per Wave
+        const wavesMap = {};
         const behaviorMap = {};
         monsterRows.forEach(row => {
+            const waveNum = row.wave_num || 1;
+            if (!wavesMap[waveNum]) {
+                wavesMap[waveNum] = {};
+            }
+            const monsterMap = wavesMap[waveNum];
+
+            // Use a unique key combining mon_id and a potential instance identifier if multiple identical monsters exist.
+            // Since quest_enemies might have multiple of same mon_id in same wave, let's group by mon_id.
+            // Wait, what if there are 2 slimes in wave 1? The SQL query joins master_monsters, so it will return duplicates?
+            // Actually, in quest_enemies, we don't have unique IDs per monster spawn yet. Let's just create an instance for each row?
+            // Since the query groups them by mon_id, if there are two (1,1,1,1) rows, they will appear twice.
+            // But behaviorMap relies on mon_id. For now, let's keep it simple: index them by array push.
+            // Actually, let's just build it like before, but inside wavesMap.
+            
+            // To ensure uniqueness if multiple same monsters exist, let's generate a unique string key per row object or rely on mon_id.
+            // Since the current code just uses mon_id as key, it would merge 2 slimes into 1 slime.
+            // To support multiple slimes, we should create a unique enemy instance for each `quest_enemies` entry.
+            // But wait, the query does `JOIN master_monsters`, so if there are 2 rows in quest_enemies, we get duplicate master_monsters.
+            // If we use `mon_id` as key, they merge.
+            // For now, let's stick to merging by mon_id per wave (meaning only 1 slime per wave).
+            // To have multiple, they'd need different mon_id or we refactor enemy mapping. I will just stick to the existing behavior: 1 mon_id = 1 enemy per wave.
+            
             if (!monsterMap[row.mon_id]) {
                 const finalHp = (Number(row.mon_base_hp) || 0) + (Number(row.mon_hp_growth) || 0) * ((row.monster_level || 1) - 1);
+                
+                // Override element if provided
+                const element = row.override_element || row.mon_element;
+                
                 monsterMap[row.mon_id] = {
-                    id: row.mon_id, name: row.mon_name, element: row.mon_element, level: row.monster_level || 1,
+                    id: row.mon_id, name: row.mon_name, element: element, level: row.monster_level || 1,
                     is_boss: (row.mon_type === 'Boss'),
                     final_stats: {
                         hp: finalHp,
@@ -246,6 +272,12 @@ class BattleService {
                         try { parsedModifiers = JSON.parse(parsedModifiers); } catch (e) { parsedModifiers = {}; }
                     }
 
+                    // Inherit override element for neutral/any skills or if it matches the monster's base element
+                    let skillElement = row.skill_element;
+                    if (row.override_element && (skillElement === 'Any' || skillElement === 'Neutral' || skillElement === row.mon_element)) {
+                        skillElement = row.override_element;
+                    }
+
                     const behaviorEntry = {
                         phase: row.boss_phase || 'Normal', base_utility: Number(row.base_utility) || 1.0,
                         modifiers: parsedModifiers || {},
@@ -253,6 +285,7 @@ class BattleService {
                             id: row.skill_id, name: row.skill_name, category: row.skill_category,
                             type: row.skill_type, target_type: row.skill_target_type || 'Single_Enemy',
                             modifier: Number(row.skill_modifier) || 0, cooldown: row.skill_cooldown,
+                            element: skillElement,
                             current_cooldown: 0,
                             trigger_delay: Boolean(row.skill_trigger_delay), trigger_dispel: Boolean(row.skill_trigger_dispel),
                             trigger_heal_pct: Number(row.skill_trigger_heal_pct) || 0, hp_cost_pct: Number(row.skill_hp_cost_pct) || 0,
@@ -260,33 +293,42 @@ class BattleService {
                         }
                     };
                     behaviorMap[row.mb_id] = behaviorEntry;
-                    monsterMap[row.mon_id].ai_behaviors.push(behaviorEntry);
+                    wavesMap[row.wave_num || 1][row.mon_id].ai_behaviors.push(behaviorEntry);
                 }
                 const effect = formatStatusEffect(row);
                 if (effect) behaviorMap[row.mb_id].skill.status_effects.push(effect);
             }
         });
-        const enemies = Object.values(monsterMap);
-        if (enemies.length === 0) throw new Error(`Tidak ada musuh yang ditemukan untuk questId: ${questId}`);
+        
+        // Convert map to sorted array of waves
+        const waveKeys = Object.keys(wavesMap).sort((a,b) => Number(a) - Number(b));
+        const waves = waveKeys.map(k => Object.values(wavesMap[k]));
+        
+        if (waves.length === 0) throw new Error(`Tidak ada musuh yang ditemukan untuk questId: ${questId}`);
+        const enemies = waves[0]; // Set first wave as current enemies
 
-        // Potion Count (mat_id 6: Green Potion, mat_id 8: Full Potion)
-        const [materialRow] = await db.query('SELECT mat_id, quantity FROM player_materials WHERE player_id = ? AND mat_id IN (6, 8)', [playerId]);
+        // Potion Count (mat_id 6: Green Potion, mat_id 7: Full Potion)
+        const [materialRow] = await db.query('SELECT mat_id, quantity FROM player_materials WHERE player_id = ? AND mat_id IN (6, 7)', [playerId]);
         let potionCount = 0;
         let fullPotionCount = 0;
         materialRow.forEach(mat => {
             if (mat.mat_id === 6) potionCount = mat.quantity;
-            if (mat.mat_id === 8) fullPotionCount = mat.quantity;
+            if (mat.mat_id === 7) fullPotionCount = mat.quantity;
         });
 
         // Construct Initial State
         const initialState = {
             quest_id: parseInt(questId),
             player_party: { characters },
-            enemies,
+            enemies: enemies,
+            waves: waves,
+            current_wave_index: 0,
+            defeated_enemies: [],
             potion_count: potionCount,
             full_potion_count: fullPotionCount,
             heals_remaining: Math.min(3, potionCount),
-            potions_used: 0
+            potions_used: 0,
+            current_turn: 1
         };
 
         // [FASE 1: DISABLE DOUBLE INIT CHECK]
@@ -458,6 +500,67 @@ class BattleService {
         return state.player_party.characters.find(c => c.slot === entityId || c.id === entityId || c.inv_id == entityId);
     }
 
+    _checkWaveClear(state, events, isTurnEnd = false) {
+        if (!state.enemies || !state.waves) return;
+        const allDead = state.enemies.every(e => (e.current_hp !== undefined ? e.current_hp : e.hp) <= 0);
+        
+        if (allDead) {
+            // Save defeated enemies for anti-cheat validation
+            if (!state.defeated_enemies) state.defeated_enemies = [];
+            state.enemies.forEach(e => state.defeated_enemies.push(e.id));
+            
+            // Check if there is a next wave
+            if (state.current_wave_index + 1 < state.waves.length) {
+                state.current_wave_index += 1;
+                // Deep copy new wave to prevent reference mutation issues
+                state.enemies = JSON.parse(JSON.stringify(state.waves[state.current_wave_index]));
+                
+                if (!isTurnEnd) {
+                    // --- Simulate 1 Turn Elapsed for Player Party on Wave Transition ---
+                    if (state.player_party && state.player_party.characters) {
+                        state.player_party.characters.forEach(char => {
+                            // Decrement active buffs
+                            if (char.active_buffs && char.active_buffs.length > 0) {
+                                for (let i = char.active_buffs.length - 1; i >= 0; i--) {
+                                    const buff = char.active_buffs[i];
+                                    const durKey = buff.mse_duration !== undefined ? 'mse_duration' : (buff.duration !== undefined ? 'duration' : null);
+                                    if (durKey && buff[durKey] > 0) {
+                                        buff[durKey] -= 1;
+                                        if (buff[durKey] <= 0) {
+                                            events.push({
+                                                type: 'effect_removed',
+                                                targetId: char.slot || char.id,
+                                                effectName: buff.effect_name || buff.target_stat
+                                            });
+                                            char.active_buffs.splice(i, 1);
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Decrement skill cooldowns
+                            if (char.skills) {
+                                char.skills.forEach(skill => {
+                                    if (skill.current_cooldown && skill.current_cooldown > 0) {
+                                        skill.current_cooldown -= 1;
+                                    }
+                                });
+                            }
+                        });
+                    }
+                    
+                    // Increment turn counter because we effectively skipped the enemy's turn
+                    state.current_turn = (state.current_turn || 1) + 1;
+                }
+
+                events.push({
+                    type: 'wave_change',
+                    waveNum: state.current_wave_index + 1
+                });
+            }
+        }
+    }
+
     /**
      * Process a battle action server-side (Phase 2-6)
      */
@@ -509,6 +612,44 @@ class BattleService {
                 return { events, stateSnapshot: state };
             }
 
+            if (actionType === 'revive_party') {
+                if ((state.full_potion_count || 0) <= (state.full_potions_used || 0) || (state.full_potions_used || 0) >= 1) {
+                    throw new Error('No Full Potions available or revive limit reached.');
+                }
+
+                // Consume potion in database
+                await db.query('UPDATE player_materials SET quantity = GREATEST(0, quantity - 1) WHERE player_id = ? AND mat_id = 7', [state.player_id]);
+                
+                state.full_potions_used = (state.full_potions_used || 0) + 1;
+                
+                // Revive all party members
+                state.player_party.characters.forEach(p => {
+                    const maxHp = p.final_stats ? p.final_stats.hp : (p.max_hp || 1000);
+                    p.current_hp = maxHp;
+                    p.current_sa = 0;
+                    p.active_buffs = [];
+                    // Reset cooldowns
+                    if (p.skills) {
+                        p.skills.forEach(s => s.current_cooldown = 0);
+                    }
+                    
+                    events.push({
+                        type: 'revive',
+                        targetId: p.slot || p.id,
+                        value: maxHp
+                    });
+                });
+
+                events.push({
+                    type: 'log',
+                    message: '🧪 Full Potion! Party revived at 100% HP!'
+                });
+
+                state.is_processing = false;
+                db.query(`UPDATE battle_sessions SET battle_state_json = ? WHERE bs_id = ? AND bs_status = 'ACTIVE'`, [JSON.stringify(state), bsId]).catch(e => console.error(e));
+                return { events, stateSnapshot: state };
+            }
+
             if (actionType === 'aether_burst') {
                 if ((state.aether_gauge || 0) < 100) throw new Error('Aether Burst not ready! Gauge must be 100%.');
                 
@@ -553,6 +694,8 @@ class BattleService {
                     targetId: targetIds[0] || 'enemy_0',
                     effectName: 'DEF Down (-25%)'
                 });
+
+                this._checkWaveClear(state, events);
 
                 state.is_processing = false;
                 db.query(`UPDATE battle_sessions SET battle_state_json = ? WHERE bs_id = ? AND bs_status = 'ACTIVE'`, [JSON.stringify(state), bsId]).catch(e => console.error(e));
@@ -853,6 +996,8 @@ class BattleService {
                 }
             }
 
+            this._checkWaveClear(state, events);
+
             state.is_processing = false;
 
             // Async persist
@@ -986,8 +1131,22 @@ class BattleService {
             state.enemies.forEach((enemy, idx) => tickBuffs(enemy, `enemy_${idx}`));
         }
         if (state.player_party && state.player_party.characters) {
-            state.player_party.characters.forEach(char => tickBuffs(char, char.slot));
+            state.player_party.characters.forEach(char => {
+                tickBuffs(char, char.slot);
+                // Tick down skill cooldowns
+                if (char.skills) {
+                    char.skills.forEach(skill => {
+                        if (skill.current_cooldown > 0) {
+                            skill.current_cooldown -= 1;
+                        }
+                    });
+                }
+            });
         }
+
+        this._checkWaveClear(state, events);
+
+        state.current_turn = (state.current_turn || 1) + 1;
 
         // Async persist
         db.query(`UPDATE battle_sessions SET battle_state_json = ? WHERE bs_id = ? AND bs_status = 'ACTIVE'`, [JSON.stringify(state), bsId]).catch(e => console.error(e));
@@ -997,6 +1156,80 @@ class BattleService {
             stateSnapshot: state
         };
     }
+
+    /**
+     * Determines the smartest target for the enemy based on skill modifiers.
+     * @param {Array} alive - Array of alive player characters.
+     * @param {Object} modifiers - The skill's score_modifiers.
+     * @returns {String} The target slot/id.
+     */
+    _determineSmartTarget(alive, modifiers) {
+        if (!alive || alive.length === 0) return null;
+        if (!modifiers) return alive[Math.floor(Math.random() * alive.length)].slot || alive[0].id;
+
+        // 1. Target Lowest HP (Execute)
+        if (modifiers.party_lowest_hp_missing_pct || modifiers.Target_Lowest_HP) {
+            let targets = [];
+            let highestMissing = -1;
+            alive.forEach(p => {
+                const max = p.max_hp !== undefined ? p.max_hp : p.maxHp;
+                const cur = p.current_hp !== undefined ? p.current_hp : p.hp;
+                const missing = max > 0 ? (max - cur) / max : 0;
+                
+                // Allow a tiny margin of floating point error
+                if (missing > highestMissing + 0.001) {
+                    highestMissing = missing;
+                    targets = [p];
+                } else if (Math.abs(missing - highestMissing) <= 0.001) {
+                    targets.push(p);
+                }
+            });
+            const chosen = targets[Math.floor(Math.random() * targets.length)];
+            return chosen.slot || chosen.id;
+        }
+
+        // 2. Target Highest HP (Tank Buster)
+        if (modifiers.party_highest_hp_pct) {
+            let targets = [];
+            let highestHpPct = -1;
+            alive.forEach(p => {
+                const max = p.max_hp !== undefined ? p.max_hp : p.maxHp;
+                const cur = p.current_hp !== undefined ? p.current_hp : p.hp;
+                const pct = max > 0 ? cur / max : 0;
+                
+                if (pct > highestHpPct + 0.001) {
+                    highestHpPct = pct;
+                    targets = [p];
+                } else if (Math.abs(pct - highestHpPct) <= 0.001) {
+                    targets.push(p);
+                }
+            });
+            const chosen = targets[Math.floor(Math.random() * targets.length)];
+            return chosen.slot || chosen.id;
+        }
+
+        // 3. Target Highest Buffs (Punisher)
+        if (modifiers.party_buff_count) {
+            let targets = [];
+            let highestBuffs = -1;
+            alive.forEach(p => {
+                const buffs = (p.active_buffs || p.activeEffects || []).filter(e => (e.effect_type || e.type || '').toLowerCase() === 'buff').length;
+                
+                if (buffs > highestBuffs) {
+                    highestBuffs = buffs;
+                    targets = [p];
+                } else if (buffs === highestBuffs) {
+                    targets.push(p);
+                }
+            });
+            const chosen = targets[Math.floor(Math.random() * targets.length)];
+            return chosen.slot || chosen.id;
+        }
+
+        // Fallback: Random
+        return alive[Math.floor(Math.random() * alive.length)].slot || alive[0].id;
+    }
+
     async processEnemyTurn(bsId) {
         let state = BattleMemoryStore.get(bsId);
         if (!state) {
@@ -1057,13 +1290,29 @@ class BattleService {
         if (caSkill) {
             // CA Action
             let targetIds = [];
-            const tType = caSkill.skill ? caSkill.skill.target_type : caSkill.target_type;
-            const alive = (state.player_party.characters || []).filter(p => (p.current_hp !== undefined ? p.current_hp : p.hp) > 0);
+            const tType = (caSkill.skill ? caSkill.skill.target_type : caSkill.target_type).toLowerCase();
+            const alivePlayers = (state.player_party.characters || []).filter(p => (p.current_hp !== undefined ? p.current_hp : p.hp) > 0);
+            const aliveEnemies = (state.enemies || []).filter(e => (e.current_hp !== undefined ? e.current_hp : e.hp) > 0);
             
-            if (tType === 'All_Enemies' || tType === 'All_Allies') {
-                targetIds = alive.map(p => p.slot || p.id);
+            if (tType === 'all_allies' || tType === 'single_ally' || tType === 'self') {
+                if (tType === 'all_allies') {
+                    targetIds = aliveEnemies.map((e, idx) => `enemy_${idx}`);
+                } else if (tType === 'self') {
+                    targetIds = ['enemy_0']; // Current source is enemy_0
+                } else {
+                    // single_ally
+                    targetIds = ['enemy_0']; // Default to self
+                }
             } else {
-                if (alive.length > 0) targetIds = [alive[Math.floor(Math.random() * alive.length)].slot || alive[0].id];
+                if (tType === 'all_enemies') {
+                    targetIds = alivePlayers.map(p => p.slot || p.id);
+                } else {
+                    if (alivePlayers.length > 0) {
+                        const modifiers = caSkill.modifiers || caSkill.score_modifiers || {};
+                        const smartTarget = this._determineSmartTarget(alivePlayers, modifiers);
+                        targetIds = [smartTarget];
+                    }
+                }
             }
             
             if (targetIds.length > 0) {
@@ -1086,7 +1335,13 @@ class BattleService {
                 let targetIds = [];
                 const alive = (state.player_party.characters || []).filter(p => (p.current_hp !== undefined ? p.current_hp : p.hp) > 0);
                 if (alive.length > 0) {
-                    targetIds = [alive[Math.floor(Math.random() * alive.length)].slot || alive[0].id];
+                    // Smart targeting for basic attack if enraged (50% chance to target lowest HP)
+                    if ((enemy.mode_state === 'enraged' || enemy.modeState === 'enraged') && Math.random() < 0.5) {
+                        const smartTarget = this._determineSmartTarget(alive, { party_lowest_hp_missing_pct: 1 });
+                        targetIds = [smartTarget];
+                    } else {
+                        targetIds = [alive[Math.floor(Math.random() * alive.length)].slot || alive[0].id];
+                    }
                 }
                 
                 const actionData = { sourceId: 'enemy_0', targetIds, actionType: 'attack', skillId: null, skipCaGain: i > 0 };
