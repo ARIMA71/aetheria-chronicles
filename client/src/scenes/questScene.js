@@ -586,6 +586,7 @@ export default class QuestScene extends Phaser.Scene {
         });
         const btnGacha = this._createModalRoundBtn(CX + 100, 125, 'GACHA', () => {
             this.toggleMenuModal(false);
+            this.scene.start('LoadingScene', { targetScene: 'GachaScene' });
         });
 
         const s2Label = this.add.text(CX, 185, 'ITEMS & MARKET', { fontSize: '9px', fontFamily: 'Outfit', color: THEME.TEXT_SECONDARY, letterSpacing: 1 }).setOrigin(0.5);

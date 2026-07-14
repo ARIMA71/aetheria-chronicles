@@ -7,12 +7,14 @@ const playerRoutes = require('./playerRoutes')
 const battleRoutes = require('./battleRoutes')
 const questRoutes = require('./questRoutes')
 const partyRoutes = require('./partyRoutes')
+const gachaRoutes = require('./gachaRoutes')
 
 router.use('/auth', authRoutes)
 router.use('/player', playerRoutes)
 router.use('/battle', battleRoutes)
 router.use('/quests', questRoutes)
 router.use('/party', partyRoutes)
+router.use('/gacha', gachaRoutes)
 
 router.get('/test', testController.test);
 

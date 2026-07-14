@@ -234,18 +234,18 @@ export default class MainMenuScene extends Phaser.Scene {
     _buildFABCluster() {
         // Floating Action Buttons dengan patokan Quest di kanan
         // Quest (Patokan Utama, nempel di kanan sejajar border stats)
-        this.questFab = this._createFAB(395, 575, 40, 'Quest', THEME.TEXT_PRIMARY, () => {
+        this.questFab = this._createFAB(395, 575, 40, 'Quest', '#ffffff', () => {
             this.scene.start('LoadingScene', { targetScene: 'QuestScene' });
         });
 
         // Party (Di atas Quest, sejajar kanan)
-        this._createFAB(405, 495, 30, 'Party', THEME.TEXT_PRIMARY, () => {
+        this._createFAB(405, 495, 30, 'Party', '#ffffff', () => {
             this.scene.start('LoadingScene', { targetScene: 'PartyScene' });
         });
 
         // Gacha (Di sebelah kiri Quest)
-        this._createFAB(317, 585, 30, 'Gacha', THEME.TEXT_MUTED, () => {
-            // Placeholder
+        this._createFAB(317, 585, 30, 'Gacha', '#ffffff', () => {
+            this.scene.start('LoadingScene', { targetScene: 'GachaScene' });
         });
     }
 
@@ -255,7 +255,7 @@ export default class MainMenuScene extends Phaser.Scene {
         circle.setInteractive({ useHandCursor: true });
 
         const txt = this.add.text(x, y, label, {
-            fontSize: radius > 35 ? '12px' : '10px',
+            fontSize: radius > 35 ? '16px' : '13px',
             fontStyle: 'bold',
             fontFamily: 'Outfit',
             color: textColor
@@ -397,7 +397,7 @@ export default class MainMenuScene extends Phaser.Scene {
         });
         const btnGacha = this._createModalRoundBtn(CX + 100, 125, 'GACHA', () => {
             this.toggleMenuModal(false);
-            // Navigasi ke scene Gacha jika ada
+            this.scene.start('LoadingScene', { targetScene: 'GachaScene' });
         });
 
         // ── SECTION 2: Inventory & Shop ──
@@ -605,7 +605,7 @@ export default class MainMenuScene extends Phaser.Scene {
                     const cy = this.questFab.circle.y - 25;
                     const redDot = this.add.circle(cx, cy, 8, 0xef4444).setDepth(50);
                     redDot.setStrokeStyle(1, 0xffffff);
-                    
+
                     this.tweens.add({
                         targets: redDot,
                         alpha: 0.2,
