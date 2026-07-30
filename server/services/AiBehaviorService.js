@@ -20,7 +20,7 @@ class AiBehaviorService {
         // 1. EXTRACT 8 PATENT VECTORS FROM BATTLE STATE
         // ─────────────────────────────────────────────────────────────────────────
         const characters = (battleState.player_party && battleState.player_party.characters) || [];
-        
+
         // Vector 1: party_total_hp_pct
         let totalCurrentHp = 0;
         let totalMaxHp = 0;
@@ -82,7 +82,7 @@ class AiBehaviorService {
         const boss = (battleState.enemies && battleState.enemies[0]) ? battleState.enemies[0] : (battleState.boss || {});
         const bossCur = (boss.current_hp !== undefined ? boss.current_hp : boss.hp) || 0;
         const bossMax = (boss.final_stats && boss.final_stats.hp !== undefined) ? boss.final_stats.hp : ((boss.max_hp !== undefined ? boss.max_hp : boss.maxHp) || 0);
-        
+
         // Vector 6: boss_hp_pct
         const boss_hp_pct = bossMax > 0 ? bossCur / bossMax : 1;
 
@@ -94,7 +94,7 @@ class AiBehaviorService {
         // 2. PHASE FILTERING
         // ─────────────────────────────────────────────────────────────────────────
         const currentPhase = (boss.phase || boss.modeState || 'Normal').trim().toLowerCase();
-        
+
         const phaseSkills = bossSkills.filter(s => {
             // HP triggers bypass phase filtering
             const mods = s.score_modifiers || s.modifiers || {};
@@ -104,7 +104,7 @@ class AiBehaviorService {
             const skillPhase = (s.phase || s.boss_phase || 'Normal').trim().toLowerCase();
             return skillPhase === currentPhase;
         });
-        
+
         // Fallback to all skills if none matches current phase
         const candidateSkills = phaseSkills.length > 0 ? phaseSkills : bossSkills;
 
@@ -122,11 +122,11 @@ class AiBehaviorService {
             const isOneTime = mods.One_Time_Use === true || mods.one_time_use === true || isOverride;
             if (isOneTime) {
                 if (s.used === true) return false;
-                
+
                 // Check in list of used skill IDs in battleState
                 const usedSkills = battleState.usedSkills || battleState.used_skills || [];
                 const skillId = s.skill_id !== undefined ? s.skill_id : (s.skill && s.skill.id) !== undefined ? s.skill.id : s.id;
-                
+
                 if (Array.isArray(usedSkills) && usedSkills.includes(skillId)) return false;
                 if (usedSkills instanceof Set && usedSkills.has(skillId)) return false;
             }
@@ -136,7 +136,7 @@ class AiBehaviorService {
                 const currentCa = boss.current_ca !== undefined ? boss.current_ca : 0;
                 const caMax = boss.caMax !== undefined ? boss.caMax : 5;
                 const isExhausted = (boss.mode_state || boss.modeState) === 'exhausted';
-                
+
                 const isCaReady = currentCa >= caMax && !isExhausted;
                 if (!isCaReady) return false;
             } else {
@@ -181,7 +181,9 @@ class AiBehaviorService {
                 const baseB = Number(b.base_utility !== undefined ? b.base_utility : b.baseUtility) || 0;
                 return baseB - baseA;
             });
-            return activeOverrides[0];
+            const selectedOverride = activeOverrides[0];
+            selectedOverride.isHpTrigger = true;
+            return selectedOverride;
         }
 
         // ─────────────────────────────────────────────────────────────────────────

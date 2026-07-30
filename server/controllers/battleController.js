@@ -245,6 +245,7 @@ exports.saveBattleResult = async (req, res) => {
                 );
                 const isWeapDuplicate = weapExists.length > 0;
 
+                // 1. Selalu insert senjata ke inventory (layaknya Gacha)
                 await conn.query(
                     `INSERT INTO player_inventories
                         (player_id, master_item_id, item_type, item_level, limit_break_level, item_exp)
@@ -256,19 +257,38 @@ exports.saveBattleResult = async (req, res) => {
                     [item.reward_item_id]
                 );
                 const detail = weapDetail[0] || { name: 'Unknown Weapon', rarity: null, element: null, unlocks_mc_id: null };
+                
                 obtainedRewards.push({
                     reward_type: 'Weapon', reward_item_id: item.reward_item_id, quantity: item.quantity,
                     name: detail.name, description: isWeapDuplicate ? 'Sudah dimiliki (duplikat)' : null, rarity: detail.rarity, element: detail.element
                 });
 
-                // Unlocks char if weapon is NOT a duplicate
-                if (detail.unlocks_mc_id !== null && !isWeapDuplicate) {
+                // 2. Cek apakah senjata memiliki karakter yang terikat
+                if (detail.unlocks_mc_id !== null) {
                     const [charExists] = await conn.query(
                         `SELECT inv_id FROM player_inventories
                          WHERE player_id = ? AND master_item_id = ? AND item_type = 'Character'`,
                         [playerId, detail.unlocks_mc_id]
                     );
-                    if (charExists.length === 0) {
+
+                    if (charExists.length > 0) {
+                        // Karakter Duplikat - Konversi Material (Enhance Crystal, mat_id: 4)
+                        const matAmount = detail.rarity === 'SSR' ? 10 : (detail.rarity === 'SR' ? 5 : 1);
+                        const matId = 4;
+
+                        await conn.query(
+                            `INSERT INTO player_materials (player_id, mat_id, quantity) 
+                             VALUES (?, ?, ?) 
+                             ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)`,
+                            [playerId, matId, matAmount]
+                        );
+
+                        obtainedRewards.push({
+                            reward_type: 'Material', reward_item_id: matId, quantity: matAmount,
+                            name: 'Enhance Crystal', description: 'Konversi Karakter Duplikat', rarity: detail.rarity, element: null
+                        });
+                    } else {
+                        // Karakter Baru - Buka Karakter
                         await conn.query(
                             `INSERT INTO player_inventories
                                 (player_id, master_item_id, item_type, item_level, limit_break_level, item_exp)
@@ -280,10 +300,30 @@ exports.saveBattleResult = async (req, res) => {
                             [detail.unlocks_mc_id]
                         );
                         const cDetail = charDetail[0] || { name: 'Unknown Character', rarity: null, element: null, mc_portrait_path: null };
+                        
                         obtainedRewards.push({
                             reward_type: 'Character', reward_item_id: detail.unlocks_mc_id, quantity: 1,
                             name: cDetail.name, description: `Karakter terbuka via Senjata ${detail.name}!`, rarity: cDetail.rarity, element: cDetail.element,
                             is_new_unlock: true, portrait_path: cDetail.mc_portrait_path
+                        });
+                    }
+                } else {
+                    // 3. Senjata TANPA karakter terikat (Rarity R)
+                    if (isWeapDuplicate) {
+                        // Jika senjata duplikat, kompensasi Weapon Whetstone (mat_id: 5)
+                        const matId = 5;
+                        const matAmount = 1;
+
+                        await conn.query(
+                            `INSERT INTO player_materials (player_id, mat_id, quantity) 
+                             VALUES (?, ?, ?) 
+                             ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)`,
+                            [playerId, matId, matAmount]
+                        );
+
+                        obtainedRewards.push({
+                            reward_type: 'Material', reward_item_id: matId, quantity: matAmount,
+                            name: 'Weapon Whetstone', description: 'Kompensasi Senjata Duplikat', rarity: detail.rarity, element: null
                         });
                     }
                 }
@@ -434,6 +474,22 @@ exports.saveBattleResult = async (req, res) => {
                 }
                 
                 const rankLevel = LevelingSystem.calculateCurrentLevel(pNewExp, 100, 'Rank');
+                
+                let totalDiamondReward = 0;
+                if (rankLevel > dbPlayerLevel) {
+                    for (let l = dbPlayerLevel + 1; l <= rankLevel; l++) {
+                        if (l % 10 === 0) totalDiamondReward += 100;
+                        else totalDiamondReward += 50;
+                    }
+                    if (totalDiamondReward > 0) {
+                         await conn.query('UPDATE players SET diamond = diamond + ? WHERE player_id = ?', [totalDiamondReward, playerId]);
+                         obtainedRewards.push({
+                              reward_type: 'Diamond', reward_item_id: 0, quantity: totalDiamondReward,
+                              name: 'Diamond', description: `Level Up Reward! (Rank ${dbPlayerLevel} ➔ ${rankLevel})`, rarity: null, element: null
+                         });
+                    }
+                }
+                
                 await conn.query('UPDATE players SET player_exp = ?, player_level = ? WHERE player_id = ?', [pNewExp, rankLevel, playerId]);
                 expData.player_rank = rankLevel;
             } else {

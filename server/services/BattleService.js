@@ -182,16 +182,24 @@ class BattleService {
         `;
 
         const [
-            [charRows], [skillRows], [monsterRows], [weaponRows], [weaponPassiveRows]
+            [charRows], [skillRows], [monsterRows], [weaponRows], [weaponPassiveRows], [playerRows]
         ] = await Promise.all([
             db.query(queryCharacters, [playerId, presetSlot, playerId, presetSlot, playerId, presetSlot, playerId, presetSlot]),
             db.query(querySkills, [playerId, presetSlot, playerId, presetSlot, playerId, presetSlot, playerId, presetSlot]),
             db.query(queryMonsters, [questId]),
             db.query(queryWeapons, [playerId, presetSlot]),
-            db.query(queryWeaponPassives, [playerId, presetSlot])
+            db.query(queryWeaponPassives, [playerId, presetSlot]),
+            db.query('SELECT username FROM players WHERE player_id = ?', [playerId])
         ]);
 
         if (charRows.length === 0) throw new Error('Party preset tidak ditemukan untuk player dan slot yang diberikan.');
+
+        const username = playerRows && playerRows[0] ? playerRows[0].username : 'Main Character';
+        charRows.forEach(row => {
+            if (row.role_slot === 'Main Character') {
+                row.name = username;
+            }
+        });
 
         // Group Skills
         const skillMap = new Map();
@@ -687,12 +695,15 @@ class BattleService {
                     value: calcResult.damage,
                     isCrit: calcResult.isCrit,
                     mitigation: calcResult.mitigationPercent,
-                    skillName: '✦ Aether Burst'
+                    skillName: '✦ Aether Burst',
+                    elementMultiplier: calcResult.elementMultiplier,
+                    sourceElement: aetherSkill.element
                 });
                 events.push({
                     type: 'effect_applied',
                     targetId: targetIds[0] || 'enemy_0',
-                    effectName: 'DEF Down (-25%)'
+                    effectName: 'DEF Down (-25%)',
+                    effectType: 'debuff'
                 });
 
                 this._checkWaveClear(state, events);
@@ -704,6 +715,26 @@ class BattleService {
 
             const attacker = this._findEntity(state, sourceId);
             if (!attacker) throw new Error('Attacker not found in state');
+
+            const isAttackerStunned = (attacker.active_buffs || []).some(b => b.target_stat === 'STUN');
+            if (isAttackerStunned) {
+                events.push({
+                    type: 'damage',
+                    sourceId: sourceId,
+                    targetId: targetIds && targetIds.length > 0 ? targetIds[0] : 'enemy_0',
+                    value: 0,
+                    isCrit: false,
+                    mitigation: 0,
+                    skillName: 'STUNNED',
+                    elementMultiplier: 1,
+                    sourceElement: 'Neutral'
+                });
+                
+                this._checkWaveClear(state, events);
+                state.is_processing = false;
+                db.query(`UPDATE battle_sessions SET battle_state_json = ? WHERE bs_id = ? AND bs_status = 'ACTIVE'`, [JSON.stringify(state), bsId]).catch(e => console.error(e));
+                return { events, stateSnapshot: state };
+            }
 
             // Find the skill
             let skill = null;
@@ -775,7 +806,8 @@ class BattleService {
                     events.push({
                         type: 'effect_applied',
                         targetId: sourceId,
-                        effectName: `+${saGain}% SA Bar`
+                        effectName: `+${saGain}% SA Bar`,
+                        effectType: 'buff'
                     });
                 }
 
@@ -783,7 +815,7 @@ class BattleService {
                 if (skill.trigger_delay > 0 && targetIds[targets.indexOf(target)].startsWith('enemy_')) {
                     if (target.current_ca > 0) {
                         target.current_ca -= 1;
-                        events.push({ type: 'effect_applied', targetId: targetIds[targets.indexOf(target)], effectName: 'Delay' });
+                        events.push({ type: 'effect_applied', targetId: targetIds[targets.indexOf(target)], effectName: 'Delay', effectType: 'debuff' });
                     }
                 }
 
@@ -793,7 +825,7 @@ class BattleService {
                         // Remove the most recently applied buff (or random)
                         const removed = buffs.pop();
                         target.active_buffs = target.active_buffs.filter(b => b !== removed);
-                        events.push({ type: 'effect_applied', targetId: targetIds[targets.indexOf(target)], effectName: 'Dispel' });
+                        events.push({ type: 'effect_applied', targetId: targetIds[targets.indexOf(target)], effectName: 'Dispel', effectType: 'debuff' });
                     }
                 }
 
@@ -812,6 +844,7 @@ class BattleService {
                     console.log(`[DEBUG] Damage Event: ${sourceId} -> ${targetIds[targets.indexOf(target)]}, skill: ${skill.name}, dmg: ${calcResult.damage}`);
 
                     // Update Enemy Mode Bar BEFORE pushing damage event
+                    let modeTransitionedTo = null;
                     if (targetIds[targets.indexOf(target)].startsWith('enemy_') && target.is_boss) {
                         const threshold = (target.final_stats.hp || target.max_hp) * 0.20;
                         const isAttackSequence = actionData.isAttackSequence === true;
@@ -826,6 +859,7 @@ class BattleService {
                                 } else {
                                     target.mode_state = 'enraged';
                                     target.enrage_turns = 3;
+                                    modeTransitionedTo = 'enraged';
                                     // enrage event will be pushed AFTER damage event
                                 }
                             }
@@ -842,6 +876,7 @@ class BattleService {
                                         target.mode_state = 'exhausted';
                                         target.exhaust_turns = 2;
                                         target.enrage_turns = 0;
+                                        modeTransitionedTo = 'exhausted';
                                         // break event will be pushed AFTER damage event
                                     }
                                 }
@@ -857,19 +892,18 @@ class BattleService {
                         isCrit: calcResult.isCrit,
                         mitigation: calcResult.mitigationPercent,
                         skillName: skill.name,
+                        elementMultiplier: calcResult.elementMultiplier,
+                        sourceElement: skill.element || (attacker ? attacker.element || 'Neutral' : 'Neutral'),
                         modeBar: target.mode_bar,
                         modeState: target.mode_state
                     });
                     
                     // Push mode transition events if triggered immediately (not pending)
                     if (targetIds[targets.indexOf(target)].startsWith('enemy_') && target.is_boss) {
-                        const isAttackSequence = actionData.isAttackSequence === true;
-                        if (!isAttackSequence) {
-                            if (target.mode_state === 'enraged' && target.mode_bar === (target.final_stats.hp || target.max_hp) * 0.20) {
-                                events.push({ type: 'enrage', targetId: targetIds[targets.indexOf(target)] });
-                            } else if (target.mode_state === 'exhausted' && target.mode_bar === 0) {
-                                events.push({ type: 'break', targetId: targetIds[targets.indexOf(target)] });
-                            }
+                        if (modeTransitionedTo === 'enraged') {
+                            events.push({ type: 'enrage', targetId: targetIds[targets.indexOf(target)] });
+                        } else if (modeTransitionedTo === 'exhausted') {
+                            events.push({ type: 'break', targetId: targetIds[targets.indexOf(target)] });
                         }
                     }
 
@@ -955,7 +989,8 @@ class BattleService {
                     effectTargets.forEach(effTarget => {
                         if (effTarget && ((effTarget.current_hp !== undefined && effTarget.current_hp > 0) || (effTarget.hp !== undefined && effTarget.hp > 0))) {
                             if (!effTarget.active_buffs) effTarget.active_buffs = [];
-                            effTarget.active_buffs.push({ ...eff });
+                            const isEnemySource = String(sourceId).startsWith('enemy');
+                            effTarget.active_buffs.push({ ...eff, applied_by_enemy_this_turn: isEnemySource });
                             
                             let tid = 'unknown';
                             if (effTarget.id !== undefined && state.enemies.find(e => e.id === effTarget.id)) {
@@ -967,7 +1002,8 @@ class BattleService {
                             events.push({
                                 type: 'effect_applied',
                                 targetId: tid,
-                                effectName: eff.effect_name || eff.target_stat
+                                effectName: eff.effect_name || eff.target_stat,
+                                effectType: eff.effect_type || 'buff'
                             });
                         }
                     });
@@ -988,7 +1024,7 @@ class BattleService {
             }
 
             // Reset CA / SA Bar if special attack is used
-            if (skill && (skill.category || '').toLowerCase() === 'special') {
+            if (skill && (skill.category || '').toLowerCase() === 'special' && !actionData.skipCaReset) {
                 if (sourceId.startsWith('enemy_')) {
                     attacker.current_ca = 0;
                 } else {
@@ -1025,14 +1061,66 @@ class BattleService {
             }
         }
         if (!state) throw new Error("ACTIVE_SESSION_NOT_FOUND");
-
         const events = [];
 
+        const processDoT = (entity, entityId, isEnemy) => {
+            if (!entity || (entity.current_hp !== undefined ? entity.current_hp : entity.hp) <= 0) return;
+            
+            const maxHp = entity.final_stats ? entity.final_stats.hp : (entity.max_hp || entity.maxHp || 1000);
+            const allDoT = (entity.active_buffs || []).filter(e => e.target_stat === 'POISON');
+            
+            const groups = [
+                { type: 'Poison', effects: allDoT.filter(e => !(e.effect_name || '').toLowerCase().includes('burn')) },
+                { type: 'Burn', effects: allDoT.filter(e => (e.effect_name || '').toLowerCase().includes('burn')) }
+            ];
+
+            groups.forEach(group => {
+                if (group.effects.length === 0) return;
+                
+                let totalPct = 0;
+                group.effects.forEach(eff => {
+                    totalPct += Math.abs(Number(eff.value) || 0.05);
+                });
+                
+                if (totalPct > 0) {
+                    const totalDmg = Math.floor(totalPct * maxHp);
+                    const curHp = entity.current_hp !== undefined ? entity.current_hp : entity.hp;
+                    entity.current_hp = Math.max(0, curHp - totalDmg);
+                    
+                    events.push({
+                        type: 'damage',
+                        sourceId: entityId, // Self-inflicted
+                        targetId: entityId,
+                        value: totalDmg,
+                        skillName: group.type, // "Poison" or "Burn"
+                        isDoT: true,
+                        effectName: group.type,
+                        isCrit: false,
+                        mitigation: 0
+                    });
+
+                    // DoT Death Resolution Guardrail
+                    if (entity.current_hp <= 0) {
+                        events.push({
+                            type: 'log',
+                            message: `💀 ${entity.name || entity.charName || 'Entity'} died from ${group.type}!`
+                        });
+                    }
+                }
+            });
+        };
+
+        if (state.enemies) {
+            state.enemies.forEach((enemy, idx) => processDoT(enemy, `enemy_${idx}`, true));
+        }
+        if (state.player_party && state.player_party.characters) {
+            state.player_party.characters.forEach((char) => processDoT(char, char.slot, false));
+        }
         // --- SA Chain Burst Trigger ---
         if ((state.current_turn_sa_count || 0) >= 2) {
-            let chainMult = 1.5;
-            if (state.current_turn_sa_count === 3) chainMult = 2.0;
-            if (state.current_turn_sa_count >= 4) chainMult = 2.5;
+            let chainMult = 1.2;
+            if (state.current_turn_sa_count === 3) chainMult = 1.5;
+            if (state.current_turn_sa_count >= 4) chainMult = 2.0;
 
             const attacker = this._findEntity(state, state.first_sa_attacker_id);
             const target = state.enemies && state.enemies[0];
@@ -1055,7 +1143,9 @@ class BattleService {
                     value: calcResult.damage,
                     isCrit: calcResult.isCrit,
                     mitigation: calcResult.mitigationPercent,
-                    skillName: `💥 SA Chain Burst (${state.current_turn_sa_count}x)`
+                    skillName: `💥 SA Chain Burst (${state.current_turn_sa_count}x)`,
+                    elementMultiplier: calcResult.elementMultiplier,
+                    sourceElement: chainSkill.element
                 });
             }
         }
@@ -1068,21 +1158,12 @@ class BattleService {
 
         if (state.enemies) {
             for (const enemy of state.enemies) {
-                // 1. Resolve pending transitions (Boss ONLY)
                 if (enemy.is_boss) {
-                    if (enemy.pending_mode_transition === 'enraged') {
-                        enemy.mode_state = 'enraged';
-                        enemy.enrage_turns = 3;
-                        enemy.pending_mode_transition = null;
-                        events.push({ type: 'enrage', targetId: 'enemy_0' });
-                    } else if (enemy.pending_mode_transition === 'exhausted') {
-                        enemy.mode_state = 'exhausted';
-                        enemy.exhaust_turns = 2;
-                        enemy.enrage_turns = 0;
-                        enemy.pending_mode_transition = null;
-                        events.push({ type: 'break', targetId: 'enemy_0' });
+                    // Prevent ticking down if mode just changed this turn
+                    if (enemy.mode_changed_this_turn) {
+                        enemy.mode_changed_this_turn = false;
                     } else {
-                        // 2. Tick turn counts if no transition was just resolved
+                        // 1. Tick turn counts for mode transitions
                         if (enemy.mode_state === 'enraged') {
                             enemy.enrage_turns = (enemy.enrage_turns || 3) - 1;
                             if (enemy.enrage_turns <= 0) {
@@ -1090,7 +1171,7 @@ class BattleService {
                                 enemy.mode_state = 'normal';
                                 enemy.mode_bar = 0;
                                 enemy.enrage_turns = 0;
-                                events.push({ type: 'effect_applied', targetId: 'enemy_0', effectName: 'Enrage Timeout' });
+                                events.push({ type: 'effect_applied', targetId: 'enemy_0', effectName: 'Enrage Timeout', effectType: 'buff' });
                             }
                         } else if (enemy.mode_state === 'exhausted') {
                             enemy.exhaust_turns = (enemy.exhaust_turns || 2) - 1;
@@ -1098,7 +1179,7 @@ class BattleService {
                                 enemy.mode_state = 'normal';
                                 enemy.mode_bar = 0;
                                 enemy.exhaust_turns = 0;
-                                events.push({ type: 'effect_applied', targetId: 'enemy_0', effectName: 'Recovered' });
+                                events.push({ type: 'effect_applied', targetId: 'enemy_0', effectName: 'Recovered', effectType: 'buff' });
                             }
                         }
                     }
@@ -1111,6 +1192,10 @@ class BattleService {
             if (entity.active_buffs && entity.active_buffs.length > 0) {
                 for (let i = entity.active_buffs.length - 1; i >= 0; i--) {
                     const buff = entity.active_buffs[i];
+                    if (buff.applied_by_enemy_this_turn) {
+                        buff.applied_by_enemy_this_turn = false;
+                        continue;
+                    }
                     const durKey = buff.mse_duration !== undefined ? 'mse_duration' : (buff.duration !== undefined ? 'duration' : null);
                     if (durKey && buff[durKey] > 0) {
                         buff[durKey] -= 1;
@@ -1240,116 +1325,154 @@ class BattleService {
         }
         if (!state) throw new Error("ACTIVE_SESSION_NOT_FOUND");
         
-        const enemy = state.enemies && state.enemies[0];
-        if (!enemy || (enemy.current_hp !== undefined ? enemy.current_hp : enemy.hp) <= 0) {
-            return { events: [], stateSnapshot: state };
-        }
-        
         let allEvents = [];
-        const AiBehaviorService = require('./AiBehaviorService');
         
-        let caSkill = null;
-        
-        if (enemy.is_boss) {
-            // 1. Determine AI Action for Boss
-            caSkill = AiBehaviorService.calculateBossAction(state, enemy.ai_behaviors || enemy.aiBehaviors);
+        for (let enemyIdx = 0; enemyIdx < state.enemies.length; enemyIdx++) {
+            const enemy = state.enemies[enemyIdx];
+            if (!enemy || (enemy.current_hp !== undefined ? enemy.current_hp : enemy.hp) <= 0) {
+                continue; // Skip dead enemies
+            }
             
-            // --- FALLBACK MECHANISM ---
-            if (!caSkill) {
-                const currentCa = enemy.current_ca !== undefined ? enemy.current_ca : 0;
-                const caMax = enemy.caMax !== undefined ? enemy.caMax : (enemy.final_stats && enemy.final_stats.caMax) !== undefined ? enemy.final_stats.caMax : 5;
-                const isExhausted = (enemy.mode_state || enemy.modeState) === 'exhausted';
-                
-                if (currentCa >= caMax && !isExhausted) {
-                    const phase = (enemy.mode_state || enemy.modeState || 'Normal').trim().toLowerCase();
-                    console.warn(`[AI WARNING] Boss ID ${enemy.id} has no valid Special Skill mapped for Phase '${phase}' or logic failed. Using Random Fallback.`);
-                    
-                    const specialSkills = (enemy.ai_behaviors || enemy.aiBehaviors || []).filter(b => {
-                        const skill = b.skill || b;
-                        const cat = skill.category || '';
-                        return cat.toLowerCase() === 'special';
-                    });
-                    
-                    if (specialSkills.length > 0) {
-                        caSkill = specialSkills[Math.floor(Math.random() * specialSkills.length)];
-                    }
+            const sourceId = `enemy_${enemyIdx}`;
+
+            // 0. Skip if stunned
+            const isStunned = enemy.active_buffs && enemy.active_buffs.some(e => e.target_stat === 'STUN');
+            if (isStunned) {
+                const enemyName = enemy.name || 'ENEMY';
+                allEvents.push({ type: 'log', message: `⚡ ${enemyName.toUpperCase()} is STUNNED and skips their turn!` });
+                continue;
+            }
+            
+            // 1. Resolve pending mode transitions at the START of Enemy Turn
+            if (enemy.is_boss) {
+                if (enemy.pending_mode_transition === 'enraged') {
+                    enemy.mode_state = 'enraged';
+                    enemy.enrage_turns = 3;
+                    enemy.mode_changed_this_turn = true;
+                    enemy.pending_mode_transition = null;
+                    allEvents.push({ type: 'enrage', targetId: sourceId });
+                } else if (enemy.pending_mode_transition === 'exhausted') {
+                    enemy.mode_state = 'exhausted';
+                    enemy.exhaust_turns = 2;
+                    enemy.enrage_turns = 0;
+                    enemy.mode_changed_this_turn = true;
+                    enemy.pending_mode_transition = null;
+                    allEvents.push({ type: 'break', targetId: sourceId });
                 }
             }
-        } else {
-            // Normal Monster Logic: Cast a random skill from their behavior list if CA is full
-            const currentCa = enemy.current_ca !== undefined ? enemy.current_ca : 0;
-            const caMax = enemy.caMax !== undefined ? enemy.caMax : (enemy.final_stats && enemy.final_stats.caMax) !== undefined ? enemy.final_stats.caMax : 5;
+
+            const AiBehaviorService = require('./AiBehaviorService');
+            let caSkill = null;
             
-            const availableSkills = enemy.ai_behaviors || enemy.aiBehaviors || [];
-            
-            if (currentCa >= caMax && availableSkills.length > 0) {
-                caSkill = availableSkills[Math.floor(Math.random() * availableSkills.length)];
-            }
-        }
-        
-        if (caSkill) {
-            // CA Action
-            let targetIds = [];
-            const tType = (caSkill.skill ? caSkill.skill.target_type : caSkill.target_type).toLowerCase();
-            const alivePlayers = (state.player_party.characters || []).filter(p => (p.current_hp !== undefined ? p.current_hp : p.hp) > 0);
-            const aliveEnemies = (state.enemies || []).filter(e => (e.current_hp !== undefined ? e.current_hp : e.hp) > 0);
-            
-            if (tType === 'all_allies' || tType === 'single_ally' || tType === 'self') {
-                if (tType === 'all_allies') {
-                    targetIds = aliveEnemies.map((e, idx) => `enemy_${idx}`);
-                } else if (tType === 'self') {
-                    targetIds = ['enemy_0']; // Current source is enemy_0
-                } else {
-                    // single_ally
-                    targetIds = ['enemy_0']; // Default to self
+            if (enemy.is_boss) {
+                // 1. Determine AI Action for Boss
+                caSkill = AiBehaviorService.calculateBossAction(state, enemy.ai_behaviors || enemy.aiBehaviors);
+                
+                // --- FALLBACK MECHANISM ---
+                if (!caSkill) {
+                    const currentCa = enemy.current_ca !== undefined ? enemy.current_ca : 0;
+                    const caMax = enemy.caMax !== undefined ? enemy.caMax : (enemy.final_stats && enemy.final_stats.caMax) !== undefined ? enemy.final_stats.caMax : 5;
+                    const isExhausted = (enemy.mode_state || enemy.modeState) === 'exhausted';
+                    
+                    if (currentCa >= caMax && !isExhausted) {
+                        const phase = (enemy.mode_state || enemy.modeState || 'Normal').trim().toLowerCase();
+                        console.warn(`[AI WARNING] Boss ID ${enemy.id} has no valid Special Skill mapped for Phase '${phase}' or logic failed. Using Random Fallback.`);
+                        
+                        const specialSkills = (enemy.ai_behaviors || enemy.aiBehaviors || []).filter(b => {
+                            const skill = b.skill || b;
+                            const cat = skill.category || '';
+                            return cat.toLowerCase() === 'special';
+                        });
+                        
+                        if (specialSkills.length > 0) {
+                            caSkill = specialSkills[Math.floor(Math.random() * specialSkills.length)];
+                        }
+                    }
                 }
             } else {
-                if (tType === 'all_enemies') {
-                    targetIds = alivePlayers.map(p => p.slot || p.id);
-                } else {
-                    if (alivePlayers.length > 0) {
-                        const modifiers = caSkill.modifiers || caSkill.score_modifiers || {};
-                        const smartTarget = this._determineSmartTarget(alivePlayers, modifiers);
-                        targetIds = [smartTarget];
-                    }
+                // Normal Monster Logic: Cast a random skill from their behavior list if CA is full
+                const currentCa = enemy.current_ca !== undefined ? enemy.current_ca : 0;
+                const caMax = enemy.caMax !== undefined ? enemy.caMax : (enemy.final_stats && enemy.final_stats.caMax) !== undefined ? enemy.final_stats.caMax : 5;
+                
+                const availableSkills = enemy.ai_behaviors || enemy.aiBehaviors || [];
+                
+                if (currentCa >= caMax && availableSkills.length > 0) {
+                    caSkill = availableSkills[Math.floor(Math.random() * availableSkills.length)];
                 }
             }
             
-            if (targetIds.length > 0) {
-                const actionData = { sourceId: 'enemy_0', targetIds, actionType: 'skill', skillId: caSkill.skill ? caSkill.skill.id : caSkill.id };
-                const res = await this.processAction(bsId, actionData);
-                allEvents.push({ type: 'log', message: `💀 ENEMY SPECIAL ATTACK: ${caSkill.skill ? caSkill.skill.name : caSkill.name}!` });
-                allEvents.push(...res.events);
-                state = res.stateSnapshot;
-            }
-        } else {
-            // Basic Attack(s)
-            let attacksCount = 1;
-            // Mode State Check for Double Attack
-            const isCaMax = (enemy.current_ca || 0) >= (enemy.caMax !== undefined ? enemy.caMax : (enemy.final_stats && enemy.final_stats.caMax) !== undefined ? enemy.final_stats.caMax : 5);
-            if ((enemy.mode_state === 'enraged' || enemy.modeState === 'enraged') && !isCaMax && Math.random() < 0.3) {
-                attacksCount = 2;
-            }
-            
-            for (let i = 0; i < attacksCount; i++) {
+            if (caSkill) {
+                // CA Action
                 let targetIds = [];
-                const alive = (state.player_party.characters || []).filter(p => (p.current_hp !== undefined ? p.current_hp : p.hp) > 0);
-                if (alive.length > 0) {
-                    // Smart targeting for basic attack if enraged (50% chance to target lowest HP)
-                    if ((enemy.mode_state === 'enraged' || enemy.modeState === 'enraged') && Math.random() < 0.5) {
-                        const smartTarget = this._determineSmartTarget(alive, { party_lowest_hp_missing_pct: 1 });
-                        targetIds = [smartTarget];
+                const tType = (caSkill.skill ? caSkill.skill.target_type : caSkill.target_type).toLowerCase();
+                const alivePlayers = (state.player_party.characters || []).filter(p => (p.current_hp !== undefined ? p.current_hp : p.hp) > 0);
+                const aliveEnemies = (state.enemies || []).filter(e => (e.current_hp !== undefined ? e.current_hp : e.hp) > 0);
+                
+                if (tType === 'all_allies' || tType === 'single_ally' || tType === 'self') {
+                    if (tType === 'all_allies') {
+                        targetIds = aliveEnemies.map((e) => `enemy_${state.enemies.indexOf(e)}`);
+                    } else if (tType === 'self') {
+                        targetIds = [sourceId];
                     } else {
-                        targetIds = [alive[Math.floor(Math.random() * alive.length)].slot || alive[0].id];
+                        targetIds = [sourceId]; // Default to self
+                    }
+                } else {
+                    if (tType === 'all_enemies') {
+                        targetIds = alivePlayers.map(p => p.slot || p.id);
+                    } else {
+                        if (alivePlayers.length > 0) {
+                            const modifiers = caSkill.modifiers || caSkill.score_modifiers || {};
+                            const smartTarget = this._determineSmartTarget(alivePlayers, modifiers);
+                            targetIds = [smartTarget];
+                        }
                     }
                 }
                 
-                const actionData = { sourceId: 'enemy_0', targetIds, actionType: 'attack', skillId: null, skipCaGain: i > 0 };
-                const res = await this.processAction(bsId, actionData);
+                if (targetIds.length > 0) {
+                    const actionData = { 
+                        sourceId: sourceId, 
+                        targetIds, 
+                        actionType: 'skill', 
+                        skillId: caSkill.skill ? caSkill.skill.id : caSkill.id,
+                        skipCaReset: caSkill.isHpTrigger === true
+                    };
+                    const res = await this.processAction(bsId, actionData);
+                    const enemyName = enemy.name || 'ENEMY';
+                    allEvents.push({ type: 'log', message: `💀 ${enemyName.toUpperCase()} SPECIAL ATTACK: ${caSkill.skill ? caSkill.skill.name : caSkill.name}!` });
+                    allEvents.push(...res.events);
+                    state = res.stateSnapshot;
+                }
+            } else {
+                // Basic Attack(s)
+                let attacksCount = 1;
+                const isCaMax = (enemy.current_ca || 0) >= (enemy.caMax !== undefined ? enemy.caMax : (enemy.final_stats && enemy.final_stats.caMax) !== undefined ? enemy.final_stats.caMax : 5);
+                if ((enemy.mode_state === 'enraged' || enemy.modeState === 'enraged') && !isCaMax && Math.random() < 0.3) {
+                    attacksCount = 2;
+                }
                 
-                if (i === 1) allEvents.push({ type: 'log', message: `🔥 ENEMY DOUBLE ATTACK!` });
-                allEvents.push(...res.events);
-                state = res.stateSnapshot;
+                for (let i = 0; i < attacksCount; i++) {
+                    let targetIds = [];
+                    const alive = (state.player_party.characters || []).filter(p => (p.current_hp !== undefined ? p.current_hp : p.hp) > 0);
+                    if (alive.length > 0) {
+                        if ((enemy.mode_state === 'enraged' || enemy.modeState === 'enraged') && Math.random() < 0.5) {
+                            const smartTarget = this._determineSmartTarget(alive, { party_lowest_hp_missing_pct: 1 });
+                            targetIds = [smartTarget];
+                        } else {
+                            targetIds = [alive[Math.floor(Math.random() * alive.length)].slot || alive[0].id];
+                        }
+                    }
+                    
+                    const isExhausted = (enemy.mode_state === 'exhausted' || enemy.modeState === 'exhausted');
+                    const actionData = { sourceId: sourceId, targetIds, actionType: 'attack', skillId: null, skipCaGain: (i > 0) || isExhausted };
+                    const res = await this.processAction(bsId, actionData);
+                    
+                    if (i === 1) {
+                        const enemyName = enemy.name || 'ENEMY';
+                        allEvents.push({ type: 'log', message: `🔥 ${enemyName.toUpperCase()} DOUBLE ATTACK!` });
+                    }
+                    allEvents.push(...res.events);
+                    state = res.stateSnapshot;
+                }
             }
         }
         

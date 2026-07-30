@@ -27,6 +27,17 @@ export default class BattleScene extends Phaser.Scene {
         this.load.svg('element_earth', earthUrl, { width: 16, height: 16 });
     }
     setTurn(newTurn) {
+        if (newTurn === "player") {
+            const alive = this.players ? this.players.filter(p => p.hp > 0) : [];
+            const allStunned = alive.length > 0 && alive.every(p => p.activeEffects && p.activeEffects.some(e => e.target_stat === 'STUN'));
+            if (allStunned) {
+                this.showLog("⚡ Seluruh party dalam keadaan STUN! Giliran dilewati.");
+                this.turn = "enemy";
+                if (this._attackBtnContainer) this._attackBtnContainer.setVisible(false);
+                this.time.delayedCall(1500, () => this._processEnemyTurn());
+                return;
+            }
+        }
         this.turn = newTurn;
         if (this._attackBtnContainer) {
             this._attackBtnContainer.setVisible(newTurn === "player");
@@ -100,7 +111,15 @@ export default class BattleScene extends Phaser.Scene {
             this.players.push(p);
         });
         this.activePlayer = null;
-        this.enemy = new Enemy(this, CX, 260, j.data.enemies[0]);
+        this.enemies = [];
+        const startX = CX - ((j.data.enemies.length - 1) * 70);
+        j.data.enemies.forEach((eData, i) => {
+            const ex = startX + (i * 140);
+            const enemy = new Enemy(this, ex, 260, eData);
+            enemy.index = i;
+            this.enemies.push(enemy);
+        });
+        this.selectedTargetIndex = -1;
         this._setupUI();
     }
 
@@ -158,20 +177,24 @@ export default class BattleScene extends Phaser.Scene {
         this.activePlayer = null;
 
         // Build enemy entity with resume state
-        const eData = state.enemies[0];
-        this.enemy = new Enemy(this, CX, 260, eData);
-        if (eData.current_hp !== undefined) this.enemy.hp = eData.current_hp;
-        if (eData.current_ca !== undefined) this.enemy.chargeBar = eData.current_ca;
-        if (eData.active_buffs && Array.isArray(eData.active_buffs)) this.enemy.activeEffects = [...eData.active_buffs];
-        this.enemy.modeState = eData.mode_state || 'normal';
-        this.enemy.modeBar = eData.mode_bar || 0;
-        this.enemy.isBoss = eData.is_boss === true;
+        this.enemies = [];
+        const startX = CX - ((state.enemies.length - 1) * 70);
+        state.enemies.forEach((eData, i) => {
+            const ex = startX + (i * 140);
+            const enemy = new Enemy(this, ex, 260, eData);
+            enemy.index = i;
+            if (eData.current_hp !== undefined) enemy.hp = eData.current_hp;
+            if (eData.current_ca !== undefined) enemy.chargeBar = eData.current_ca;
+            if (eData.active_buffs && Array.isArray(eData.active_buffs)) enemy.activeEffects = [...eData.active_buffs];
+            enemy.modeState = eData.mode_state || 'normal';
+            enemy.modeBar = eData.mode_bar || 0;
+            enemy.isBoss = eData.is_boss === true;
+            this.enemies.push(enemy);
+        });
+        this.selectedTargetIndex = -1;
 
         this._setupUI();
 
-        this.enemy.on("pointerdown", () => {
-            if (this.turn !== "player" || !this.activePlayer) return;
-        });
 
         // Update turn text setelah UI dibangun
         if (this.turnText) this._updateTurnText();
@@ -196,7 +219,51 @@ export default class BattleScene extends Phaser.Scene {
         this._buildPartySprites(); this._buildLayer4(); this._buildSidebar(); this._buildBattleLog();
         this._startTimer(); this._refreshEnemyHUD();
         this._playStartAnimation();
+        
+        // Setup targeting indicator listener
+        this.enemies.forEach(enemy => {
+            // Click area exactly on the Enemy Sprite which is 130x130
+            enemy.setInteractive(new Phaser.Geom.Rectangle(-65, -65, 130, 130), Phaser.Geom.Rectangle.Contains);
+            enemy.on("pointerdown", () => {
+                if (this.turn === "none" || this.turn === "attacking") return;
+                this.selectTarget(enemy.index);
+            });
+        });
+        this._updateTargetIndicator();
     }
+
+    selectTarget(index) {
+        if (!this.enemies[index] || this.enemies[index].hp <= 0) return;
+        
+        if (this.selectedTargetIndex === index) {
+            this.selectedTargetIndex = -1;
+        } else {
+            this.selectedTargetIndex = index;
+        }
+        
+        this._updateTargetIndicator();
+    }
+
+    _updateTargetIndicator() {
+        if (!this._targetIndicator) {
+            // HUD bounds approximation: width ~405, height ~55
+            this._targetIndicator = this.add.rectangle(0, 0, 405, 55, 0x000000, 0)
+                .setStrokeStyle(3, 0xffeb3b)
+                .setDepth(50);
+        }
+
+        const target = this.enemies[this.selectedTargetIndex];
+        if (target && target.hp > 0 && this.selectedTargetIndex !== -1) {
+            this._targetIndicator.setVisible(true);
+            // baseY of the target HUD is 88 + (index * 45)
+            const baseY = 88 + (this.selectedTargetIndex * 45);
+            // Center of the HUD: X around 227.5, Y around baseY + 10
+            this._targetIndicator.setPosition(228, baseY + 10);
+        } else {
+            this._targetIndicator.setVisible(false);
+        }
+    }
+
     _updateTurnText() {
         if (!this.turnText) return;
         let txt = "TURN " + this.currentTurn;
@@ -215,122 +282,142 @@ export default class BattleScene extends Phaser.Scene {
         });
     }
     _buildEnemyHUD() {
-        const ec = this._elemColor(this.enemy.element);
-        this._enemyIcon = this.add.rectangle(45, 96, 50, 50, THEME.PANEL);
-        this._enemyIcon.setStrokeStyle(2, ec);
-        this._elemText = this.add.text(45, 96, this.enemy.element.substring(0, 2).toUpperCase(), { fontSize: "9px", color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
-        this._hpPct = this.add.text(85, 78, "100%", { fontSize: "11px", color: "#ffffff", fontStyle: "bold" }).setOrigin(0, 1);
-        
-        // HP Bar
-        this._hpBarBg = this.add.rectangle(85, 88, 340, 14, THEME.BG).setOrigin(0, 0.5);
-        this._hpBarBg.setStrokeStyle(2, THEME.BORDER);
-        this._hpFill = this.add.rectangle(85, 88, 336, 12, THEME.DAMAGE).setOrigin(0, 0.5);
-        this._hpEnrage = this.add.rectangle(85, 88, 340, 14, 0, 0).setOrigin(0, 0.5).setAlpha(0);
-        
-        // Mode Gauge (Spaced from HP bar)
-        this._modeBarBg = this.add.rectangle(85, 102, 340, 4, THEME.BG).setOrigin(0, 0.5);
-        this._modeBarBg.setStrokeStyle(1, THEME.BORDER);
-        this._modeFill = this.add.rectangle(85, 102, 0, 4, 0xffffff).setOrigin(0, 0.5);
-
-        if (!this.enemy.isBoss) {
-            this._hpEnrage.setVisible(false);
-            this._modeBarBg.setVisible(false);
-            this._modeFill.setVisible(false);
+        if (this.enemyHUDs) {
+            this.enemyHUDs.forEach(hud => {
+                Object.values(hud).forEach(item => {
+                    if (item && item.destroy && !Array.isArray(item)) item.destroy();
+                    else if (Array.isArray(item)) item.forEach(i => i && i.destroy && i.destroy());
+                });
+            });
         }
-        
-        // CA Bar (Removed CA text, moved left)
-        this._caSegmentsBg = [];
-        this._caSegments = [];
-        for (let i = 0; i < this.enemy.caMax; i++) {
-            const bg = this.add.rectangle(85 + i * 16, 118, 12, 12, THEME.BG).setOrigin(0, 0.5);
-            bg.setStrokeStyle(1, THEME.BORDER);
-            const f = this.add.rectangle(85 + i * 16, 118, 10, 10, THEME.GOLD).setOrigin(0, 0.5).setAlpha(0);
-            this._caSegmentsBg.push(bg);
-            this._caSegments.push(f);
-        }
-        
-        // Enemy Name and Level moved to Section 3 (handled in Enemy entity or _buildArenaButtons? Let's move it to _buildLayer3 or update it in Enemy.js)
-        this._nameText = this.add.text(CX, 340, this.enemy.charName + " \nLv." + this.enemy.level, { fontSize: "13px", color: "#ffffff", fontStyle: "bold", align: "center" }).setOrigin(0.5, 0);
-    }
-    _refreshEnemyHUD() {
-        if (!this._hpFill) return;
-        const hr = Math.max(0, this.enemy.hp / this.enemy.maxHp);
-        this._hpFill.setSize(336 * hr, 12);
-        this._hpPct.setText(Math.ceil(hr * 100) + "%");
+        this.enemyHUDs = [];
+        this.enemies.forEach((enemy, index) => {
+            const baseY = 88 + (index * 45); 
+            const ec = this._elemColor(enemy.element);
+            
+            const icon = this.add.rectangle(45, baseY + 8, 30, 30, THEME.PANEL).setStrokeStyle(2, ec);
+            const elemText = this.add.text(45, baseY + 8, enemy.element.substring(0, 2).toUpperCase(), { fontSize: "8px", color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
+            const hpPct = this.add.text(65, baseY - 2, "100%", { fontSize: "10px", color: "#ffffff", fontStyle: "bold" }).setOrigin(0, 1);
+            
+            const hpBarBg = this.add.rectangle(65, baseY + 4, 360, 12, THEME.BG).setOrigin(0, 0.5).setStrokeStyle(2, THEME.BORDER);
+            const hpFill = this.add.rectangle(65, baseY + 4, 356, 10, THEME.DAMAGE).setOrigin(0, 0.5);
+            const hpEnrage = this.add.rectangle(65, baseY + 4, 360, 12, 0, 0).setOrigin(0, 0.5).setAlpha(0);
+            
+            const modeBarBg = this.add.rectangle(65, baseY + 14, 360, 4, THEME.BG).setOrigin(0, 0.5).setStrokeStyle(1, THEME.BORDER);
+            const modeFill = this.add.rectangle(65, baseY + 14, 0, 4, 0xffffff).setOrigin(0, 0.5);
 
-        // Update Mode Bar Gauge
-        const mr = Math.min(1, this.enemy.modeBar / this.enemy.modeMax);
-        this._modeFill.setSize(340 * mr, 4);
-
-        if (this._caSegments && this._caSegments.length !== this.enemy.caMax) {
-            // Rebuild CA segments if caMax changed (e.g. wave transition)
-            this._caSegments.forEach(f => f.destroy());
-            this._caSegments = [];
-            if (this._caSegmentsBg) {
-                this._caSegmentsBg.forEach(bg => bg.destroy());
-                this._caSegmentsBg = [];
-            } else {
-                this._caSegmentsBg = [];
+            if (!enemy.isBoss) {
+                hpEnrage.setVisible(false);
+                modeBarBg.setVisible(false);
+                modeFill.setVisible(false);
             }
             
-            for (let i = 0; i < this.enemy.caMax; i++) {
-                const bg = this.add.rectangle(85 + i * 16, 118, 12, 12, THEME.BG).setOrigin(0, 0.5);
-                bg.setStrokeStyle(1, THEME.BORDER);
-                if (this.enemy) bg.setAlpha(this.enemy.alpha);
-                const f = this.add.rectangle(85 + i * 16, 118, 10, 10, THEME.GOLD).setOrigin(0, 0.5).setAlpha(0);
-                this._caSegmentsBg.push(bg);
-                this._caSegments.push(f);
+            const caSegmentsBg = [];
+            const caSegments = [];
+            for (let i = 0; i < enemy.caMax; i++) {
+                const bg = this.add.rectangle(65 + i * 14, baseY + 26, 10, 10, THEME.BG).setOrigin(0, 0.5).setStrokeStyle(1, THEME.BORDER);
+                const f = this.add.rectangle(65 + i * 14, baseY + 26, 8, 8, THEME.GOLD).setOrigin(0, 0.5).setAlpha(0);
+                caSegmentsBg.push(bg);
+                caSegments.push(f);
             }
-        }
+            
+            const nameText = this.add.text(enemy.x, 340, enemy.charName + " \nLv." + enemy.level, { fontSize: "11px", color: "#ffffff", fontStyle: "bold", align: "center" }).setOrigin(0.5, 0);
 
-        if (this._caSegments) {
-            const caColor = (this.enemy.modeState === "exhausted") ? 0x3498db : 0xffaa00;
-            this._caSegments.forEach((f, i) => { f.setFillStyle(caColor); f.setAlpha(i < this.enemy.caBar ? 1 : 0); });
-        }
-        if (this._nameText) {
-            this._nameText.setText(this.enemy.charName + " \nLv." + this.enemy.level);
-        }
-        if (this._enemyIcon) {
-            this._enemyIcon.setStrokeStyle(2, this._elemColor(this.enemy.element));
-            if (this._elemText) {
-                this._elemText.setText(this.enemy.element.substring(0, 2).toUpperCase());
-            }
-        }
-
-        this._updateEnrageHUD(); this.enemy.updateEnrageVisual();
+            this.enemyHUDs.push({
+                icon, elemText, hpPct, hpBarBg, hpFill, hpEnrage, modeBarBg, modeFill, caSegmentsBg, caSegments, nameText
+            });
+        });
     }
-    _updateEnrageHUD() {
-        if (!this.enemy.isBoss) return;
-        const state = this.enemy.modeState;
-        const ratio = this.enemy.modeBar / this.enemy.modeMax;
+    _refreshEnemyHUD() {
+        this.enemies.forEach((enemy, index) => {
+            const hud = this.enemyHUDs[index];
+            if (!hud || !hud.hpFill) return;
+            
+            const hr = Math.max(0, enemy.hp / enemy.maxHp);
+            hud.hpFill.setSize(356 * hr, 10);
+            hud.hpPct.setText(Math.ceil(hr * 100) + "%");
 
-        let color = 0xffffff; // Default Putih
+            const mr = Math.min(1, enemy.modeBar / enemy.modeMax);
+            hud.modeFill.setSize(360 * mr, 4);
+
+            if (hud.caSegments && hud.caSegments.length !== enemy.caMax) {
+                hud.caSegments.forEach(f => f.destroy());
+                hud.caSegmentsBg.forEach(bg => bg.destroy());
+                hud.caSegments = [];
+                hud.caSegmentsBg = [];
+                const baseY = 88 + (index * 45);
+                for (let i = 0; i < enemy.caMax; i++) {
+                    const bg = this.add.rectangle(65 + i * 14, baseY + 26, 10, 10, THEME.BG).setOrigin(0, 0.5).setStrokeStyle(1, THEME.BORDER);
+                    if (enemy) bg.setAlpha(enemy.alpha);
+                    const f = this.add.rectangle(65 + i * 14, baseY + 26, 8, 8, THEME.GOLD).setOrigin(0, 0.5).setAlpha(0);
+                    hud.caSegmentsBg.push(bg);
+                    hud.caSegments.push(f);
+                }
+            }
+
+            if (hud.caSegments) {
+                const caColor = (enemy.modeState === "exhausted") ? 0x3498db : 0xffaa00;
+                hud.caSegments.forEach((f, i) => { f.setFillStyle(caColor); f.setAlpha(i < enemy.caBar ? 1 : 0); });
+            }
+            
+            if (hud.nameText) {
+                hud.nameText.setText(enemy.charName + " \nLv." + enemy.level);
+                hud.nameText.setPosition(enemy.x, 340);
+                if(enemy.hp <= 0) hud.nameText.setAlpha(0.3);
+            }
+            if (hud.icon) {
+                hud.icon.setStrokeStyle(2, this._elemColor(enemy.element));
+                if (hud.elemText) hud.elemText.setText(enemy.element.substring(0, 2).toUpperCase());
+            }
+
+            this._updateEnrageHUD(enemy, hud);
+            enemy.updateEnrageVisual();
+            
+            if (enemy.hp <= 0) {
+                hud.icon.setAlpha(0.3);
+                hud.hpBarBg.setAlpha(0.3);
+            }
+        });
+        if (this._updateTargetIndicator) this._updateTargetIndicator();
+    }
+    _updateEnrageHUD(enemy, hud) {
+        if (!enemy || !enemy.isBoss) return;
+        const state = enemy.modeState;
+        const ratio = enemy.modeBar / enemy.modeMax;
+
+        let color = 0xffffff;
         let alpha = 0.5;
 
         if (state === "enraged") {
-            color = 0xe74c3c; // Merah
+            color = 0xe74c3c;
             alpha = 1;
         } else if (state === "exhausted") {
-            color = 0x3498db; // Biru
+            color = 0x3498db;
             alpha = 1;
         } else if (state === "normal") {
             if (ratio >= 0.75) {
-                color = 0xf1c40f; // Kuning (Warning)
+                color = 0xf1c40f;
                 alpha = 1;
             } else {
-                color = 0xffffff; // Putih
+                color = 0xffffff;
                 alpha = 0.5;
             }
         }
 
-        this._hpEnrage.setStrokeStyle(2, color);
-        this._hpEnrage.setAlpha(alpha);
-        this._modeFill.setFillStyle(color);
+        if (hud && hud.hpEnrage) {
+            hud.hpEnrage.setStrokeStyle(2, color);
+            hud.hpEnrage.setAlpha(alpha);
+        }
+        if (hud && hud.modeFill) {
+            hud.modeFill.setFillStyle(color);
+        }
     }
-    _applyEnemyDamage(dmg) {
-        this.enemy.hp = Math.max(0, this.enemy.hp - dmg);
+    _applyEnemyDamage(enemyIndex, dmg) {
+        const enemy = this.enemies[enemyIndex];
+        if (!enemy) return;
+        enemy.hp = Math.max(0, enemy.hp - dmg);
         this._refreshEnemyHUD();
-        this.enemy.playHitAnim();
+        enemy.playHitAnim();
     }
     _buildArenaButtons() {
         this._attackBtnContainer = this.add.container(0, 0);
@@ -664,6 +751,35 @@ export default class BattleScene extends Phaser.Scene {
         this._logTimer = this.time.delayedCall(2200, () => this.battleLog.setText(""));
     }
 
+    showFloatingDoT(target, effectName, dmg, colorStr) {
+        if (!target) return;
+        
+        let x = target.x || (target.spriteObj && target.spriteObj.x) || 200;
+        let y = (target.y || (target.spriteObj && target.spriteObj.y) || 300) - 40;
+
+        const labelTxt = this.add.text(x, y, effectName, { 
+            fontSize: "14px", color: colorStr, fontStyle: "bold", 
+            stroke: "#000", strokeThickness: 3, fontFamily: 'Outfit'
+        }).setOrigin(0.5).setDepth(200);
+
+        const amtTxt = this.add.text(x, y + 16, dmg.toString(), { 
+            fontSize: "12px", color: colorStr, fontStyle: "bold", 
+            stroke: "#000", strokeThickness: 2, fontFamily: 'Outfit' 
+        }).setOrigin(0.5).setDepth(200);
+
+        this.tweens.add({
+            targets: [labelTxt, amtTxt],
+            y: "-=40",
+            alpha: { from: 1, to: 0 },
+            duration: 1500,
+            ease: 'Power1',
+            onComplete: () => {
+                labelTxt.destroy();
+                amtTxt.destroy();
+            }
+        });
+    }
+
     _playStartAnimation() {
         // Fallback: Check if party is already wiped out upon resuming battle
         const allDead = this.players.every(p => p.hp <= 0);
@@ -721,86 +837,59 @@ export default class BattleScene extends Phaser.Scene {
             }
         });
     }
-    async processTurnEnd(finishedTurn) {
-        if (finishedTurn === 'enemy') {
-            // Terapkan damage Poison pada musuh jika ada
-            if (this.enemy.hp > 0) {
-                const poisonEffects = this.enemy.activeEffects.filter(e => e.target_stat === 'POISON');
-                let totalPoisonDmg = 0;
-                poisonEffects.forEach(eff => {
-                    const dmg = Math.floor(Math.abs(Number(eff.value) || 0.05) * this.enemy.maxHp);
-                    totalPoisonDmg += dmg;
-                });
-                if (totalPoisonDmg > 0) {
-                    this._applyEnemyDamage(totalPoisonDmg);
-                    this.showLog(`💀 Poison deals ${totalPoisonDmg} damage to ${this.enemy.charName}!`);
-                }
-                this.enemy.updateEffectsTurn();
-            }
-
-            if (this.checkVictory()) return;
-            if (this.players.every(p => p.hp <= 0)) {
-                this.triggerDefeat(false);
-                return;
-            }
-
-            this.currentTurn++;
-            this._updateTurnText();
-            if (this._sidebarOpen) this._renderSidebar();
-
-            // Auto-skip giliran player jika semua yang hidup terkena STUN
-            const alive = this.players.filter(p => p.hp > 0);
-            const allStunned = alive.length > 0 && alive.every(p => p.activeEffects.some(e => e.target_stat === 'STUN'));
-            if (allStunned) {
-                this.showLog("⚡ Seluruh party dalam keadaan STUN! Giliran dilewati.");
-                this.setTurn('enemy'); // Sembunyikan tombol serang
-                this.time.delayedCall(1500, () => this.processTurnEnd('player'));
-                return;
-            }
-
-            this.setTurn('player');
-
-        } else if (finishedTurn === 'player') {
-            // Tick down cooldowns & active effects untuk semua player hidup
-            this.players.forEach(p => {
-                if (p.hp <= 0) return;
-
-                // Terapkan damage Poison jika ada sebelum durasi berkurang
-                const poisonEffects = p.activeEffects.filter(e => e.target_stat === 'POISON');
-                poisonEffects.forEach(eff => {
-                    const dmg = Math.floor(Math.abs(Number(eff.value) || 0.05) * p.maxHp);
-                    p.hp = Math.max(0, p.hp - dmg);
-                    this.showLog(`💀 Poison deals ${dmg} damage to ${p.charName}!`);
-                    p.refreshVisual();
-                });
-
-                for (let id in p.cooldowns) if (p.cooldowns[id] > 0) p.cooldowns[id]--;
-                p.updateEffectsTurn(); // tick efek status, hapus yang expired, refresh visual
-            });
-
-            if (this.checkVictory()) return;
-            if (this.players.every(p => p.hp <= 0)) {
-                this.triggerDefeat(false);
-                return;
-            }
-
-            // Panggil API end_turn ke server untuk resolve pending state transitions
-            try {
-                const res = await BattleApi.endTurn(this.bsId);
-                if (res.status === 'success') {
-                    await this._playActionEvents(res.data.events);
-                    this._syncState(res.data.stateSnapshot);
-                }
-            } catch (err) {
-                console.error("End turn error:", err);
-            }
-
-            this.setTurn('enemy');
-            this.time.delayedCall(800, () => this.enemyAttack());
+    async processTurnEnd() {
+        if (this.checkVictory()) return;
+        if (this.players.every(p => p.hp <= 0)) {
+            this.triggerDefeat(false);
+            return;
         }
 
-        // === AUTO-SYNC: fire-and-forget ke server setiap Turn End ===
+        try {
+            const res = await BattleApi.endTurn(this.bsId);
+            if (res.status === 'success') {
+                await this._playActionEvents(res.data.events);
+                this._syncState(res.data.stateSnapshot);
+            }
+        } catch (err) {
+            console.error("End turn error:", err);
+        }
+
+        // Setel kembali turn ke player
+        this.setTurn('player');
+        
+        // Cek kematian pasca DoT
+        if (this.players.every(p => p.hp <= 0)) {
+            this.triggerDefeat(false);
+            return;
+        }
+        
+        // Auto-sync
         this._syncStateToServer();
+    }
+
+    async _processEnemyTurn() {
+        if (this.checkVictory()) return;
+        if (this.players.every(p => p.hp <= 0)) {
+            this.triggerDefeat(false);
+            return;
+        }
+
+        try {
+            const res = await BattleApi.getAiDecision(this.bsId, null, null);
+            if (res.status === 'success') {
+                await this._playActionEvents(res.data.events);
+                this._syncState(res.data.stateSnapshot);
+            }
+        } catch (err) {
+            console.error("Enemy turn error:", err);
+        }
+
+        if (this.players.every(p => p.hp <= 0)) {
+            this.triggerDefeat(false);
+            return;
+        }
+
+        this.processTurnEnd();
     }
 
     /**
@@ -837,20 +926,20 @@ export default class BattleScene extends Phaser.Scene {
                         }))
                     }))
                 },
-                enemies: [{
-                    id: this.enemy.monsterId,
-                    name: this.enemy.charName,
-                    element: this.enemy.element,
-                    level: this.enemy.level,
-                    final_stats: this.enemy.finalStats,
-                    caMax: this.enemy.caMax,
-                    current_hp: this.enemy.hp,
-                    current_ca: this.enemy.caBar,
-                    is_ca_ready: this.enemy.caBar >= this.enemy.caMax,
-                    active_buffs: this.enemy.activeEffects ? [...this.enemy.activeEffects] : [],
-                    mode_state: this.enemy.modeState,
-                    mode_bar: this.enemy.modeBar
-                }]
+                enemies: this.enemies.map(e => ({
+                    id: e.monsterId,
+                    name: e.charName,
+                    element: e.element,
+                    level: e.level,
+                    final_stats: e.finalStats,
+                    caMax: e.caMax,
+                    current_hp: e.hp,
+                    current_ca: e.caBar,
+                    is_ca_ready: e.caBar >= e.caMax,
+                    active_buffs: e.activeEffects ? [...e.activeEffects] : [],
+                    mode_state: e.modeState,
+                    mode_bar: e.modeBar
+                }))
             };
             BattleApi.syncBattleState(this.bsId, snapshot, this._timerSec);
         } catch (e) {
@@ -874,8 +963,9 @@ export default class BattleScene extends Phaser.Scene {
         const partyHealthy = avgHpRatio > 0.7;
 
         // Hitung buff aktif musuh (efek bertipe Buff pada enemy)
-        const enemyBuffCount = this.enemy.activeEffects.filter(e => (e.effect_type || '').toLowerCase() === 'buff').length;
-        const enemyDebuffCount = this.enemy.activeEffects.filter(e => (e.effect_type || '').toLowerCase() === 'debuff').length;
+        const targetEnemy = this.enemies[this.selectedTargetIndex] || this.enemies[0];
+        const enemyBuffCount = targetEnemy && targetEnemy.activeEffects.filter(e => (e.effect_type || '').toLowerCase() === 'buff').length;
+        const enemyDebuffCount = targetEnemy && targetEnemy.activeEffects.filter(e => (e.effect_type || '').toLowerCase() === 'debuff').length;
 
         // Hitung total buff aktif di seluruh party
         const playerBuffCount = alive.reduce((total, p) => {
@@ -911,8 +1001,9 @@ export default class BattleScene extends Phaser.Scene {
                     target = this.players.find(p => p.slot === ev.targetId);
                     if (!target) {
                         const tIdStr = String(ev.targetId);
-                        if (this.enemy.monsterId == ev.targetId || tIdStr.startsWith('enemy_') || tIdStr === 'enemy') {
-                            target = this.enemy;
+                        if (this.enemies.some(e => String(e.monsterId) == tIdStr) || tIdStr.startsWith('enemy_') || tIdStr === 'enemy') {
+                            const eIdx = tIdStr.startsWith('enemy_') ? parseInt(tIdStr.split('_')[1], 10) : 0;
+                            target = this.enemies[eIdx] || this.enemies[0];
                         }
                     }
                 }
@@ -920,23 +1011,32 @@ export default class BattleScene extends Phaser.Scene {
                 if (ev.type === 'damage') {
                     if (target) {
                         target.hp = Math.max(0, target.hp - ev.value);
-                        if (target === this.enemy) {
-                            if (ev.modeBar !== undefined) this.enemy.modeBar = ev.modeBar;
-                            if (ev.modeState !== undefined) this.enemy.modeState = ev.modeState;
+                        if (this.enemies.includes(target)) {
+                            if (ev.modeBar !== undefined && target) target.modeBar = ev.modeBar;
+                            if (ev.modeState !== undefined && target) target.modeState = ev.modeState;
                             this._refreshEnemyHUD();
-                            this.enemy.playHitAnim();
+                            if (target) target.playHitAnim();
                         } else {
                             target.refreshVisual();
                             this.playSpriteHitAnim(target);
                         }
-                        const source = this.players.find(p => p.slot === ev.sourceId) || (this.enemy.monsterId == ev.sourceId || ev.sourceId.startsWith('enemy_') ? this.enemy : null);
-                        const sourceName = source ? source.charName : ev.sourceId;
-                        let logText = `${sourceName} -> ${target.charName}: ${ev.isCrit ? "💥 " : ""}${ev.value} dmg`;
-                        if (ev.skillName && ev.skillName !== 'Basic Attack') {
-                            logText = `[${ev.skillName}]\n` + logText;
+                        if (ev.isDoT) {
+                            const colorStr = ev.effectName === 'Burn' ? "#e67e22" : "#9b59b6";
+                            const emoji = ev.effectName === 'Burn' ? "🔥" : "💀";
+                            this.showLog(`${emoji} ${ev.effectName} deals ${ev.value} damage to ${target.charName}!`);
+                            this.showFloatingDoT(target, ev.effectName, ev.value, colorStr);
+                            delay = 600;
+                        } else {
+                            const eIdxAct = ev.sourceId && String(ev.sourceId).startsWith('enemy_') ? parseInt(String(ev.sourceId).split('_')[1], 10) : 0;
+                            const source = this.players.find(p => p.slot === ev.sourceId) || (String(ev.sourceId).startsWith('enemy') ? this.enemies[eIdxAct] : null);
+                            const sourceName = source ? source.charName : ev.sourceId;
+                            let logText = `${sourceName} -> ${target.charName}: ${ev.isCrit ? "💥 " : ""}${ev.value} dmg`;
+                            if (ev.skillName && ev.skillName !== 'Basic Attack') {
+                                logText = `[${ev.skillName}]\n` + logText;
+                            }
+                            this.showLog(logText);
+                            delay = 800;
                         }
-                        this.showLog(logText);
-                        delay = 800;
                     }
                 } else if (ev.type === 'heal') {
                     if (target) {
@@ -967,20 +1067,20 @@ export default class BattleScene extends Phaser.Scene {
                         delay = 500;
                     }
                 } else if (ev.type === 'enrage') {
-                    if (this.enemy) {
-                        this.enemy.modeState = 'enraged';
+                    if (target) {
+                        target.modeState = 'enraged';
                         this._enragedTurns = 3;
                         this.showLog("ENEMY ENRAGED! (3 Turns)");
-                        this._updateEnrageHUD();
+                        this._refreshEnemyHUD();
                         delay = 800;
                     }
                 } else if (ev.type === 'break') {
-                    if (this.enemy) {
-                        this.enemy.modeState = 'exhausted';
+                    if (target) {
+                        target.modeState = 'exhausted';
                         this._exhaustedTurns = 2;
                         this._enragedTurns = 0;
                         this.showLog("ENEMY BREAK! (Exhausted)");
-                        this._updateEnrageHUD();
+                        this._refreshEnemyHUD();
                         delay = 800;
                     }
                 } else if (ev.type === 'log') {
@@ -988,25 +1088,32 @@ export default class BattleScene extends Phaser.Scene {
                     delay = 600;
                 } else if (ev.type === 'wave_change') {
                     waveChanged = true;
-                    // this.showLog(`WAVE ${ev.waveNum} START!`);
+                    this._isWaveChanging = true;
                     
                     delay = -1; // Flag for manual resolve
                     
                     // 1. Fade out the dying enemy
-                    if (this.enemy) {
-                        const targetAlphas = [this.enemy, this._hpBarBg, this._hpFill, this._hpPct, this._enemyIcon];
-                        if (this._caSegmentsBg) targetAlphas.push(...this._caSegmentsBg);
-                        if (this._caSegments) targetAlphas.push(...this._caSegments);
+                    if (this.enemies.length > 0) {
+                        const targetAlphas = [];
+                        this.enemies.forEach((enemy, idx) => {
+                            targetAlphas.push(enemy);
+                            const hud = this.enemyHUDs[idx];
+                            if(hud) {
+                                targetAlphas.push(hud.icon, hud.hpBarBg, hud.hpFill, hud.hpPct, hud.nameText);
+                                if(hud.caSegmentsBg) targetAlphas.push(...hud.caSegmentsBg);
+                                if(hud.caSegments) targetAlphas.push(...hud.caSegments);
+                                if(hud.modeFill) targetAlphas.push(hud.modeFill);
+                                if(hud.modeBarBg) targetAlphas.push(hud.modeBarBg);
+                            }
+                        });
                         
                         this.tweens.add({
                             targets: targetAlphas,
                             alpha: 0,
                             duration: 1000,
                             onComplete: () => {
-                                // 2. Resolve immediately so _syncState runs and updates the invisible enemy
                                 resolve();
                                 
-                                // Big WAVE Text
                                 const waveTxt = this.add.text(CX, H/2, `WAVE ${ev.waveNum}`, {
                                     fontSize: '48px', color: THEME.GOLD, fontStyle: 'bold', fontFamily: 'Outfit'
                                 }).setOrigin(0.5).setAlpha(0).setDepth(201);
@@ -1020,18 +1127,24 @@ export default class BattleScene extends Phaser.Scene {
                                     onComplete: () => {
                                         waveTxt.destroy();
                                         
-                                        // 3. Fade IN the new enemy and HUD
-                                        const newTargetAlphas = [this.enemy, this._hpBarBg, this._hpFill, this._hpPct, this._enemyIcon];
-                                        if (this._caSegmentsBg) newTargetAlphas.push(...this._caSegmentsBg);
-                                        // caSegments fills will be faded based on enemy charge by _refreshEnemyHUD later
-                                        if (this._modeFill && this.enemy.isBoss) newTargetAlphas.push(this._modeFill);
-                                        if (this._modeBarBg && this.enemy.isBoss) newTargetAlphas.push(this._modeBarBg);
+                                        const newTargetAlphas = [];
+                                        this.enemies.forEach((enemy, idx) => {
+                                            newTargetAlphas.push(enemy);
+                                            const hud = this.enemyHUDs[idx];
+                                            if(hud) {
+                                                newTargetAlphas.push(hud.icon, hud.hpBarBg, hud.hpFill, hud.hpPct, hud.nameText);
+                                                if(hud.caSegmentsBg) newTargetAlphas.push(...hud.caSegmentsBg);
+                                                if(hud.modeFill && enemy.isBoss) newTargetAlphas.push(hud.modeFill);
+                                                if(hud.modeBarBg && enemy.isBoss) newTargetAlphas.push(hud.modeBarBg);
+                                            }
+                                        });
                                         
                                         this.tweens.add({
                                             targets: newTargetAlphas,
                                             alpha: 1,
                                             duration: 800,
                                             onComplete: () => {
+                                                this._isWaveChanging = false;
                                                 this._refreshEnemyHUD();
                                             }
                                         });
@@ -1068,9 +1181,10 @@ export default class BattleScene extends Phaser.Scene {
                 saSkill = p.skills.find(sk => (sk.category || '').toLowerCase() === 'special');
             }
 
+            const targetIdx = this.selectedTargetIndex !== -1 ? this.selectedTargetIndex : 0;
             const actionData = {
                 sourceId: p.slot,
-                targetIds: ['enemy_0'],
+                targetIds: [`enemy_${targetIdx}`],
                 actionType: saSkill ? 'skill' : 'attack',
                 skillId: saSkill ? saSkill.id : null,
                 isAttackSequence: true
@@ -1095,13 +1209,13 @@ export default class BattleScene extends Phaser.Scene {
             await new Promise(resolve => this.time.delayedCall(500, resolve));
 
             // Stop attack sequence if wave changed or enemy is dead
-            if (waveChanged || this.enemy.hp <= 0) {
+            if (waveChanged || this.enemies[0].hp <= 0) {
                 if (waveChanged) this.setTurn("player"); // Give control back to player
                 break;
             }
         }
 
-        if (this.enemy.hp <= 0) {
+        if (this.enemies.every(e => e.hp <= 0)) {
             this.checkVictory();
             return;
         }
@@ -1109,7 +1223,7 @@ export default class BattleScene extends Phaser.Scene {
         // If turn was reset due to wave change, do not end turn
         if (this.turn === "player") return;
 
-        this.time.delayedCall(800, () => this.processTurnEnd('player'));
+        this.time.delayedCall(800, () => this._processEnemyTurn());
     }
 
     async useSkill(idx) {
@@ -1128,7 +1242,8 @@ export default class BattleScene extends Phaser.Scene {
         const tType = skill.target_type || 'Single_Enemy';
 
         if (tType === 'Single_Enemy' || tType === 'All_Enemies') {
-            targetIds = ['enemy_0'];
+            const targetIdx = this.selectedTargetIndex !== -1 ? this.selectedTargetIndex : 0;
+            targetIds = [`enemy_${targetIdx}`];
         } else if (tType === 'Self') {
             targetIds = [this.activePlayer.slot];
         } else if (tType === 'All_Allies') {
@@ -1140,7 +1255,8 @@ export default class BattleScene extends Phaser.Scene {
             });
             return; // Wait for modal callback
         } else {
-            targetIds = ['enemy_0'];
+            const targetIdx = this.selectedTargetIndex !== -1 ? this.selectedTargetIndex : 0;
+            targetIds = [`enemy_${targetIdx}`];
         }
 
         this._enqueueSkill(this.activePlayer, skill, targetIds);
@@ -1174,7 +1290,7 @@ export default class BattleScene extends Phaser.Scene {
                 await this._sendActionAndPlay(player.slot, targetIds, actType, skill ? skill.id : null);
                 
                 // Queue Abort on Death
-                if (this.enemy && this.enemy.hp <= 0) {
+                if (this.enemies.every(e => e.hp <= 0)) {
                     this.skillQueue = [];
                     this.isProcessingQueue = false;
                     this._updateAttackButtonState();
@@ -1225,161 +1341,111 @@ export default class BattleScene extends Phaser.Scene {
     _syncState(state) {
         if (!state) return;
         
-        // Sync Players
-        if (state.player_party && state.player_party.characters) {
-            for (const charData of state.player_party.characters) {
-                const p = this.players.find(pl => 
-                    (pl.slot && charData.slot && pl.slot === charData.slot) || 
-                    (pl.id && charData.id && pl.id === charData.id) || 
-                    (pl.inv_id && charData.inv_id && pl.inv_id == charData.inv_id) ||
-                    (pl.charName && charData.name && pl.charName === charData.name)
-                );
-                if (p) {
-                    p.hp = charData.current_hp;
-                    p.specialBar = charData.current_sa;
-                    
-                    if (charData.skills) {
-                        for (const sk of charData.skills) {
-                            p.cooldowns[sk.id] = sk.current_cooldown || 0;
-                        }
-                    }
-                    if (charData.active_buffs) {
-                        p.activeEffects = [...charData.active_buffs];
-                    } else {
-                        p.activeEffects = [];
-                    }
-                    p.refreshVisual();
-                }
-            }
-            if (this._sidebarOpen) this._renderSidebar();
-        }
-        
-        // Sync Enemies
-        if (state.enemies && this.enemy) {
-            const enemyData = state.enemies[0];
-            if (enemyData) {
-                // Ensure base stats are updated during wave transitions
-                if (enemyData.final_stats) {
-                    this.enemy.finalStats = enemyData.final_stats;
-                    this.enemy.maxHp = enemyData.final_stats.hp;
-                    this.enemy.atk = enemyData.final_stats.atk;
-                    this.enemy.def = enemyData.final_stats.def || 500;
-                }
-                this.enemy.monsterId = enemyData.id;
-                this.enemy.charName = enemyData.name;
-                this.enemy.element = enemyData.element || 'None';
-                this.enemy.level = enemyData.level || 1;
-                this.enemy.isBoss = enemyData.is_boss === true;
-                this.enemy.caMax = enemyData.caMax || 3;
-
-                this.enemy.hp = enemyData.current_hp !== undefined ? enemyData.current_hp : this.enemy.maxHp;
-                this.enemy.modeBar = enemyData.mode_bar || 0;
-                this.enemy.modeState = enemyData.mode_state || 'normal';
-                
-                if (enemyData.current_ca !== undefined) {
-                     this.enemy.caBar = enemyData.current_ca;
-                }
-                
-                if (enemyData.active_buffs) {
-                    this.enemy.activeEffects = [...enemyData.active_buffs];
-                } else {
-                    this.enemy.activeEffects = [];
-                }
-                
-                this.enemy.refreshVisual();
-                this._refreshEnemyHUD();
-            }
-        }
-
-        // Sync Wave Info
-        if (state.waves && state.current_wave_index !== undefined) {
-            this.currentWaveLabel = `(${state.current_wave_index + 1}/${state.waves.length})`;
-        }
-        
-        // Sync Turn Count
+        // Sync Turn & Wave
         if (state.current_turn !== undefined) {
             this.currentTurn = state.current_turn;
+            this._updateTurnText();
         }
-        this._updateTurnText();
-        
-        // Sync Aether Gauge
-        if (state.aether_gauge !== undefined) {
-            this.aetherGauge = state.aether_gauge;
-            this._refreshAetherUI();
-        }
-        
-        // Sync Potions
-        if (state.heals_remaining !== undefined) {
-            this.healsRemaining = state.heals_remaining;
-            this._refreshHealButtonUI();
-        }
-        if (state.potions_used !== undefined) {
-            this.potionsUsed = state.potions_used;
-        }
-    }
-    async aetherBurst() {
-        if (this.aetherGauge < this.aetherGaugeMax) { this.showLog("Aether Burst not ready!"); return; }
-        
-        const mc = this.players.find(p => p.charName.includes("MC") || p.charName.includes("Main Character")) || this.players[0];
-        
-        this.setTurn("attacking");
-        this.closeSidebar();
-        
-        try {
-            const actionData = { sourceId: mc.slot, targetIds: ['enemy_0'], actionType: 'aether_burst', skillId: null };
-            
-            const res = await BattleApi.executeAction(this.bsId, actionData);
-            if (res.status === 'success') {
-                this.showLog("✦✦ AETHER BURST!");
-                await this._playActionEvents(res.data.events);
-                this._syncState(res.data.stateSnapshot);
-            }
-        } catch (err) {
-            console.error("Action error", err);
-        }
-        
-        if (this.enemy.hp <= 0) {
-            this.checkVictory();
-            return;
-        }
-        this.time.delayedCall(800, () => this.processTurnEnd('player'));
-    }
+        if (state.wave !== undefined) this.currentWave = state.wave;
 
-    async enemyAttack() {
-        if (!this.enemy || this.enemy.hp <= 0) {
-            this.time.delayedCall(1000, () => this.processTurnEnd('enemy'));
-            return;
-        }
-
-        try {
-            const res = await BattleApi.getAiDecision(this.bsId, null, null);
-            if (res.status === 'success' && res.data) {
-                const { events, stateSnapshot } = res.data;
-                
-                // Play all events returned by the server (logs, attacks, skills, damage)
-                if (events && events.length > 0) {
-                    await this._playActionEvents(events);
+        // Sync Players
+        if (state.players) {
+            state.players.forEach(pd => {
+                const pObj = this.players.find(p => p.slot === pd.id);
+                if (pObj) {
+                    pObj.hp = pd.current_hp !== undefined ? pd.current_hp : pObj.hp;
+                    if (pd.current_sp !== undefined) pObj.specialBar = pd.current_sp;
+                    if (pd.cooldowns) pObj.cooldowns = { ...pd.cooldowns };
+                    if (pd.active_buffs) pObj.activeEffects = [...pd.active_buffs];
+                    else pObj.activeEffects = [];
+                    pObj.refreshVisual();
                 }
+            });
+        }
+
+        // Sync Enemies
+        if (state.enemies) {
+            let needsRebuild = false;
+            if (this.enemies.length !== state.enemies.length) needsRebuild = true;
+            else if (this.enemies.length > 0 && state.enemies.length > 0 && this.enemies[0].monsterId !== state.enemies[0].id) needsRebuild = true;
+
+            if (needsRebuild) {
+                this.enemies.forEach(e => { if (e && e.destroy) e.destroy(); });
+                this.enemies = [];
                 
-                // Sync the final state of the turn
-                if (stateSnapshot) {
-                    this._syncState(stateSnapshot);
+                const startX = CX - ((state.enemies.length - 1) * 70);
+                state.enemies.forEach((eData, i) => {
+                    const ex = startX + (i * 140);
+                    const enemy = new Enemy(this, ex, 260, eData);
+                    enemy.index = i;
+                    
+                    if (this._isWaveChanging) {
+                        enemy.setAlpha(0);
+                    }
+                    
+                    enemy.setInteractive(new Phaser.Geom.Rectangle(-65, -65, 130, 130), Phaser.Geom.Rectangle.Contains);
+                    enemy.on("pointerdown", () => {
+                        if (this.turn === "none" || this.turn === "attacking") return;
+                        this.selectTarget(enemy.index);
+                    });
+                    
+                    this.enemies.push(enemy);
+                });
+                
+                this._buildEnemyHUD();
+                
+                if (this._isWaveChanging && this.enemyHUDs) {
+                    this.enemyHUDs.forEach(hud => {
+                        Object.values(hud).forEach(item => {
+                            if (item && item.setAlpha && !Array.isArray(item)) item.setAlpha(0);
+                            else if (Array.isArray(item)) item.forEach(i => i && i.setAlpha && i.setAlpha(0));
+                        });
+                    });
                 }
+                this.selectedTargetIndex = -1;
+                this._updateTargetIndicator();
             }
-        } catch (err) {
-            console.error("Enemy Action error", err);
+
+            state.enemies.forEach((enemyData, i) => {
+                const enemyObj = this.enemies[i];
+                if (enemyObj && enemyData) {
+                    if (enemyData.final_stats) {
+                        enemyObj.finalStats = enemyData.final_stats;
+                        enemyObj.maxHp = enemyData.final_stats.hp;
+                        enemyObj.atk = enemyData.final_stats.atk;
+                        enemyObj.def = enemyData.final_stats.def || 500;
+                    }
+                    enemyObj.monsterId = enemyData.id;
+                    enemyObj.charName = enemyData.name;
+                    enemyObj.element = enemyData.element || 'None';
+                    enemyObj.level = enemyData.level || 1;
+                    enemyObj.isBoss = enemyData.is_boss === true;
+                    enemyObj.caMax = enemyData.caMax || 3;
+
+                    enemyObj.hp = enemyData.current_hp !== undefined ? enemyData.current_hp : enemyObj.maxHp;
+                    enemyObj.modeBar = enemyData.mode_bar || 0;
+                    enemyObj.modeState = enemyData.mode_state || 'normal';
+                    
+                    if (enemyData.current_ca !== undefined) {
+                         enemyObj.caBar = enemyData.current_ca;
+                    }
+                    
+                    if (enemyData.active_buffs) {
+                        enemyObj.activeEffects = [...enemyData.active_buffs];
+                    } else {
+                        enemyObj.activeEffects = [];
+                    }
+                    
+                    enemyObj.refreshVisual();
+                }
+            });
+            this._refreshEnemyHUD();
         }
 
-        await new Promise(resolve => this.time.delayedCall(1000, resolve));
-        
-        if (this.players.every(p => p.hp <= 0)) { 
-            this.triggerDefeat(false); 
-            return; 
+        if (state.timeline && this.timelineContainer) {
+            this.buildTimeline(state.timeline);
         }
-        
-        this.processTurnEnd('enemy');
     }
-
     _randAlive() { const l = this.players.filter(p => p.hp > 0); return l.length ? l[Math.floor(Math.random() * l.length)] : null; }
     _elemColor(el) { return { Fire: THEME.ELEM_FIRE, Wind: THEME.ELEM_WIND, Earth: THEME.ELEM_EARTH }[el] || THEME.BORDER; }
 
@@ -1512,7 +1578,7 @@ export default class BattleScene extends Phaser.Scene {
     }
 
     checkVictory() {
-        if (this.enemy.hp <= 0) {
+        if (this.enemies.every(e => e.hp <= 0)) {
             this.turn = "none";
             this.showLog("VICTORY! 🎉");
             this.time.delayedCall(1500, () => {

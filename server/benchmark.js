@@ -13,12 +13,18 @@
 
 'use strict';
 
+// Muat variabel dari .env agar tidak terjadi error Access Denied saat import file yang butuh DB
+require('dotenv').config();
+
 const { performance } = require('perf_hooks');
 const http = require('http');
 
 const AiBehaviorService    = require('./services/AiBehaviorService');
 const DamageCalculatorService = require('./services/DamageCalculatorService');
 const LevelingSystem       = require('./utils/LevelingSystem');
+
+// Gunakan BattleMemoryStore mock atau inisiasi manual untuk hindari overhead setInterval jika di-require utuh
+const BattleService        = require('./services/BattleService');
 
 LevelingSystem.init();
 
@@ -212,17 +218,61 @@ async function main() {
         10000
     ));
 
-    // 3. Leveling
+    // 3. Smart Targeting (BattleService)
+    results.push(runLogicBenchmark(
+        'Smart Targeting (BattleService)',
+        () => BattleService._determineSmartTarget(MOCK_BATTLE_STATE.player_party.characters, { party_lowest_hp_missing_pct: 2.0 }),
+        10000
+    ));
+
+    // 4. Leveling
     results.push(runLogicBenchmark(
         'Level Calc (LevelingSystem)',
         () => LevelingSystem.calculateCurrentLevel(Math.floor(Math.random() * 5000000), 60, 'Character'),
         10000
     ));
 
-    // 4. EXP Thresholds
+    // 5. EXP Thresholds
     results.push(runLogicBenchmark(
         'EXP Thresholds (LevelingSystem)',
         () => LevelingSystem.getExpThresholds(Math.ceil(Math.random() * 59) + 1, 60, 'Character'),
+        10000
+    ));
+
+    // 6. Gacha RNG Logic
+    const bannerItems = [
+        { mw_rarity: 'SSR', drop_chance: 0.02 },
+        { mw_rarity: 'SR', drop_chance: 0.18 },
+        { mw_rarity: 'R', drop_chance: 0.80 }
+    ];
+    const getRandomItemWeighted = (itemsPool) => {
+        const totalWeight = itemsPool.reduce((sum, item) => sum + item.drop_chance, 0);
+        let random = Math.random() * totalWeight;
+        for (const item of itemsPool) {
+            if (random < item.drop_chance) return item;
+            random -= item.drop_chance;
+        }
+        return itemsPool[itemsPool.length - 1];
+    };
+    results.push(runLogicBenchmark(
+        'Gacha RNG (Monte Carlo Pick)',
+        () => getRandomItemWeighted(bannerItems),
+        10000
+    ));
+
+    // 7. Battle Wave Check
+    results.push(runLogicBenchmark(
+        'Battle Wave Check (BattleSvc)',
+        () => {
+            const state = {
+                current_wave_index: 0,
+                waves: [[{ id: 'e1', current_hp: 0 }], [{ id: 'e2', current_hp: 100 }]],
+                enemies: [{ id: 'e1', current_hp: 0 }],
+                defeated_enemies: [],
+                player_party: { characters: [] }
+            };
+            BattleService._checkWaveClear(state, []);
+        },
         10000
     ));
 
@@ -258,6 +308,12 @@ async function main() {
     console.log('─────────────────────────────────────────────────────');
     console.log('\n  💡 Salin tabel di atas ke Bab 4 skripsi sebagai bukti KPI.');
     console.log('  💡 Jalankan ulang dengan server aktif untuk mendapatkan data API lengkap.\n');
+    
+    // Matikan proses secara paksa agar setInterval dari BattleService tidak menahan benchmark
+    process.exit(0);
 }
 
-main().catch(console.error);
+main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+});
