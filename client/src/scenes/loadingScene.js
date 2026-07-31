@@ -57,6 +57,22 @@ export default class LoadingScene extends Phaser.Scene {
             }
         });
 
+        // Kunci posisi teks loading di pojok kanan bawah viewport yang terlihat (mobile height lock)
+        this.events.on('update', () => {
+            const gameContent = document.getElementById('game-content');
+            if (gameContent) {
+                const rect = gameContent.getBoundingClientRect();
+                if (rect.bottom > window.innerHeight) {
+                    const hiddenPx = rect.bottom - window.innerHeight;
+                    const scaleY = H / rect.height;
+                    const adjustedY = H - (hiddenPx * scaleY);
+                    loadingText.setY(adjustedY - 20);
+                } else {
+                    loadingText.setY(H - 20);
+                }
+            }
+        });
+
         // Delay sebelum pindah ke scene berikutnya
         this.time.delayedCall(this.minLoadTimeMs, () => {
             this.scene.start(this.targetScene, this.targetData);

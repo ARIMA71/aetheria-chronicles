@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { THEME } from '../main.js';
 
-const W = 450, H = 800, CX = 225;
+const W = 480, H = 800, CX = 240;
 
 export default class FallbackScene extends Phaser.Scene {
     constructor() {

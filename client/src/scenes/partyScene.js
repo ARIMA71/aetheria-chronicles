@@ -2,8 +2,9 @@ import Phaser from 'phaser';
 import { THEME } from '../main.js';
 import { checkSession, getPlayerId, saveCurrentScene, clearSession } from '../utils/auth.js';
 import PartyApi from '../services/PartyApi.js';
+import { CameraScrollManager } from '../utils/cameraScroll.js';
 
-const W = 450, H = 800, CX = 225;
+const W = 480, H = 880, CX = 240;
 const COLOR_SSR = 0xffd700, COLOR_SR = 0xc0c0c0, COLOR_R = 0xcd7f32, COLOR_EMPTY = 0x334155;
 
 export default class PartyScene extends Phaser.Scene {
@@ -21,23 +22,23 @@ export default class PartyScene extends Phaser.Scene {
         this.add.rectangle(CX, H / 2, W, H, THEME.BG);
 
         // Top Bar
-        this.add.rectangle(CX, 30, W, 60, THEME.PANEL, THEME.PANEL_ALPHA).setStrokeStyle(1, THEME.BORDER);
-        this.add.text(CX, 30, 'PARTY SETTINGS', { fontSize: '15px', fontStyle: 'bold', color: THEME.TEXT_PRIMARY, fontFamily: 'Outfit', letterSpacing: 2 }).setOrigin(0.5);
+        this.add.rectangle(CX, 30, W, 60, THEME.PANEL, THEME.PANEL_ALPHA).setStrokeStyle(1, THEME.BORDER).setScrollFactor(0).setDepth(100);
+        this.add.text(CX, 30, 'PARTY SETTINGS', { fontSize: '15px', fontStyle: 'bold', color: THEME.TEXT_PRIMARY, fontFamily: 'Outfit', letterSpacing: 2 }).setOrigin(0.5).setScrollFactor(0).setDepth(100);
         
-        const backBtn = this.add.circle(40, 30, 18, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
-        const homeTxt = this.add.text(40, 30, 'HOME', { fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
+        const backBtn = this.add.circle(40, 30, 18, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true }).setScrollFactor(0).setDepth(100);
+        const homeTxt = this.add.text(40, 30, 'HOME', { fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5).setScrollFactor(0).setDepth(100);
         backBtn.on('pointerover', () => { backBtn.setFillStyle(0x334155); homeTxt.setColor('#ffffff'); });
         backBtn.on('pointerout', () => { backBtn.setFillStyle(THEME.PANEL); homeTxt.setColor(THEME.TEXT_PRIMARY); });
         backBtn.on('pointerdown', () => this.scene.start('LoadingScene', { targetScene: 'MainMenuScene' }));
 
         // Pojok kanan atas: Bulat bertulisan MENU
-        const menuBtn = this.add.circle(W - 40, 30, 18, THEME.PANEL, THEME.PANEL_ALPHA);
+        const menuBtn = this.add.circle(W - 40, 30, 18, THEME.PANEL, THEME.PANEL_ALPHA).setScrollFactor(0).setDepth(100);
         menuBtn.setStrokeStyle(1, THEME.BORDER);
         menuBtn.setInteractive({ useHandCursor: true });
 
         const menuText = this.add.text(W - 40, 30, 'MENU', {
             fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY
-        }).setOrigin(0.5);
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(100);
 
         menuBtn.on('pointerover', () => {
             menuBtn.setFillStyle(0x334155);
@@ -196,7 +197,7 @@ export default class PartyScene extends Phaser.Scene {
         // --- Tabs Preset 1-5 ---
         for (let i = 1; i <= 5; i++) {
             const isSel = (i === this.currentSlot);
-            const tabX = 50 + (i - 1) * 85;
+            const tabX = 70 + (i - 1) * 85;
             const tabColor = isSel ? 0x475569 : THEME.PANEL; // Lighter blue for active
             this.drawRoundedBox(tabX, 85, 75, 30, 8, tabColor, isSel ? 0xffffff : THEME.BORDER, 1);
             
@@ -213,23 +214,25 @@ export default class PartyScene extends Phaser.Scene {
         // --- Secondary Tabs (Characters / Weapons) ---
         const tabCharActive = this.currentTab === 'Characters';
         const charTabColor = tabCharActive ? 0x475569 : THEME.PANEL;
-        this.drawRoundedBox(130, 240, 160, 30, 6, charTabColor, tabCharActive ? 0xffffff : THEME.BORDER);
-        const zChar = this.add.zone(130, 240, 160, 30).setInteractive({useHandCursor:true});
+        this.drawRoundedBox(145, 240, 160, 30, 6, charTabColor, tabCharActive ? 0xffffff : THEME.BORDER);
+        const zChar = this.add.zone(145, 240, 160, 30).setInteractive({useHandCursor:true});
         zChar.on('pointerdown', () => { this.currentTab = 'Characters'; this.renderUI(); });
-        this.uiGroup.addMultiple([zChar, this.add.text(130, 240, 'CHARACTERS', { fontSize: '12px', color: tabCharActive ? '#fff' : THEME.TEXT_MUTED, fontStyle: 'bold' }).setOrigin(0.5)]);
+        this.uiGroup.addMultiple([zChar, this.add.text(145, 240, 'CHARACTERS', { fontSize: '12px', color: tabCharActive ? '#fff' : THEME.TEXT_MUTED, fontStyle: 'bold' }).setOrigin(0.5)]);
 
         const tabWeapActive = this.currentTab === 'Weapons';
         const weapTabColor = tabWeapActive ? 0x475569 : THEME.PANEL;
-        this.drawRoundedBox(320, 240, 160, 30, 6, weapTabColor, tabWeapActive ? 0xffffff : THEME.BORDER);
-        const zWeap = this.add.zone(320, 240, 160, 30).setInteractive({useHandCursor:true});
+        this.drawRoundedBox(335, 240, 160, 30, 6, weapTabColor, tabWeapActive ? 0xffffff : THEME.BORDER);
+        const zWeap = this.add.zone(335, 240, 160, 30).setInteractive({useHandCursor:true});
         zWeap.on('pointerdown', () => { this.currentTab = 'Weapons'; this.renderUI(); });
-        this.uiGroup.addMultiple([zWeap, this.add.text(320, 240, 'WEAPONS GRID', { fontSize: '12px', color: tabWeapActive ? '#fff' : THEME.TEXT_MUTED, fontStyle: 'bold' }).setOrigin(0.5)]);
+        this.uiGroup.addMultiple([zWeap, this.add.text(335, 240, 'WEAPONS GRID', { fontSize: '12px', color: tabWeapActive ? '#fff' : THEME.TEXT_MUTED, fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0)]);
 
         // --- Content Area ---
-        if (tabCharActive) {
+        if (this.currentTab === 'Characters') {
             this.renderCharacters(preset);
+            CameraScrollManager.enable(this, 750);
         } else {
             this.renderWeapons(preset);
+            CameraScrollManager.enable(this, 750);
         }
 
         // --- Party Stats (Moved to bottom) ---
@@ -1073,7 +1076,9 @@ export default class PartyScene extends Phaser.Scene {
     _buildMenuModal() {
         this.menuContainer = this.add.container(0, 0).setDepth(95).setVisible(false);
 
-        const backdrop = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.75).setInteractive();
+        const sysW = this.scale.width;
+        const sysH = this.scale.height;
+        const backdrop = this.add.rectangle(sysW / 2, sysH / 2, sysW, sysH, 0x000000, 0.75).setInteractive();
         backdrop.on('pointerdown', (pointer, localX, localY, event) => {
             event.stopPropagation();
             if (pointer.y > 420) this.toggleMenuModal(false);
@@ -1139,7 +1144,7 @@ export default class PartyScene extends Phaser.Scene {
         ]);
 
         this.confirmContainer = this.add.container(0, 0).setDepth(100).setVisible(false);
-        const cBackdrop = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.8).setInteractive();
+        const cBackdrop = this.add.rectangle(sysW / 2, sysH / 2, sysW, sysH, 0x000000, 0.8).setInteractive();
         cBackdrop.on('pointerdown', (p, x, y, e) => e.stopPropagation());
 
         const cPanel = this.add.rectangle(CX, H / 2, 300, 150, 0x0d1425).setInteractive();

@@ -702,6 +702,8 @@ class BattleService {
                 events.push({
                     type: 'effect_applied',
                     targetId: targetIds[0] || 'enemy_0',
+                    sourceId: sourceId,
+                    skillName: '✦ Aether Burst',
                     effectName: 'DEF Down (-25%)',
                     effectType: 'debuff'
                 });
@@ -806,16 +808,17 @@ class BattleService {
                     events.push({
                         type: 'effect_applied',
                         targetId: sourceId,
+                        sourceId: sourceId,
+                        skillName: skill.name,
                         effectName: `+${saGain}% SA Bar`,
                         effectType: 'buff'
                     });
                 }
 
-                // 3. Process Target Instant Effects (Delay, Dispel, Heal Pct)
                 if (skill.trigger_delay > 0 && targetIds[targets.indexOf(target)].startsWith('enemy_')) {
                     if (target.current_ca > 0) {
                         target.current_ca -= 1;
-                        events.push({ type: 'effect_applied', targetId: targetIds[targets.indexOf(target)], effectName: 'Delay', effectType: 'debuff' });
+                        events.push({ type: 'effect_applied', targetId: targetIds[targets.indexOf(target)], sourceId: sourceId, skillName: skill.name, effectName: 'Delay', effectType: 'debuff' });
                     }
                 }
 
@@ -825,7 +828,7 @@ class BattleService {
                         // Remove the most recently applied buff (or random)
                         const removed = buffs.pop();
                         target.active_buffs = target.active_buffs.filter(b => b !== removed);
-                        events.push({ type: 'effect_applied', targetId: targetIds[targets.indexOf(target)], effectName: 'Dispel', effectType: 'debuff' });
+                        events.push({ type: 'effect_applied', targetId: targetIds[targets.indexOf(target)], sourceId: sourceId, skillName: skill.name, effectName: 'Dispel', effectType: 'debuff' });
                     }
                 }
 
@@ -1002,6 +1005,8 @@ class BattleService {
                             events.push({
                                 type: 'effect_applied',
                                 targetId: tid,
+                                sourceId: sourceId,
+                                skillName: skill ? skill.name : 'Unknown Skill',
                                 effectName: eff.effect_name || eff.target_stat,
                                 effectType: eff.effect_type || 'buff'
                             });

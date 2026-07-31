@@ -6,7 +6,7 @@ import fireRaw from '../../assets/icons/elements/fire.svg?raw';
 import windRaw from '../../assets/icons/elements/wind.svg?raw';
 import earthRaw from '../../assets/icons/elements/rock.svg?raw';
 
-const W = 450, H = 800, CX = 225;
+const W = 480, H = 800, CX = 240;
 
 export default class GachaScene extends Phaser.Scene {
     constructor() {
@@ -594,7 +594,9 @@ export default class GachaScene extends Phaser.Scene {
     _buildMenuModal() {
         this.menuContainer = this.add.container(0, 0).setDepth(195).setVisible(false);
 
-        const backdrop = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.75).setInteractive();
+        const sysW = this.scale.width;
+        const sysH = this.scale.height;
+        const backdrop = this.add.rectangle(sysW / 2, sysH / 2, sysW, sysH, 0x000000, 0.75).setInteractive();
         backdrop.on('pointerdown', (pointer, localX, localY, event) => {
             event.stopPropagation();
             if (pointer.y > 420) {
@@ -679,7 +681,7 @@ export default class GachaScene extends Phaser.Scene {
         // Confirmation Dialog
         this.confirmContainer = this.add.container(0, 0).setDepth(200).setVisible(false);
 
-        const cBackdrop = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.8).setInteractive();
+        const cBackdrop = this.add.rectangle(sysW / 2, sysH / 2, sysW, sysH, 0x000000, 0.8).setInteractive();
         cBackdrop.on('pointerdown', (pointer, localX, localY, event) => event.stopPropagation());
 
         const cPanel = this.add.rectangle(CX, H / 2, 300, 150, 0x0d1425).setInteractive();

@@ -3,7 +3,7 @@ import { THEME } from '../main.js';
 import { checkSession } from '../utils/auth.js';
 import BattleApi from '../services/BattleApi.js';
 
-const W = 450, H = 800, CX = 225, CY = 400;
+const W = 480, H = 800, CX = 240, CY = 400;
 
 export default class DefeatScene extends Phaser.Scene {
     constructor() {
@@ -26,7 +26,9 @@ export default class DefeatScene extends Phaser.Scene {
         }
 
         // Dim the background battle scene
-        const overlay = this.add.rectangle(CX, CY, W, H, 0x000000, 0.75).setInteractive();
+        const sysW = this.scale.width;
+        const sysH = this.scale.height;
+        const overlay = this.add.rectangle(sysW / 2, sysH / 2, sysW, sysH, 0x000000, 0.75).setInteractive();
         overlay.on('pointerdown', (pointer, x, y, event) => {
             event.stopPropagation();
         });

@@ -3,7 +3,7 @@ import { THEME } from '../main.js';
 import { checkSession } from '../utils/auth.js';
 import BattleApi from '../services/BattleApi.js';
 
-const W = 450, H = 800, CX = 225, CY = 400;
+const W = 480, H = 800, CX = 240, CY = 400;
 
 export default class VictoryScene extends Phaser.Scene {
     constructor() {

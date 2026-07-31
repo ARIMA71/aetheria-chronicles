@@ -3,7 +3,7 @@ import { THEME } from '../main.js';
 import { checkSession, clearSession, saveCurrentScene } from '../utils/auth.js';
 import BattleApi from '../services/BattleApi.js';
 
-const W = 450, H = 800, CX = 225;
+const W = 480, H = 880, CX = 240;
 
 export default class MainMenuScene extends Phaser.Scene {
     constructor() {
@@ -234,17 +234,17 @@ export default class MainMenuScene extends Phaser.Scene {
     _buildFABCluster() {
         // Floating Action Buttons dengan patokan Quest di kanan
         // Quest (Patokan Utama, nempel di kanan sejajar border stats)
-        this.questFab = this._createFAB(395, 575, 40, 'Quest', '#ffffff', () => {
+        this.questFab = this._createFAB(425, 575, 40, 'Quest', '#ffffff', () => {
             this.scene.start('LoadingScene', { targetScene: 'QuestScene' });
         });
 
         // Party (Di atas Quest, sejajar kanan)
-        this._createFAB(405, 495, 30, 'Party', '#ffffff', () => {
+        this._createFAB(435, 495, 30, 'Party', '#ffffff', () => {
             this.scene.start('LoadingScene', { targetScene: 'PartyScene' });
         });
 
         // Gacha (Di sebelah kiri Quest)
-        this._createFAB(317, 585, 30, 'Gacha', '#ffffff', () => {
+        this._createFAB(347, 585, 30, 'Gacha', '#ffffff', () => {
             this.scene.start('LoadingScene', { targetScene: 'GachaScene' });
         });
     }
@@ -350,7 +350,9 @@ export default class MainMenuScene extends Phaser.Scene {
         this.menuContainer = this.add.container(0, 0).setDepth(95).setVisible(false);
 
         // 1. Black low-opacity backdrop (full screen)
-        const backdrop = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.75).setInteractive();
+        const sysW = this.scale.width;
+        const sysH = this.scale.height;
+        const backdrop = this.add.rectangle(sysW / 2, sysH / 2, sysW, sysH, 0x000000, 0.75).setInteractive();
         // Prevent click propagation
         backdrop.on('pointerdown', (pointer, localX, localY, event) => {
             event.stopPropagation();
@@ -483,7 +485,7 @@ export default class MainMenuScene extends Phaser.Scene {
         // ── CONFIRMATION DIALOG LAYER (hidden by default) ──
         this.confirmContainer = this.add.container(0, 0).setDepth(100).setVisible(false);
 
-        const cBackdrop = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.8).setInteractive();
+        const cBackdrop = this.add.rectangle(sysW / 2, sysH / 2, sysW, sysH, 0x000000, 0.8).setInteractive();
         cBackdrop.on('pointerdown', (pointer, localX, localY, event) => event.stopPropagation());
 
         const cPanel = this.add.rectangle(CX, H / 2, 300, 150, 0x0d1425).setInteractive();

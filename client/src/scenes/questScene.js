@@ -2,21 +2,22 @@ import Phaser from 'phaser';
 import { THEME } from '../main.js';
 import { checkSession, saveCurrentScene, clearSession } from '../utils/auth.js';
 import BattleApi from '../services/BattleApi.js';
+import { CameraScrollManager } from '../utils/cameraScroll.js';
 
-const W = 450, H = 800, CX = 225;
+const W = 480, H = 880, CX = 240;
 const API_BASE = 'http://localhost:3000/api';
 
 // Area dot positions on the map (top half)
 const AREA_DOTS = [
-    { x: 100, y: 160, label: 'I' },
-    { x: 225, y: 120, label: 'II' },
-    { x: 350, y: 170, label: 'III' },
+    { x: 115, y: 190, label: 'I' },
+    { x: 240, y: 150, label: 'II' },
+    { x: 365, y: 200, label: 'III' },
 ];
 
 // Paths between dots
 const PATH_POINTS = [
-    { x1: 130, y1: 160, x2: 195, y2: 125 },
-    { x1: 255, y1: 125, x2: 320, y2: 165 },
+    { x1: 145, y1: 190, x2: 210, y2: 150 },
+    { x1: 270, y1: 150, x2: 335, y2: 190 },
 ];
 
 export default class QuestScene extends Phaser.Scene {
@@ -48,22 +49,22 @@ export default class QuestScene extends Phaser.Scene {
     }
 
     _buildTopBar() {
-        this.add.rectangle(CX, 30, W, 60, THEME.PANEL, THEME.PANEL_ALPHA).setStrokeStyle(1, THEME.BORDER);
-        this.add.text(CX, 30, 'QUEST MAP', { fontSize: '15px', fontStyle: 'bold', color: THEME.TEXT_PRIMARY, fontFamily: 'Outfit', letterSpacing: 2 }).setOrigin(0.5);
-        const backBtn = this.add.circle(40, 30, 18, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
-        const homeTxt = this.add.text(40, 30, 'HOME', { fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
+        this.add.rectangle(CX, 30, W, 60, THEME.PANEL, THEME.PANEL_ALPHA).setStrokeStyle(1, THEME.BORDER).setScrollFactor(0).setDepth(100);
+        this.add.text(CX, 30, 'QUEST MAP', { fontSize: '15px', fontStyle: 'bold', color: THEME.TEXT_PRIMARY, fontFamily: 'Outfit', letterSpacing: 2 }).setOrigin(0.5).setScrollFactor(0).setDepth(100);
+        const backBtn = this.add.circle(40, 30, 18, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true }).setScrollFactor(0).setDepth(100);
+        const homeTxt = this.add.text(40, 30, 'HOME', { fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5).setScrollFactor(0).setDepth(100);
         backBtn.on('pointerover', () => { backBtn.setFillStyle(0x334155); homeTxt.setColor('#ffffff'); });
         backBtn.on('pointerout', () => { backBtn.setFillStyle(THEME.PANEL); homeTxt.setColor(THEME.TEXT_PRIMARY); });
         backBtn.on('pointerdown', () => this.scene.start('LoadingScene', { targetScene: 'MainMenuScene' }));
 
         // Pojok kanan atas: Bulat bertulisan MENU
-        const menuBtn = this.add.circle(W - 40, 30, 18, THEME.PANEL, THEME.PANEL_ALPHA);
+        const menuBtn = this.add.circle(W - 40, 30, 18, THEME.PANEL, THEME.PANEL_ALPHA).setScrollFactor(0).setDepth(100);
         menuBtn.setStrokeStyle(1, THEME.BORDER);
         menuBtn.setInteractive({ useHandCursor: true });
 
         const menuText = this.add.text(W - 40, 30, 'MENU', {
             fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY
-        }).setOrigin(0.5);
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(100);
 
         menuBtn.on('pointerover', () => {
             menuBtn.setFillStyle(0x334155);
@@ -211,6 +212,10 @@ export default class QuestScene extends Phaser.Scene {
 
             this.questListContainer.add(items);
         });
+
+        // Aktifkan scroll dinamis berdasarkan quest terakhir
+        const maxY = startY + quests.length * (cardH + gap) + 50;
+        CameraScrollManager.enable(this, maxY);
     }
 
     _showPreBattleModal(quest) {
@@ -231,14 +236,14 @@ export default class QuestScene extends Phaser.Scene {
         currentY += 22;
         items.push(this.add.text(CX, currentY, quest.name, { fontSize: '12px', color: THEME.TEXT_PRIMARY, fontFamily: 'Outfit' }).setOrigin(0.5));
         currentY += 25;
-        
+
         items.push(this.add.rectangle(CX, currentY, W - 70, 1, 0x334155)); // Divider
         currentY += 20;
 
         // --- SECTION 2: ENEMY INFO ---
         items.push(this.add.text(50, currentY, 'ENEMY INFO', { fontSize: '10px', fontStyle: 'bold', color: THEME.TEXT_SECONDARY, fontFamily: 'Outfit', letterSpacing: 1 }).setOrigin(0, 0.5));
         currentY += 25;
-        
+
         // Use a Set to filter unique enemies based on name and level
         const uniqueEnemiesMap = new Map();
         quest.enemies.forEach(e => {
@@ -264,7 +269,7 @@ export default class QuestScene extends Phaser.Scene {
         // --- SECTION 3: DROP LOOT ---
         items.push(this.add.text(50, currentY, 'DROP LOOT', { fontSize: '10px', fontStyle: 'bold', color: THEME.TEXT_SECONDARY, fontFamily: 'Outfit', letterSpacing: 1 }).setOrigin(0, 0.5));
         currentY += 25;
-        
+
         const loots = quest.rewards.slice(0, 4);
         loots.forEach((r) => {
             const chance = Math.round(r.drop_chance * 100);
@@ -280,7 +285,7 @@ export default class QuestScene extends Phaser.Scene {
         items.push(this.add.text(50, currentY, `⚡ Stamina Cost: ${quest.stamina_cost}`, { fontSize: '11px', color: '#f39c12', fontFamily: 'Outfit', fontStyle: 'bold' }).setOrigin(0, 0.5));
         currentY += 20;
         items.push(this.add.text(50, currentY, `💪 Rec. Power: ${quest.power_level}`, { fontSize: '11px', color: THEME.TEXT_SECONDARY, fontFamily: 'Outfit' }).setOrigin(0, 0.5));
-        
+
         currentY += 20;
         items.push(this.add.rectangle(CX, currentY, W - 70, 1, 0x334155)); // Divider
         currentY += 25;
@@ -306,7 +311,7 @@ export default class QuestScene extends Phaser.Scene {
         this.presetPowerText = this.add.text(CX, currentY, 'Loading power...', { fontSize: '10px', color: THEME.TEXT_MUTED, fontFamily: 'Outfit' }).setOrigin(0.5);
         this._fetchPresetPower();
         items.push(this.presetPowerText);
-        
+
         currentY += 40;
 
         // --- SECTION 6: ACTION BUTTONS ---
@@ -331,10 +336,10 @@ export default class QuestScene extends Phaser.Scene {
         const bottomPadding = 30;
         const totalHeight = (currentY - topY) + topPadding + bottomPadding;
         const panelCenterY = (topY - topPadding) + (totalHeight / 2);
-        
+
         const panel = this.add.rectangle(CX, panelCenterY, W - 30, totalHeight, 0x0d1b2a).setStrokeStyle(2, THEME.AETHER).setInteractive();
         panel.on('pointerdown', (p, x, y, e) => e.stopPropagation());
-        
+
         // Insert panel immediately behind content (index 1, right after overlay)
         items.splice(1, 0, panel);
 
@@ -460,7 +465,7 @@ export default class QuestScene extends Phaser.Scene {
 
     async _checkActiveBattle() {
         if (!this.playerData || !this.playerData.player_id) return;
-        
+
         try {
             const res = await BattleApi.checkActiveBattle(this.playerData.player_id);
             if (res.status === 'success' && res.data && res.data.has_active) {
@@ -561,7 +566,9 @@ export default class QuestScene extends Phaser.Scene {
     _buildMenuModal() {
         this.menuContainer = this.add.container(0, 0).setDepth(95).setVisible(false);
 
-        const backdrop = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.75).setInteractive();
+        const sysW = this.scale.width;
+        const sysH = this.scale.height;
+        const backdrop = this.add.rectangle(sysW / 2, sysH / 2, sysW, sysH, 0x000000, 0.75).setInteractive();
         backdrop.on('pointerdown', (pointer, localX, localY, event) => {
             event.stopPropagation();
             if (pointer.y > 420) this.toggleMenuModal(false);
@@ -575,7 +582,7 @@ export default class QuestScene extends Phaser.Scene {
         const divider = this.add.rectangle(CX, 60, W, 1, THEME.BORDER);
 
         const s1Label = this.add.text(CX, 85, 'QUICK NAVIGATION', { fontSize: '9px', fontFamily: 'Outfit', color: THEME.TEXT_SECONDARY, letterSpacing: 1 }).setOrigin(0.5);
-        
+
         const btnParty = this._createModalRoundBtn(CX - 100, 125, 'PARTY', () => {
             this.toggleMenuModal(false);
             this.scene.start('LoadingScene', { targetScene: 'PartyScene' });
@@ -594,7 +601,7 @@ export default class QuestScene extends Phaser.Scene {
             this.toggleMenuModal(false);
             this.scene.start('LoadingScene', { targetScene: 'InventoryScene' });
         });
-        const btnShop = this._createModalRectBtn(CX + 90, 215, 160, 30, 'SHOP', () => {});
+        const btnShop = this._createModalRectBtn(CX + 90, 215, 160, 30, 'SHOP', () => { });
 
         const s3Label = this.add.text(CX, 270, 'AUDIO SETTINGS', { fontSize: '9px', fontFamily: 'Outfit', color: THEME.TEXT_SECONDARY, letterSpacing: 1 }).setOrigin(0.5);
 
@@ -628,7 +635,7 @@ export default class QuestScene extends Phaser.Scene {
         ]);
 
         this.confirmContainer = this.add.container(0, 0).setDepth(100).setVisible(false);
-        const cBackdrop = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.8).setInteractive();
+        const cBackdrop = this.add.rectangle(sysW / 2, sysH / 2, sysW, sysH, 0x000000, 0.8).setInteractive();
         cBackdrop.on('pointerdown', (p, x, y, e) => e.stopPropagation());
 
         const cPanel = this.add.rectangle(CX, H / 2, 300, 150, 0x0d1425).setInteractive();

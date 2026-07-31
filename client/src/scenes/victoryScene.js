@@ -3,7 +3,7 @@ import { THEME } from '../main.js';
 import { checkSession } from '../utils/auth.js';
 import BattleApi from '../services/BattleApi.js';
 
-const W = 450, H = 800, CX = 225, CY = 400;
+const W = 480, H = 800, CX = 240, CY = 400;
 
 export default class VictoryScene extends Phaser.Scene {
     constructor() {
@@ -26,7 +26,9 @@ export default class VictoryScene extends Phaser.Scene {
         this.cameras.main.setScroll(0, 0);
 
         // Solid background since we transition completely from BattleScene
-        this.add.rectangle(CX, CY, W, 4000, THEME.BG, 1.0).setInteractive();
+        const sysW = this.scale.width;
+        const sysH = this.scale.height;
+        this.add.rectangle(sysW / 2, sysH / 2, sysW, 4000, THEME.BG, 1.0).setInteractive();
 
         // Title text
         this.add.text(CX, 60, "QUEST CLEARED", {

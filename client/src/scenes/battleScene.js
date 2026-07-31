@@ -9,7 +9,7 @@ import fireRaw from '../../assets/icons/elements/fire.svg?raw';
 import windRaw from '../../assets/icons/elements/wind.svg?raw';
 import earthRaw from '../../assets/icons/elements/rock.svg?raw';
 
-const W = 450, H = 800, CX = 225;
+const W = 480, H = 880, CX = 240;
 export default class BattleScene extends Phaser.Scene {
     constructor() { super("BattleScene"); }
     init(data) {
@@ -265,11 +265,12 @@ export default class BattleScene extends Phaser.Scene {
         this.turnText.setText(txt);
     }
     _buildLayer1() {
-        this.turnText = this.add.text(20, 26, "TURN 1  |  (1/1)", { fontSize: "13px", color: THEME.TEXT_SECONDARY, fontStyle: "bold" }).setOrigin(0, 0.5);
+        this.turnText = this.add.text(20, 26, "TURN 1", { fontSize: "13px", color: THEME.TEXT_SECONDARY, fontStyle: "bold" }).setOrigin(0, 0.5);
         this.timerText = this.add.text(CX, 26, "44:59", { fontSize: "18px", color: THEME.TEXT_PRIMARY, fontStyle: "bold" }).setOrigin(0.5, 0.5);
-        const mb = this.add.rectangle(405, 26, 50, 34, THEME.PANEL).setInteractive();
+
+        const mb = this.add.rectangle(435, 26, 50, 34, THEME.PANEL).setInteractive();
         mb.setStrokeStyle(1, THEME.BORDER);
-        this.add.text(405, 26, "☰", { fontSize: "18px", color: THEME.TEXT_SECONDARY }).setOrigin(0.5);
+        this.add.text(435, 26, "☰", { fontSize: "18px", color: THEME.TEXT_SECONDARY }).setOrigin(0.5);
         mb.on("pointerdown", () => {
             if (this.turn === "none" || this.turn === "attacking") return;
             this.showMainMenu();
@@ -415,9 +416,9 @@ export default class BattleScene extends Phaser.Scene {
     }
     _buildArenaButtons() {
         this._attackBtnContainer = this.add.container(0, 0);
-        const ab = this.add.rectangle(375, 460, 100, 40, THEME.DAMAGE).setDepth(10);
+        const ab = this.add.rectangle(410, 460, 100, 40, THEME.DAMAGE).setDepth(10);
         ab.setStrokeStyle(1, THEME.BORDER);
-        const text = this.add.text(375, 460, "ATTACK ⚔", { fontSize: "14px", color: THEME.TEXT_PRIMARY, fontStyle: "bold", align: "center" }).setOrigin(0.5).setDepth(10);
+        const text = this.add.text(410, 460, "ATTACK ⚔", { fontSize: "14px", color: THEME.TEXT_PRIMARY, fontStyle: "bold", align: "center" }).setOrigin(0.5).setDepth(10);
         this._attackBtnContainer.add([ab, text]);
         ab.setInteractive(); ab.on("pointerdown", () => {
             if (this.turn === "player" && !this.attackBtnLocked) this.playerAttack();
@@ -432,34 +433,48 @@ export default class BattleScene extends Phaser.Scene {
             const b = this.add.rectangle(0, 0, 58, 58, THEME.PANEL, 0.7);
             b.setStrokeStyle(1, THEME.BORDER);
             const t = this.add.text(0, 0, "?", { fontSize: "20px", color: THEME.TEXT_SECONDARY }).setOrigin(0.5);
-            p.spriteObj = this.add.container(px, 530, [b, t]);
+            p.spriteObj = this.add.container(px, 520, [b, t]);
         });
     }
 
     _buildLayer4() {
-        this._aethBarBg = this.add.rectangle(CX, 715, W - 40, 10, THEME.BG);
-        this._aethBarBg.setStrokeStyle(1, THEME.AETHER);
-        this._aethFill = this.add.rectangle(20, 715, 0, 8, THEME.AETHER).setOrigin(0, 0.5);
-        this._aethPct = this.add.text(W - 20, 705, "0%", { fontSize: "8px", color: THEME.TEXT_SECONDARY }).setOrigin(1, 1);
-        this.add.text(20, 705, "AETHER", { fontSize: "8px", color: THEME.TEXT_SECONDARY }).setOrigin(0, 1);
+        const W = 480;
+        const CX = 240;
 
-        this._healBtn = this.add.rectangle(130, 745, 220, 44, THEME.PANEL);
+        // 1. AETHER GAUGE
+        this._aethBarBg = this.add.rectangle(CX, 720, 440, 10, THEME.BG);
+        this._aethBarBg.setStrokeStyle(1, THEME.AETHER);
+
+        // Fill dimulai dari batas margin kiri (X = 20)
+        this._aethFill = this.add.rectangle(20, 720, 0, 8, THEME.AETHER).setOrigin(0, 0.5);
+
+        // Teks disejajarkan dengan margin kiri (20) dan kanan (460)
+        this._aethPct = this.add.text(460, 700, "0%", { fontSize: "10px", color: THEME.TEXT_SECONDARY }).setOrigin(1, 0);
+        this.add.text(20, 700, "AETHER", { fontSize: "10px", color: THEME.TEXT_SECONDARY }).setOrigin(0, 0);
+
+        // 2. ACTION BUTTONS (Center Y = 720, Height = 55)
+        // Tombol Heal (Lebar 210, Center X = 125)
+        this._healBtn = this.add.rectangle(125, 762, 210, 55, THEME.PANEL);
         this._healBtn.setStrokeStyle(1, THEME.HEALTH);
-        this._healText = this.add.text(130, 745, "⊕ HEAL (x" + this.healsRemaining + ")", { fontSize: "12px", color: THEME.TEXT_SECONDARY }).setOrigin(0.5);
+        this._healText = this.add.text(125, 762, "⊕ HEAL (x" + this.healsRemaining + ")", { fontSize: "14px", color: THEME.TEXT_SECONDARY }).setOrigin(0.5);
         this._healBtn.setInteractive();
         this._healBtn.on("pointerdown", () => {
             if (this.turn === "player") this.useHealPotion();
         });
 
-        this._abBg = this.add.rectangle(350, 745, 160, 44, THEME.PANEL);
+        // Tombol Burst (Lebar 210, Center X = 355)
+        this._abBg = this.add.rectangle(355, 762, 210, 55, THEME.PANEL);
         this._abBg.setStrokeStyle(1, THEME.BORDER);
-        this._abText = this.add.text(350, 745, "✦ BURST", { fontSize: "11px", color: THEME.TEXT_SECONDARY, align: "center" }).setOrigin(0.5);
+        this._abText = this.add.text(355, 762, "✦ AETHER BURST", { fontSize: "14px", color: THEME.TEXT_SECONDARY, align: "center" }).setOrigin(0.5);
         this._abBg.setInteractive();
-        this._abBg.on("pointerdown", () => { if (this.turn === "player") this.aetherBurst(); });
+        this._abBg.on("pointerdown", () => {
+            if (this.turn === "player") this.aetherBurst();
+        });
 
-        this._logBtnBg = this.add.rectangle(CX, 785, 400, 30, THEME.PANEL);
+        // 3. BATTLE LOG BUTTON (Center Y = 830, Width = 440)
+        this._logBtnBg = this.add.rectangle(CX, 812, 440, 30, THEME.PANEL);
         this._logBtnBg.setStrokeStyle(1, THEME.BORDER);
-        this.add.text(CX, 785, "📜 BATTLE LOG", { fontSize: "12px", color: THEME.TEXT_SECONDARY, fontStyle: "bold" }).setOrigin(0.5);
+        this.add.text(CX, 812, "📜 BATTLE LOG", { fontSize: "12px", color: THEME.TEXT_SECONDARY, fontStyle: "bold", letterSpacing: 1 }).setOrigin(0.5);
         this._logBtnBg.setInteractive();
         this._logBtnBg.on("pointerdown", () => {
             this.logOverlay.setVisible(true);
@@ -472,7 +487,7 @@ export default class BattleScene extends Phaser.Scene {
     _refreshAetherUI() {
         if (!this._aethFill) return;
         const r = Math.min(1, this.aetherGauge / this.aetherGaugeMax);
-        this._aethFill.setSize((W - 40) * r, 8);
+        this._aethFill.setSize(440 * r, 8);
         this._aethPct.setText(Math.floor(r * 100) + "%");
         const rdy = this.aetherGauge >= this.aetherGaugeMax;
         this._abBg.setStrokeStyle(1, rdy ? THEME.AETHER : THEME.BORDER);
@@ -481,12 +496,12 @@ export default class BattleScene extends Phaser.Scene {
     _buildSidebar() {
         const SBW = 210, SHX = W + SBW / 2;
         this._sbShownX = W - SBW / 2; this._sbHiddenX = SHX;
-        this._overlay = this.add.rectangle(CX, H / 2, W, H, 0x000000).setAlpha(0).setInteractive().setDepth(19);
+        this._overlay = this.add.rectangle(CX, H / 2, W, H, 0x000000).setAlpha(0).setInteractive().setDepth(299);
         this._overlay.on("pointerdown", () => this.closeSidebar());
-        this._sbPanel = this.add.container(SHX, H / 2).setDepth(20);
+        this._sbPanel = this.add.container(SHX, H / 2).setDepth(300);
         const bg = this.add.rectangle(0, 0, SBW, H, THEME.PANEL); bg.setStrokeStyle(1, THEME.BORDER);
         this._sbPanel.add([bg]);
-        this._sbBtns = this.add.container(SHX, H / 2).setDepth(20);
+        this._sbBtns = this.add.container(SHX, H / 2).setDepth(301);
     }
     openSidebar() {
         this._sidebarOpen = true; this._renderSidebar();
@@ -752,24 +767,109 @@ export default class BattleScene extends Phaser.Scene {
         });
     }
     _buildBattleLog() {
-        // Popup Log Area Potret
-        this.battleLogBg = this.add.rectangle(CX, 600, 400, 120, 0x000000, 0.7).setOrigin(0.5).setDepth(200).setVisible(false);
-        this.battleLogText = this.add.text(CX, 600, "", { fontSize: "16px", color: "#fff", align: "center", wordWrap: { width: 380 } }).setOrigin(0.5).setDepth(201).setVisible(false);
+        // Popup Log Area (Top of Main Arena)
+        this.battleLogBg = this.add.rectangle(0, 50, W, 60, 0x000000, 0.7).setOrigin(0, 0).setDepth(200).setVisible(false);
+        this.battleLogText = this.add.text(15, 65, "", { fontSize: "14px", color: "#fff", align: "left", wordWrap: { width: W - 30 } }).setOrigin(0, 0).setDepth(201).setVisible(false);
 
-        // Overlay Latar Hitam Transparan (Input Trap)
         this.logOverlay = this.add.rectangle(0, 0, this.cameras.main.width, this.cameras.main.height, 0x000000, 0.8)
             .setOrigin(0, 0).setDepth(249).setInteractive().setVisible(false);
-        this.logOverlay.on('pointerdown', () => {
-            this.logOverlay.setVisible(false);
-            this.logContainer.setVisible(false);
+
+        // BATTLE LOG UI (Fixed)
+        this.logContainer = this.add.container(240, 100).setDepth(250).setVisible(false);
+
+        const titleBg = this.add.rectangle(0, -25, 400, 30, 0x111111).setStrokeStyle(1, 0x333333);
+        const title = this.add.text(0, -25, "BATTLE LOG HISTORY (Drag/Scroll)", { fontSize: "14px", color: "#f39c12", fontStyle: "bold" }).setOrigin(0.5);
+        this.logContainer.add([titleBg, title]);
+
+        // MASKING UNTUK SCROLL
+        const maskShape = this.make.graphics();
+        maskShape.fillStyle(0xffffff);
+        maskShape.fillRect(20, 100, 440, 600); // Batas scroll area
+        const mask = maskShape.createGeometryMask();
+
+        // CONTAINER ISI LOG (Scrollable)
+        this.logScrollContainer = this.add.container(0, 10);
+        this.logContainer.add(this.logScrollContainer);
+        this.logScrollContainer.setMask(mask);
+
+        // LOGIC DRAG & SCROLL
+        let isDragging = false;
+        let startY = 0;
+        let lastY = 0;
+
+        this.logOverlay.on('wheel', (pointer, dx, dy, dz, event) => {
+            this.logScrollContainer.y -= dy * 0.5;
+            this._clampLogScroll();
         });
 
-        this.logContainer = this.add.container(CX, 100).setDepth(250).setVisible(false);
-        const title = this.add.text(0, -20, "BATTLE LOG HISTORY", { fontSize: "16px", color: "#ffffff", fontStyle: "bold" }).setOrigin(0.5);
-        this.logContainer.add(title);
+        this.logOverlay.on('pointerdown', (pointer) => {
+            isDragging = true;
+            startY = pointer.y;
+            lastY = pointer.y;
+        });
+
+        this.logOverlay.on('pointermove', (pointer) => {
+            if (isDragging) {
+                const dy = pointer.y - lastY;
+                this.logScrollContainer.y += dy;
+                lastY = pointer.y;
+                this._clampLogScroll();
+            }
+        });
+
+        const handlePointerUp = (pointer) => {
+            isDragging = false;
+            // Jika drag sangat kecil, anggap sebagai click/tap -> Close Modal
+            if (Math.abs(pointer.y - startY) < 5) {
+                this.logOverlay.setVisible(false);
+                this.logContainer.setVisible(false);
+            }
+        };
+
+        this.logOverlay.on('pointerup', handlePointerUp);
+        this.logOverlay.on('pointerout', handlePointerUp);
 
         this.battleHistory = [];
         this.logHistoryObjs = [];
+        this._logTotalHeight = 0;
+    }
+
+    _clampLogScroll() {
+        const maxY = 10; // Posisi awal Y dari logScrollContainer
+        const maskHeight = 600;
+        const paddingBottom = 40;
+
+        // Jika isi lebih pendek dari layar, jangan discroll
+        if (this._logTotalHeight + paddingBottom < maskHeight) {
+            this.logScrollContainer.y = maxY;
+            return;
+        }
+
+        const minY = maxY - (this._logTotalHeight + paddingBottom - maskHeight);
+        if (this.logScrollContainer.y > maxY) this.logScrollContainer.y = maxY;
+        if (this.logScrollContainer.y < minY) this.logScrollContainer.y = minY;
+    }
+
+    _showCenterAnim(textStr, colorStr = "#ffffff") {
+        const cx = this.cameras.main.width / 2;
+        const cy = this.cameras.main.height / 2;
+        const animText = this.add.text(cx, cy, textStr, {
+            fontSize: "36px", fontStyle: "bold", fontFamily: "Outfit", align: "center",
+            color: colorStr, letterSpacing: 4, stroke: "#000", strokeThickness: 4,
+            wordWrap: { width: this.cameras.main.width - 60 }
+        }).setOrigin(0.5).setDepth(250).setScale(0.5).setAlpha(0);
+
+        this.tweens.add({
+            targets: animText, scale: 1.2, alpha: 1, duration: 400, ease: 'Back.out',
+            onComplete: () => {
+                this.time.delayedCall(1200, () => {
+                    this.tweens.add({
+                        targets: animText, alpha: 0, scale: 1.5, duration: 300,
+                        onComplete: () => animText.destroy()
+                    });
+                });
+            }
+        });
     }
 
     showLog(msg, source = 'system') {
@@ -783,7 +883,7 @@ export default class BattleScene extends Phaser.Scene {
                 this.battleLogText.setVisible(false);
             });
             if (source === 'popup') return;
-        } else if (msg.includes("ENRAGED") || msg.includes("BREAK") || msg.includes("STANCE") || msg.includes("START") || msg.includes("VICTORY") || msg.includes("DEFEAT")) {
+        } else if (msg.includes("ENRAGED") || msg.includes("BREAK") || msg.includes("STANCE")) {
             if (this._popupTimer) this._popupTimer.remove();
             this.battleLogText.setText(msg);
             this.battleLogBg.setVisible(true);
@@ -795,8 +895,12 @@ export default class BattleScene extends Phaser.Scene {
         }
 
         this.battleHistory.push({ msg, source });
-        if (this.battleHistory.length > 10) this.battleHistory.shift();
+        if (this.battleHistory.length > 50) this.battleHistory.shift();
 
+        this._renderHistoryLogs();
+    }
+
+    _renderHistoryLogs() {
         this.logHistoryObjs.forEach(obj => obj.destroy());
         this.logHistoryObjs = [];
 
@@ -806,22 +910,37 @@ export default class BattleScene extends Phaser.Scene {
             let align = "center";
             let originX = 0.5;
             let posX = 0;
+            let bgOriginX = 0.5;
+            let bgPosX = 0;
 
             if (item.source === 'player') {
                 color = "#4fc3f7"; align = "left"; originX = 0; posX = -190;
+                bgOriginX = 0; bgPosX = -200;
             } else if (item.source === 'enemy') {
                 color = "#ff8a65"; align = "right"; originX = 1; posX = 190;
+                bgOriginX = 1; bgPosX = 200;
             }
 
             const t = this.add.text(posX, currentY, item.msg, {
-                fontSize: "13px", color: color,
-                wordWrap: { width: 280 }, align: align
+                fontSize: "12px", color: color,
+                wordWrap: { width: 320 }, align: align, lineSpacing: 4
             }).setOrigin(originX, 0);
 
-            this.logContainer.add(t);
-            this.logHistoryObjs.push(t);
-            currentY += t.displayHeight + 8;
+            const bgW = t.displayWidth + 20;
+            const bgH = t.displayHeight + 10;
+
+            const bgColor = color === "#ffffff" ? 0x222222 : (item.source === 'player' ? 0x0d1b2a : 0x2a0d0d);
+            const strokeCol = color === "#ffffff" ? 0x555555 : (item.source === 'player' ? 0x1a3a5a : 0x5a1a1a);
+
+            const bg = this.add.rectangle(bgPosX, currentY - 5, bgW, bgH, bgColor).setOrigin(bgOriginX, 0).setStrokeStyle(1, strokeCol);
+
+            this.logScrollContainer.add([bg, t]);
+            this.logHistoryObjs.push(bg, t);
+            currentY += bg.height + 10;
         });
+
+        this._logTotalHeight = currentY;
+        this.logScrollContainer.y = 10; // Reset scroll ke atas tiap ada log baru
     }
 
     showFloatingEffect(target, effectName, effectType) {
@@ -840,10 +959,11 @@ export default class BattleScene extends Phaser.Scene {
         const ox = Phaser.Math.Between(-30, 30);
         const oy = Phaser.Math.Between(-20, 20);
         let tx = target.x; let ty = target.y;
-        if (target.sprite) { tx = target.sprite.x; ty = target.sprite.y; }
+        if (target.spriteObj) { tx = target.spriteObj.x; ty = target.spriteObj.y; }
+        else if (target.sprite) { tx = target.sprite.x; ty = target.sprite.y; }
 
         const floatText = this.add.text(tx + ox, ty + oy - 40, effectName, {
-            fontSize: "18px", color: "#ffffff", fontStyle: "bold",
+            fontSize: "16px", color: "#ffffff", fontStyle: "bold",
             stroke: strokeColor, strokeThickness: 4, fontFamily: 'Arial',
             align: 'center'
         }).setOrigin(0.5).setDepth(200);
@@ -861,9 +981,9 @@ export default class BattleScene extends Phaser.Scene {
         const ox = Phaser.Math.Between(-30, 30);
         const oy = Phaser.Math.Between(-20, 20);
 
-        let tx = target.x;
-        let ty = target.y;
-        if (target.sprite) { tx = target.sprite.x; ty = target.sprite.y; }
+        let tx = target.x; let ty = target.y;
+        if (target.spriteObj) { tx = target.spriteObj.x; ty = target.spriteObj.y; }
+        else if (target.sprite) { tx = target.sprite.x; ty = target.sprite.y; }
 
         let x = tx + ox;
         let y = ty + oy - 40;
@@ -903,8 +1023,6 @@ export default class BattleScene extends Phaser.Scene {
             color: THEME.TEXT_PRIMARY,
             letterSpacing: 8
         }).setOrigin(0.5).setDepth(200).setScale(0.5).setAlpha(0);
-
-        this.showLog("BATTLE START!");
 
         this.tweens.add({
             targets: startText,
@@ -1098,6 +1216,91 @@ export default class BattleScene extends Phaser.Scene {
     }
     async _playActionEvents(events) {
         let waveChanged = false;
+
+        // --- BATTLE HISTORY AGGREGATION ---
+        const turnAgg = new Map();
+        events.forEach(ev => {
+            if (!ev.sourceId) return;
+            if (ev.type === 'wave_change' || ev.type === 'enrage' || ev.type === 'break' || ev.type === 'log') return;
+
+            const key = `${ev.sourceId}_${ev.skillName || 'Basic Attack'}`;
+            if (!turnAgg.has(key)) {
+                turnAgg.set(key, {
+                    sourceId: ev.sourceId,
+                    skillName: ev.skillName || 'Basic Attack',
+                    totalDmg: 0,
+                    totalHeal: 0,
+                    effects: new Set(),
+                    targets: new Set()
+                });
+            }
+            const agg = turnAgg.get(key);
+
+            if (ev.targetId !== undefined && ev.targetId !== null) {
+                let tName = null;
+                const pTarget = this.players.find(p => p.slot === ev.targetId);
+                if (pTarget) tName = pTarget.charName;
+                if (!tName) {
+                    const tIdStr = String(ev.targetId);
+                    if (this.enemies.some(e => String(e.monsterId) == tIdStr) || tIdStr.startsWith('enemy_') || tIdStr === 'enemy') {
+                        const eIdx = tIdStr.startsWith('enemy_') ? parseInt(tIdStr.split('_')[1], 10) : 0;
+                        const eTarget = this.enemies[eIdx] || this.enemies[0];
+                        if (eTarget) tName = eTarget.charName || "Monster";
+                    }
+                }
+                if (tName) agg.targets.add(tName);
+            }
+
+            if (ev.type === 'damage') {
+                agg.totalDmg += (ev.value || 0);
+            }
+            if (ev.type === 'heal') {
+                agg.totalHeal += (ev.value || 0);
+            }
+            if (ev.type === 'effect_applied') {
+                agg.effects.add(ev.effectName);
+            }
+        });
+
+        // Push aggregated logs
+        const now = new Date();
+        const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+        let addedHistory = false;
+        turnAgg.forEach(agg => {
+            const source = this.players.find(p => p.slot === agg.sourceId) ||
+                (String(agg.sourceId).startsWith('enemy') ? this.enemies[0] : null);
+            const sourceName = source ? source.charName : agg.sourceId;
+            const logSource = String(agg.sourceId).startsWith('enemy') ? 'enemy' : 'player';
+
+            let titleStr = `${timeStr} ${sourceName} used ${agg.skillName}`;
+
+            if (logSource === 'enemy') {
+                if (agg.targets.size === 1) {
+                    titleStr += ` -> ${Array.from(agg.targets)[0]}`;
+                }
+            }
+
+            let detailStr = [];
+            if (agg.totalDmg > 0) detailStr.push(`Total dmg: ${agg.totalDmg}`);
+            if (agg.totalHeal > 0) detailStr.push(`Total heal: ${agg.totalHeal}`);
+            if (agg.effects.size > 0) detailStr.push(Array.from(agg.effects).join(' & '));
+
+            if (detailStr.length > 0 || logSource === 'enemy' || agg.skillName !== 'Basic Attack') {
+                let historyMsg = titleStr;
+                if (detailStr.length > 0) {
+                    historyMsg += `\n${detailStr.join('\n')}`;
+                }
+                this.battleHistory.push({ msg: historyMsg, source: logSource });
+                addedHistory = true;
+            }
+        });
+
+        if (addedHistory) {
+            if (this.battleHistory.length > 50) this.battleHistory.splice(0, this.battleHistory.length - 50);
+            this._renderHistoryLogs();
+        }
+
         for (const ev of events) {
             await new Promise(resolve => {
                 let delay = 500;
@@ -1140,14 +1343,13 @@ export default class BattleScene extends Phaser.Scene {
                             let logText;
                             if (ev.skillName === 'STUNNED') {
                                 logText = `💫 ${sourceName} is STUNNED and cannot move!`;
+                                this.showLog(logText, 'popup');
                             } else {
                                 const skillDisplay = ev.skillName || 'Basic Attack';
                                 logText = `[${skillDisplay}] ${sourceName} attacks!`;
                                 this.showLog(`${sourceName} used ${skillDisplay}!`, 'popup');
                                 this.showFloatingDamage(target, ev.value, ev.isCrit, ev.elementMultiplier, ev.sourceElement);
                             }
-                            const logSource = String(ev.sourceId).startsWith('enemy') ? 'enemy' : 'player';
-                            this.showLog(logText, logSource);
                             delay = ev.skillName === 'STUNNED' ? 400 : 800;
                         }
                     }
@@ -1157,8 +1359,7 @@ export default class BattleScene extends Phaser.Scene {
                         if (target === this.enemy) this._refreshEnemyHUD();
                         else target.refreshVisual();
                         this.showFloatingHeal(target, ev.value);
-                        const logSource = String(target.slot || target.monsterId).startsWith('enemy') ? 'enemy' : 'player';
-                        this.showLog(`[Heal] ${target.charName} restored HP!`, logSource);
+                        this.showLog(`[Heal] ${target.charName} restored HP!`, 'popup');
                         delay = 600;
                     }
                 } else if (ev.type === 'revive') {
@@ -1166,23 +1367,20 @@ export default class BattleScene extends Phaser.Scene {
                         target.hp = ev.value;
                         if (target === this.enemy) this._refreshEnemyHUD();
                         else target.refreshVisual();
-                        const logSource = String(target.slot || target.monsterId).startsWith('enemy') ? 'enemy' : 'player';
-                        this.showLog(`✨ ${target.charName} revived!`, logSource);
+                        this.showLog(`✨ ${target.charName} revived!`, 'popup');
                         delay = 600;
                     }
                 } else if (ev.type === 'cleanse') {
                     if (target) {
                         target.activeEffects = target.activeEffects.filter(e => (e.effect_type || '').toLowerCase() !== 'debuff');
                         target.refreshVisual();
-                        const logSource = String(target.slot || target.monsterId).startsWith('enemy') ? 'enemy' : 'player';
-                        this.showLog(`✨ ${target.charName} debuffs cleansed!`, logSource);
+                        this.showLog(`✨ ${target.charName} debuffs cleansed!`, 'popup');
                         delay = 500;
                     }
                 } else if (ev.type === 'effect_applied') {
                     if (target) {
                         this.showFloatingEffect(target, ev.effectName, ev.effectType);
-                        const logSource = String(target.slot || target.monsterId).startsWith('enemy') ? 'enemy' : 'player';
-                        this.showLog(`${target.charName} got ${ev.effectName}!`, logSource);
+                        this.showLog(`${target.charName} got ${ev.effectName}!`, 'popup');
                         delay = 500;
                     }
                 } else if (ev.type === 'enrage') {
@@ -1313,9 +1511,9 @@ export default class BattleScene extends Phaser.Scene {
         const ox = Phaser.Math.Between(-30, 30);
         const oy = Phaser.Math.Between(-20, 20);
 
-        let tx = target.x;
-        let ty = target.y;
-        if (target.sprite) { tx = target.sprite.x; ty = target.sprite.y; }
+        let tx = target.x; let ty = target.y;
+        if (target.spriteObj) { tx = target.spriteObj.x; ty = target.spriteObj.y; }
+        else if (target.sprite) { tx = target.sprite.x; ty = target.sprite.y; }
 
         const floatText = this.add.text(tx + ox, ty + oy, textStr, {
             fontSize: fontSize,
@@ -1343,9 +1541,9 @@ export default class BattleScene extends Phaser.Scene {
         const ox = Phaser.Math.Between(-30, 30);
         const oy = Phaser.Math.Between(-20, 20);
 
-        let tx = target.x;
-        let ty = target.y;
-        if (target.sprite) { tx = target.sprite.x; ty = target.sprite.y; }
+        let tx = target.x; let ty = target.y;
+        if (target.spriteObj) { tx = target.spriteObj.x; ty = target.spriteObj.y; }
+        else if (target.sprite) { tx = target.sprite.x; ty = target.sprite.y; }
 
         const floatText = this.add.text(tx + ox, ty + oy, `+${value}`, {
             fontSize: '26px',
@@ -1780,7 +1978,7 @@ export default class BattleScene extends Phaser.Scene {
     checkVictory() {
         if (this.enemies.every(e => e.hp <= 0)) {
             this.turn = "none";
-            this.showLog("VICTORY! 🎉");
+            this._showCenterAnim("VICTORY! 🎉", "#ffeb3b");
             this.time.delayedCall(1500, () => {
                 this.scene.stop();
                 this.scene.start('LoadingScene', {
@@ -1803,7 +2001,7 @@ export default class BattleScene extends Phaser.Scene {
         this.turn = "none";
 
         if (isRetreat) {
-            this.showLog("RETREATED");
+            this._showCenterAnim("RETREATED", "#aaaaaa");
             this.time.delayedCall(1500, () => {
                 this.scene.pause();
                 this.scene.launch('DefeatScene', {
@@ -1820,7 +2018,7 @@ export default class BattleScene extends Phaser.Scene {
         this.time.delayedCall(1500, () => {
             if (this.fullPotionsUsed >= 1) {
                 // Langsung defeat jika sudah revive 1x
-                this.showLog("DEFEAT... 💀");
+                this._showCenterAnim("DEFEAT... 💀", "#e74c3c");
                 this.scene.pause();
                 this.scene.launch('DefeatScene', {
                     questId: this.questId,
@@ -1855,7 +2053,7 @@ export default class BattleScene extends Phaser.Scene {
         giveUpBtn.on('pointerdown', () => {
             mc.destroy();
             this.turn = "none";
-            this.showLog("DEFEAT... 💀");
+            this._showCenterAnim("DEFEAT... 💀", "#e74c3c");
             this.time.delayedCall(1500, () => {
                 this.scene.pause();
                 this.scene.launch('DefeatScene', {

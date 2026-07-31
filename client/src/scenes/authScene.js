@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { THEME } from '../main.js';
 import { checkSession } from '../utils/auth.js';
 
-const W = 450, H = 800, CX = 225;
+const W = 480, H = 800, CX = 240;
 
 export default class AuthScene extends Phaser.Scene {
     constructor() {

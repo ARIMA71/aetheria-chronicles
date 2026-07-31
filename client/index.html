@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -7,11 +8,14 @@
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Cinzel:wght@500;700;800&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Cinzel:wght@500;700;800&display=swap"
+        rel="stylesheet">
     <style>
         * {
             box-sizing: border-box;
         }
+
         html {
             overflow-y: auto;
             overflow-x: hidden;
@@ -19,6 +23,7 @@
             scrollbar-width: thin;
             scrollbar-color: #1e293b #0f141d;
         }
+
         body {
             margin: 0;
             padding: 0;
@@ -44,7 +49,8 @@
             width: 100%;
             height: auto;
             min-height: 100vh;
-            overflow: visible; /* No scrollbar here; scroll occurs at page level */
+            overflow: visible;
+            /* No scrollbar here; scroll occurs at page level */
             max-width: 450px;
             position: relative;
             background: #0F172A;
@@ -52,11 +58,10 @@
             z-index: 10;
         }
 
-        /* Container untuk canvas game dengan aspect-ratio 9:16 */
         #game-content {
             width: 100%;
             max-width: 450px;
-            aspect-ratio: 450 / 800;
+            aspect-ratio: 450 / 825;
             position: relative;
             margin: 0 auto;
         }
@@ -69,13 +74,15 @@
             height: 100vh;
             position: -webkit-sticky;
             position: sticky;
-            top: 0; /* Sticky to top of window */
+            top: 0;
+            /* Sticky to top of window */
             background: linear-gradient(135deg, #0f141d 0%, #070b12 100%);
             border-left: 2px solid #1a2230;
             padding: 40px;
             justify-content: center;
             align-items: center;
-            overflow-y: auto; /* Fallback scroll if sidebar content overflows */
+            overflow-y: auto;
+            /* Fallback scroll if sidebar content overflows */
             overflow-x: hidden;
         }
 
@@ -105,7 +112,7 @@
             position: absolute;
             width: 600px;
             height: 600px;
-            background: radial-gradient(circle, rgba(100, 181, 246, 0.08) 0%, rgba(0,0,0,0) 70%);
+            background: radial-gradient(circle, rgba(100, 181, 246, 0.08) 0%, rgba(0, 0, 0, 0) 70%);
             top: -100px;
             right: -100px;
             z-index: 1;
@@ -178,6 +185,7 @@
             #desktop-sidebar {
                 display: none;
             }
+
             #game-wrapper {
                 max-width: 100%;
                 box-shadow: none;
@@ -185,6 +193,7 @@
         }
     </style>
 </head>
+
 <body>
     <div id="app-container">
         <div id="game-wrapper">
@@ -195,7 +204,7 @@
             <div class="sidebar-content">
                 <div class="sidebar-title">AETHERIA</div>
                 <div class="sidebar-subtitle">Chronicles</div>
-                
+
                 <div class="info-card">
                     <h3>⚔️ BATTLE STATUS</h3>
                     <p><strong>Quest Slot:</strong> Quest 5 (Syren Boss Fight)</p>
@@ -214,4 +223,5 @@
     </div>
     <script type="module" src="/src/main.js"></script>
 </body>
+
 </html>

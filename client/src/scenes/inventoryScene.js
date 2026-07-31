@@ -2,12 +2,13 @@ import Phaser from 'phaser';
 import { THEME } from '../main.js';
 import { checkSession, saveCurrentScene, clearSession, getPlayerId } from '../utils/auth.js';
 import PartyApi from '../services/PartyApi.js';
+import { CameraScrollManager } from '../utils/cameraScroll.js';
 
 import fireRaw from '../../assets/icons/elements/fire.svg?raw';
 import windRaw from '../../assets/icons/elements/wind.svg?raw';
 import earthRaw from '../../assets/icons/elements/rock.svg?raw';
 
-const W = 450, H = 800, CX = 225;
+const W = 480, H = 880, CX = 240;
 
 export default class InventoryScene extends Phaser.Scene {
     constructor() {
@@ -77,7 +78,7 @@ export default class InventoryScene extends Phaser.Scene {
         this.loadingText = this.add.text(CX, H / 2, 'Loading Inventory...', { fontSize: '14px', color: THEME.TEXT_MUTED, fontFamily: 'Outfit' }).setOrigin(0.5);
 
         this.currentPage = 1;
-        this.itemsPerPage = 20;
+        this.itemsPerPage = 200; // Ditingkatkan agar bisa di-scroll tanpa pagination
 
         this.loadData();
     }
@@ -129,9 +130,8 @@ export default class InventoryScene extends Phaser.Scene {
         this.scrollGroup.clear(true, true);
 
         // Section 2: Container Background for List (Drawn FIRST to avoid covering UI)
-        const gridBgH = 685; // Increased for extra bottom padding for pagination
-        const gridBg = this.add.rectangle(CX, 105 + gridBgH / 2, W - 16, gridBgH, 0x1e293b).setStrokeStyle(1, 0x334155);
-        this.uiGroup.add(gridBg);
+        // gridBgH akan menyesuaikan jumlah baris nantinya, kita hapus background kaku ini atau buat transparan
+        // karena kita mau adaptive scroll. Atau biarkan saja karena THEME.BG sudah mengisi layar belakang.
 
         // --- Tabs (Section 1) ---
         const tabs = ['Characters', 'Weapons', 'Materials'];
@@ -415,15 +415,16 @@ export default class InventoryScene extends Phaser.Scene {
 
         this.scrollGroup.addMultiple([prevBtn, prevTxt, nextBtn, nextTxt]);
 
-        // Fix camera bounds to prevent drag scrolling issues, since we now use pagination
-        this.cameras.main.setBounds(0, 0, W, H);
-        this.cameras.main.scrollY = 0;
+        // Enable Camera Scroll
+        CameraScrollManager.enable(this, bottomY + 100);
     }
 
     _buildMenuModal() {
         this.menuContainer = this.add.container(0, 0).setDepth(150).setVisible(false).setScrollFactor(0);
 
-        const backdrop = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.75).setInteractive();
+        const sysW = this.scale.width;
+        const sysH = this.scale.height;
+        const backdrop = this.add.rectangle(sysW / 2, sysH / 2, sysW, sysH, 0x000000, 0.75).setInteractive();
         backdrop.on('pointerdown', (pointer, localX, localY, event) => {
             event.stopPropagation();
             if (pointer.y > 420) this.toggleMenuModal(false);
@@ -490,7 +491,7 @@ export default class InventoryScene extends Phaser.Scene {
         ]);
 
         this.confirmContainer = this.add.container(0, 0).setDepth(160).setVisible(false).setScrollFactor(0);
-        const cBackdrop = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.8).setInteractive();
+        const cBackdrop = this.add.rectangle(sysW / 2, sysH / 2, sysW, sysH, 0x000000, 0.8).setInteractive();
         cBackdrop.on('pointerdown', (p, x, y, e) => e.stopPropagation());
 
         const cPanel = this.add.rectangle(CX, H / 2, 300, 150, 0x0d1425).setInteractive();
