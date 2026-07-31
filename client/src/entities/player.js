@@ -115,7 +115,7 @@ export default class Player extends Phaser.GameObjects.Container {
         }).setOrigin(0.5).setAlpha(0);
 
         // Container untuk indikator status efek aktif (di-rebuild tiap refreshVisual)
-        this._effectIndicators = scene.add.container(0, -this._H / 2 + 30);
+        this._effectIndicators = scene.add.container(0, 16);
 
         this.add([
             this._bg, this._accent,
@@ -276,9 +276,7 @@ export default class Player extends Phaser.GameObjects.Container {
         // ── Status Effect Indicators ──
         // Rebuild teks indikator kecil di atas HP bar setiap refresh
         this._effectIndicators.removeAll(true);
-        const visibleEffects = this.activeEffects.filter(e =>
-            ['ATK', 'DEF', 'CRIT', 'STUN', 'POISON'].includes(e.target_stat)
-        );
+        const visibleEffects = this.activeEffects || [];
 
         const sups = { 0: '', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹' };
         visibleEffects.forEach((e, idx) => {
@@ -286,11 +284,15 @@ export default class Player extends Phaser.GameObjects.Container {
             const color = isBuff ? '#f1c40f' : '#7ec8e3'; // Kuning untuk Buff, Biru Muda untuk Debuff
 
             let emoji = '❓';
-            if (e.target_stat === 'ATK') emoji = '⚔️';
-            else if (e.target_stat === 'DEF') emoji = '🛡️';
-            else if (e.target_stat === 'CRIT') emoji = '✨';
-            else if (e.target_stat === 'STUN') emoji = '💫';
-            else if (e.target_stat === 'POISON') emoji = '🤢';
+            const stat = (e.target_stat || '').toUpperCase();
+            if (stat === 'ATK') emoji = '⚔️';
+            else if (stat === 'DEF') emoji = '🛡️';
+            else if (stat === 'CRIT') emoji = '✨';
+            else if (stat === 'STUN') emoji = '💫';
+            else if (stat === 'POISON') emoji = '🤢';
+            else if (stat === 'BURN') emoji = '🔥';
+            else if (stat === 'HP') emoji = '💚';
+            else if (stat === 'AGI') emoji = '💨';
 
             const durSup = sups[e.duration] || e.duration || '';
             const label = `${emoji}${durSup}`;
