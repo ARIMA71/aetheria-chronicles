@@ -86,7 +86,8 @@ export default class MainMenuScene extends Phaser.Scene {
 
         // Stamina bar fill (using setSize instead of .width to force geometry redraw)
         if (this.staminaFill) {
-            const ratio = Math.min(1, Math.max(0, this.playerData.stamina / 100));
+            const maxStam = this.playerData.max_stamina || 100;
+            const ratio = Math.min(1, Math.max(0, this.playerData.stamina / maxStam));
             this.staminaFill.setSize(120 * ratio, 6);
         }
 
@@ -96,7 +97,8 @@ export default class MainMenuScene extends Phaser.Scene {
             this.staminaTimer = null;
         }
 
-        if (this.playerData.stamina < 100 && this.playerData.stamina_refill_in > 0) {
+        const maxStam = this.playerData.max_stamina || 100;
+        if (this.playerData.stamina < maxStam && this.playerData.stamina_refill_in > 0) {
             this.staminaRefillSeconds = this.playerData.stamina_refill_in;
             this.updateStaminaText();
             this.staminaTimer = this.time.addEvent({
@@ -138,8 +140,9 @@ export default class MainMenuScene extends Phaser.Scene {
 
     updateStaminaText() {
         if (!this.playerData || !this.staminaText) return;
-        if (this.playerData.stamina >= 100) {
-            this.staminaText.setText(`${this.playerData.stamina}/100`);
+        const maxStam = this.playerData.max_stamina || 100;
+        if (this.playerData.stamina >= maxStam) {
+            this.staminaText.setText(`${this.playerData.stamina}/${maxStam}`);
         } else if (this.staminaRefillSeconds > 0) {
             const minutes = Math.floor(this.staminaRefillSeconds / 60);
             const seconds = this.staminaRefillSeconds % 60;

@@ -218,6 +218,7 @@ exports.login = async (req, res) => {
                 username: player.username,
                 player_level: player.player_level,
                 stamina: player.stamina,
+                max_stamina: Math.min(200, 50 + ((player.player_level - 1) * 5)),
                 gold: player.gold,
                 diamond: player.diamond
             }

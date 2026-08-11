@@ -10,26 +10,39 @@ const db = require('../config/db');
 exports.checkAndRegenStamina = async (playerId, connOrDb = db) => {
     try {
         const [playerRows] = await connOrDb.query(
-            'SELECT stamina, stamina_last_updated FROM players WHERE player_id = ?',
+            'SELECT stamina, stamina_last_updated, player_level FROM players WHERE player_id = ?',
             [playerId]
         );
         if (playerRows.length === 0) return;
 
         const player = playerRows[0];
-        const maxStamina = 100; // Default max stamina
+        const maxStamina = Math.min(200, 50 + ((player.player_level - 1) * 5)); // Cap dinamis 50 (+5 per lvl), Max 200
+        const HARD_CAP = 999;   // Hard cap absolut di DB
+
+        // Jika stamina sudah melampaui HARD_CAP (karena data lama/testing), kita pangkas
+        if (player.stamina > HARD_CAP) {
+            await connOrDb.query('UPDATE players SET stamina = ? WHERE player_id = ?', [HARD_CAP, playerId]);
+            player.stamina = HARD_CAP;
+        }
 
         if (player.stamina < maxStamina) {
             const lastUpdated = new Date(player.stamina_last_updated).getTime();
             const now = Date.now();
-            const elapsed = Math.floor((now - lastUpdated) / 1000);
+            const elapsedSeconds = Math.floor((now - lastUpdated) / 1000);
 
-            // Refill to max after 5 minutes (300 seconds)
-            if (elapsed >= 300) {
+            // Regen FULL (langsung mentok cap) setiap 5 menit (300 detik)
+            if (elapsedSeconds >= 300) {
+                const regenStam = maxStamina - player.stamina;
+                const newStamina = maxStamina;
+                
                 await connOrDb.query(
-                    'UPDATE players SET stamina = ?, stamina_last_updated = CURRENT_TIMESTAMP WHERE player_id = ?',
-                    [maxStamina, playerId]
+                    `UPDATE players 
+                     SET stamina = ?, 
+                         stamina_last_updated = CURRENT_TIMESTAMP 
+                     WHERE player_id = ?`,
+                    [newStamina, playerId]
                 );
-                console.log(`[staminaService] Automatically refilled stamina to max (100) for player ID: ${playerId}.`);
+                console.log(`[staminaService] Refilled +${regenStam} stamina to reach Max Cap for player ID: ${playerId}. New Stamina: ${newStamina}`);
             }
         }
     } catch (err) {

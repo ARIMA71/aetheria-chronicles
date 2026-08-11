@@ -79,6 +79,10 @@ exports.getPartyPresets = async (req, res) => {
 exports.getPlayerInventory = async (req, res) => {
     const { playerId } = req.params;
     try {
+        // Fetch player username to replace MC name
+        const [userRows] = await db.query('SELECT username FROM players WHERE player_id = ?', [playerId]);
+        const username = userRows.length > 0 ? userRows[0].username : 'Main Character';
+
         // 1. Fetch characters
         const [characters] = await db.query(`
             SELECT pi.inv_id, pi.master_item_id, pi.item_level, pi.limit_break_level, pi.item_exp, mc.*,
@@ -118,6 +122,9 @@ exports.getPlayerInventory = async (req, res) => {
             }
         }
         for (const char of characters) {
+            if (char.master_item_id === 1) {
+                char.mc_name = username;
+            }
             char.skills = charSkillsMap[char.master_item_id] || [];
             if (char.sa_id) {
                 char.skills.push({

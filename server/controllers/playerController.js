@@ -63,9 +63,11 @@ exports.getPlayerProfile = async (req, res) => {
             ? questRows[0].max_completed + 1
             : 1;
 
+        const maxStamina = Math.min(200, 50 + ((player.player_level - 1) * 5));
+
         // Calculate seconds remaining until refill (5 min / 300 sec cap)
         let staminaRefillIn = 0;
-        if (player.stamina < 100) {
+        if (player.stamina < maxStamina) {
             const lastUpdated = new Date(player.stamina_last_updated).getTime();
             const now = Date.now();
             const elapsed = Math.floor((now - lastUpdated) / 1000);
@@ -80,6 +82,7 @@ exports.getPlayerProfile = async (req, res) => {
                 player_level: player.player_level,
                 player_exp: player.player_exp,
                 stamina: player.stamina,
+                max_stamina: maxStamina,
                 stamina_refill_in: staminaRefillIn,
                 gold: player.gold,
                 diamond: player.diamond,
@@ -130,11 +133,11 @@ exports.useStaminaPotion = async (req, res) => {
             });
         }
 
-        // 2. Ambil max stamina dari INFORMATION_SCHEMA (Dynamic, bukan hardcode)
-        const [schemaCols] = await conn.query(
-            "SELECT COLUMN_DEFAULT FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'db_aetheria' AND TABLE_NAME = 'players' AND COLUMN_NAME = 'stamina'"
-        );
-        const maxStamina = schemaCols[0] ? parseInt(schemaCols[0].COLUMN_DEFAULT, 10) : 100;
+        // 2. Tambah 120 Stamina (Max 999)
+        const HARD_CAP = 999;
+        const [playerRows] = await conn.query('SELECT stamina FROM players WHERE player_id = ?', [playerId]);
+        const currentStam = playerRows[0] ? playerRows[0].stamina : 0;
+        const newStam = Math.min(HARD_CAP, currentStam + 120);
 
         // 3. Kurangi 1x Full Potion
         await conn.query(
@@ -142,10 +145,10 @@ exports.useStaminaPotion = async (req, res) => {
             [playerId]
         );
 
-        // 4. Set stamina ke max
+        // 4. Set stamina baru
         await conn.query(
             'UPDATE players SET stamina = ? WHERE player_id = ?',
-            [maxStamina, playerId]
+            [newStam, playerId]
         );
 
         await conn.commit();
@@ -153,10 +156,10 @@ exports.useStaminaPotion = async (req, res) => {
 
         return res.status(200).json({
             status: 'success',
-            message: `Stamina berhasil diisi ke ${maxStamina}! Full Potion tersisa: ${currentQty - 1}.`,
+            message: `Stamina berhasil ditambah 120! Full Potion tersisa: ${currentQty - 1}.`,
             data: {
-                stamina: maxStamina,
-                full_potion_remaining: currentQty - 1
+                stamina: newStam,
+                full_potion_count: currentQty - 1
             }
         });
 
