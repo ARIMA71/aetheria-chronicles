@@ -189,15 +189,20 @@ class BattleService {
             db.query(queryMonsters, [questId]),
             db.query(queryWeapons, [playerId, presetSlot]),
             db.query(queryWeaponPassives, [playerId, presetSlot]),
-            db.query('SELECT username FROM players WHERE player_id = ?', [playerId])
+            db.query('SELECT username, gender FROM players WHERE player_id = ?', [playerId])
         ]);
 
         if (charRows.length === 0) throw new Error('Party preset tidak ditemukan untuk player dan slot yang diberikan.');
 
-        const username = playerRows && playerRows[0] ? playerRows[0].username : 'Main Character';
+        const playerInfo = playerRows && playerRows[0] ? playerRows[0] : { username: 'Main Character', gender: 'Male' };
+        const username = playerInfo.username;
+        const genderSuffix = (playerInfo.gender || 'Male').toLowerCase(); // 'male' or 'female'
+
         charRows.forEach(row => {
-            if (row.role_slot === 'Main Character') {
+            if (row.role_slot === 'Main Character' || row.mc_id === 1) {
                 row.name = username;
+                if (row.portrait_path) row.portrait_path += `-${genderSuffix}.png`;
+                if (row.sprite_path) row.sprite_path += `-${genderSuffix}.png`;
             }
         });
 
@@ -220,8 +225,51 @@ class BattleService {
             if (effect) skillMap.get(key).status_effects.push(effect);
         });
 
-        // Delegate to GridCalculatorService
-        const characters = GridCalculatorService.calculatePartyStats(charRows, weaponRows, weaponPassiveRows, skillMap);
+        // Delegate stats calculation
+        const baseStatsMap = GridCalculatorService.calculatePartyBaseStats(charRows, weaponRows, weaponPassiveRows);
+
+        // Map Characters payload
+        const characters = charRows.map(char => {
+            const stats = baseStatsMap[char.inv_id];
+
+            const charSkills = Array.from(skillMap.values())
+                .filter(s => s._inv_id === char.inv_id)
+                .map(({ _inv_id, ...skill }) => {
+                    skill.current_cooldown = 0;
+                    return skill;
+                });
+
+            let fullPortrait = null;
+            if (char.portrait_path) {
+                if (char.portrait_path.endsWith('.png')) {
+                    fullPortrait = char.portrait_path.replace('.png', '-full.png');
+                } else {
+                    fullPortrait = char.portrait_path + '-full';
+                }
+            }
+
+            return {
+                slot:    char.role_slot,
+                mc_id:   char.mc_id,
+                name:    char.name,
+                element: stats.element,
+                level:   char.level,
+                final_stats: {
+                    hp:     stats.final_hp,
+                    atk:    stats.final_atk,
+                    def:    stats.final_def,
+                    crit:   stats.final_crit,
+                    max_sa: stats.max_sa
+                },
+                current_hp: stats.final_hp,
+                current_sa: 0,
+                active_buffs: [],
+                portrait_path: char.portrait_path,
+                full_portrait_path: fullPortrait,
+                sprite_path:   char.sprite_path,
+                skills: charSkills
+            };
+        });
 
         // Map Enemies per Wave
         const wavesMap = {};

@@ -56,8 +56,8 @@ exports.register = async (req, res) => {
         // Langkah A: Insert ke tabel players — Parameterized Query
         // --------------------------------------------------
         const [playerResult] = await conn.query(
-            `INSERT INTO players (username, password_hash, player_level, player_exp, stamina, gold, diamond)
-             VALUES (?, ?, 1, 0, 100, 0, 0)`,
+            `INSERT INTO players (username, password_hash, gender, player_level, player_exp, stamina, gold, diamond)
+             VALUES (?, ?, 'Male', 1, 0, 100, 0, 0)`,
             [username, passwordHash]
         );
         const newPlayerId = playerResult.insertId;
@@ -166,7 +166,7 @@ exports.login = async (req, res) => {
     try {
         // [KEAMANAN 2] Parameterized Query — tidak ada interpolasi string
         const [rows] = await db.query(
-            `SELECT player_id, username, password_hash, player_level, player_exp, stamina, gold, diamond
+            `SELECT player_id, username, password_hash, gender, player_level, player_exp, stamina, gold, diamond
              FROM players
              WHERE username = ?`,
             [username]
@@ -216,7 +216,9 @@ exports.login = async (req, res) => {
             data: {
                 player_id: player.player_id,
                 username: player.username,
+                gender: player.gender,
                 player_level: player.player_level,
+                player_exp: player.player_exp,
                 stamina: player.stamina,
                 max_stamina: Math.min(200, 50 + ((player.player_level - 1) * 5)),
                 gold: player.gold,

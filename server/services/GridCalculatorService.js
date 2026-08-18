@@ -13,7 +13,7 @@ class GridCalculatorService {
      * @param {Map} skillMap - Map of skills with their status effects.
      * @returns {Array} List of processed character objects.
      */
-    calculatePartyStats(charRows, weaponRows, weaponPassiveRows, skillMap) {
+    calculatePartyBaseStats(charRows, weaponRows, weaponPassiveRows) {
         // Calculate Grid Base (Raw Stat sum)
         let totalGridHp = 0;
         let totalGridAtk = 0;
@@ -26,12 +26,8 @@ class GridCalculatorService {
         const mainWeapon = (weaponRows || []).find(w => w.is_main_weapon === 1);
         const mainWeaponElement = mainWeapon ? mainWeapon.element : 'Fire';
 
-        // Map Characters and apply Passives
-        const characters = charRows.map(char => {
-            const charSkills = Array.from(skillMap.values())
-                .filter(s => s._inv_id === char.inv_id)
-                .map(({ _inv_id, ...skill }) => skill); // omit internal _inv_id
-
+        const statsMap = {};
+        charRows.forEach(char => {
             // Base stat = character growth stat + flat weapon grid stats
             const rawHp  = (Number(char.base_hp)  || 0) + totalGridHp;
             const rawAtk = (Number(char.base_atk) || 0) + totalGridAtk;
@@ -52,35 +48,17 @@ class GridCalculatorService {
                 }
             });
 
-            // Initialize runtime skill states
-            if (charSkills) {
-                charSkills.forEach(skill => {
-                    skill.current_cooldown = 0;
-                });
-            }
-
-            return {
-                slot:    char.role_slot,
-                name:    char.name,
+            statsMap[char.inv_id] = {
                 element: charElement,
-                level:   char.level,
-                final_stats: {
-                    hp:     Math.floor(rawHp  * (1 + personalPassive.HP)),
-                    atk:    Math.floor(rawAtk * (1 + personalPassive.ATK)),
-                    def:    Math.floor(rawDef * (1 + personalPassive.DEF)),
-                    crit:   Number((0.1 + (personalPassive.CRIT || 0)).toFixed(4)),
-                    max_sa: Number(char.max_sa)   || 100
-                },
-                current_hp: Math.floor(rawHp  * (1 + personalPassive.HP)),
-                current_sa: 0,
-                active_buffs: [],
-                portrait_path: char.portrait_path,
-                sprite_path:   char.sprite_path,
-                skills: charSkills
+                final_hp: Math.floor(rawHp  * (1 + personalPassive.HP)),
+                final_atk: Math.floor(rawAtk * (1 + personalPassive.ATK)),
+                final_def: Math.floor(rawDef * (1 + personalPassive.DEF)),
+                final_crit: Number((0.1 + (personalPassive.CRIT || 0)).toFixed(4)),
+                max_sa: Number(char.max_sa) || 100
             };
         });
 
-        return characters;
+        return statsMap;
     }
 }
 

@@ -16,8 +16,10 @@ export default class Player extends Phaser.GameObjects.Container {
         super(scene, x, y);
         scene.add.existing(this);
 
-        // ── Data Mapping ──────────────────────────────────────────────────────
         this.slot = data.slot;
+        this.mc_id = data.mc_id || data.id || data.slot;
+        this._portraitPath = data.portrait_path;
+        this._fullPortraitPath = data.full_portrait_path;
         this.id = data.id || data.slot;
         this.charName = data.name;
         this.element = data.element || 'None';
@@ -85,9 +87,22 @@ export default class Player extends Phaser.GameObjects.Container {
         this._bg = scene.add.rectangle(0, 0, this._W, this._H, 0x12192b);
         this._bg.setStrokeStyle(1, 0x334155);
 
-        this._accent = scene.add.rectangle(0, -(this._H / 2) + 5, this._W, 10, this._elemColor);
+        if (this._portraitPath) {
+            const keyId = data.mc_id || data.id || data.slot;
+            let portTex = `portrait_${keyId}`;
+            this._portrait = scene.add.image(0, 0, portTex);
+            this._portrait.setScale(0.25);
+            
+            const maskShape = scene.make.graphics();
+            maskShape.fillStyle(0xffffff);
+            maskShape.fillRect(x - (this._W / 2), y - (this._H / 2), this._W, this._H);
+            this._portrait.setMask(new Phaser.Display.Masks.GeometryMask(scene, maskShape));
+        } else {
+            // Placeholder
+            this._portrait = scene.add.text(0, 0, "?", { fontSize: "32px", color: "#94a3b8" }).setOrigin(0.5);
+        }
 
-        // Removed Element Badge and Name Text per user request
+        this._accent = scene.add.rectangle(0, -(this._H / 2) + 5, this._W, 10, this._elemColor);
 
         // HP Bar
         this._hpBarBg = scene.add.rectangle(0, 32, 60, 10, 0x222222);
@@ -118,7 +133,7 @@ export default class Player extends Phaser.GameObjects.Container {
         this._effectIndicators = scene.add.container(0, 16);
 
         this.add([
-            this._bg, this._accent,
+            this._bg, this._portrait, this._accent,
             this._hpBarBg, this._hpFill, this._hpText,
             this._saBarBg, this._saFill, this._saPctText, this._saReadyGem,
             this._koOverlay, this._koText,

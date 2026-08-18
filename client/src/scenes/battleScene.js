@@ -3,11 +3,8 @@ import Enemy from "../entities/enemy";
 import { THEME } from "../main.js";
 import { checkSession, saveCurrentScene, getPlayerUsername } from "../utils/auth.js";
 import BattleApi from "../services/BattleApi.js";
-// import CombatManager from "../services/CombatManager.js"; // DEPRECATED
 import BattleMenu from "../ui/BattleMenu.js";
-import fireRaw from '../../assets/icons/elements/fire.svg?raw';
-import windRaw from '../../assets/icons/elements/wind.svg?raw';
-import earthRaw from '../../assets/icons/elements/rock.svg?raw';
+// Element icons are loaded as PNGs in preload
 
 const W = 480, H = 880, CX = 240;
 export default class BattleScene extends Phaser.Scene {
@@ -18,13 +15,19 @@ export default class BattleScene extends Phaser.Scene {
         saveCurrentScene(this.scene.key, this._sceneData);
     }
     preload() {
-        const fireUrl = URL.createObjectURL(new Blob([fireRaw], { type: 'image/svg+xml' }));
-        const windUrl = URL.createObjectURL(new Blob([windRaw], { type: 'image/svg+xml' }));
-        const earthUrl = URL.createObjectURL(new Blob([earthRaw], { type: 'image/svg+xml' }));
+        this.load.image('element_fire', 'assets/icons/elements/fire.png');
+        this.load.image('element_wind', 'assets/icons/elements/wind.png');
+        this.load.image('element_earth', 'assets/icons/elements/rock.png');
+        
+        // Load Character Sprites
+        this.load.image('char_mc_Male', 'assets/sprite/char/1-mc-male.png');
+        this.load.image('char_mc_Female', 'assets/sprite/char/1-mc-female.png');
+        // Load Monster Sprites
+        this.load.image('mons_12', 'assets/sprite/mons/12-slime.png');
 
-        this.load.svg('element_fire', fireUrl, { width: 16, height: 16 });
-        this.load.svg('element_wind', windUrl, { width: 16, height: 16 });
-        this.load.svg('element_earth', earthUrl, { width: 16, height: 16 });
+        // Load Character Portraits
+        this.load.image('port_mc_Male', 'assets/portrait/char/1-mc-male.png');
+        this.load.image('port_mc_Female', 'assets/portrait/char/1-mc-female.png');
     }
     setTurn(newTurn) {
 
@@ -51,6 +54,7 @@ export default class BattleScene extends Phaser.Scene {
         this.playerId = playerData.player_id || 1;
         this.questId = this._sceneData.questId || playerData.current_quest_stage || 5;
         this.presetSlot = this._sceneData.presetSlot || playerData.selected_preset_slot || 1;
+        this.playerGender = playerData.gender || 'Male';
 
         this.add.rectangle(CX, H / 2, W, H, THEME.BG);
         this.add.rectangle(CX, 26, W, 52, THEME.PANEL, THEME.PANEL_ALPHA);
@@ -90,7 +94,36 @@ export default class BattleScene extends Phaser.Scene {
         this.potionCount = j.data.potion_count !== undefined ? j.data.potion_count : 0;
         this.healsRemaining = Math.min(3, this.potionCount);
         this.fullPotionCount = j.data.full_potion_count !== undefined ? j.data.full_potion_count : 0;
+        
+        let assetsToLoad = 0;
         const chars = j.data.player_party.characters.slice(0, 4);
+        
+        chars.forEach(d => {
+            const keyId = d.mc_id || d.id || d.slot;
+            if (d.sprite_path) { this.load.image(`sprite_${keyId}`, d.sprite_path); assetsToLoad++; }
+            if (d.portrait_path) { this.load.image(`portrait_${keyId}`, d.portrait_path); assetsToLoad++; }
+            if (d.full_portrait_path) { this.load.image(`portrait_full_${keyId}`, d.full_portrait_path); assetsToLoad++; }
+        });
+        j.data.enemies.forEach(e => {
+            if (e.sprite_path) { this.load.image(`mons_${e.id || e.monster_id}`, e.sprite_path); assetsToLoad++; }
+        });
+
+        if (assetsToLoad > 0) {
+            const loadingText = this.add.text(CX, H / 2, "Loading Assets...", { fontSize: "20px", color: "#ffffff" }).setOrigin(0.5);
+            this.load.once('complete', () => {
+                loadingText.destroy();
+                this._renderProcessBattleData(j, chars);
+            });
+            this.load.start();
+        } else {
+            this._renderProcessBattleData(j, chars);
+        }
+    }
+
+    _renderProcessBattleData(j, chars) {
+        // Draw battlefield floor line
+        this.add.rectangle(CX, 565, W, 1, THEME.BORDER);
+        
         const cW = 85, gap = 15, total = chars.length, totalW = total * cW + (total - 1) * gap, sx = (W - totalW) / 2 + cW / 2;
         chars.forEach((d, i) => {
             const px = sx + i * (cW + gap);
@@ -99,6 +132,18 @@ export default class BattleScene extends Phaser.Scene {
             p.setInteractive(new Phaser.Geom.Rectangle(-42.5, -60, 85, 120), Phaser.Geom.Rectangle.Contains);
             p.on("pointerdown", () => { if (this.turn !== "player") return; this._tapPortrait(p); });
             this.players.push(p);
+
+            // Render Player Sprite on Battlefield
+            const keyId = d.mc_id || d.id || d.slot;
+            if (d.sprite_path) {
+                p.battleSprite = this.add.sprite(px, 505, `sprite_${keyId}`).setScale(1.5);
+            } else {
+                // Placeholder
+                const b = this.add.rectangle(0, 0, 58, 58, THEME.PANEL, 0.7);
+                b.setStrokeStyle(1, THEME.BORDER);
+                const t = this.add.text(0, 0, "?", { fontSize: "20px", color: THEME.TEXT_SECONDARY }).setOrigin(0.5);
+                p.spriteObj = this.add.container(px, 520, [b, t]);
+            }
         });
         this.activePlayer = null;
         this.enemies = [];
@@ -108,6 +153,17 @@ export default class BattleScene extends Phaser.Scene {
             const enemy = new Enemy(this, ex, 260, eData);
             enemy.index = i;
             this.enemies.push(enemy);
+
+            let monsScale = j.data.enemies.length > 1 ? 0.6 : 1;
+            if (eData.sprite_path) {
+                enemy.battleSprite = this.add.sprite(ex, 260, `mons_${eData.id || eData.monster_id}`).setScale(monsScale);
+            } else {
+                // Placeholder
+                const b = this.add.rectangle(0, 0, 80, 80, THEME.PANEL, 0.7);
+                b.setStrokeStyle(1, THEME.BORDER);
+                const t = this.add.text(0, 0, "?", { fontSize: "30px", color: THEME.TEXT_SECONDARY }).setOrigin(0.5);
+                enemy.spriteObj = this.add.container(ex, 260, [b, t]);
+            }
         });
         this.selectedTargetIndex = -1;
         this._setupUI();
@@ -137,8 +193,35 @@ export default class BattleScene extends Phaser.Scene {
         this.currentTurn = state.current_turn || 1;
         this.aetherGauge = state.aether_gauge || 0;
 
-        // Build player entities with resume state
+        let assetsToLoad = 0;
         const chars = state.player_party.characters.slice(0, 4);
+        
+        chars.forEach(d => {
+            const keyId = d.mc_id || d.id || d.slot;
+            if (d.sprite_path) { this.load.image(`sprite_${keyId}`, d.sprite_path); assetsToLoad++; }
+            if (d.portrait_path) { this.load.image(`portrait_${keyId}`, d.portrait_path); assetsToLoad++; }
+            if (d.full_portrait_path) { this.load.image(`portrait_full_${keyId}`, d.full_portrait_path); assetsToLoad++; }
+        });
+        state.enemies.forEach(e => {
+            if (e.sprite_path) { this.load.image(`mons_${e.id || e.monster_id}`, e.sprite_path); assetsToLoad++; }
+        });
+
+        if (assetsToLoad > 0) {
+            const loadingText = this.add.text(CX, H / 2, "Loading Assets...", { fontSize: "20px", color: "#ffffff" }).setOrigin(0.5);
+            this.load.once('complete', () => {
+                loadingText.destroy();
+                this._renderResumeBattle(state, chars);
+            });
+            this.load.start();
+        } else {
+            this._renderResumeBattle(state, chars);
+        }
+    }
+
+    _renderResumeBattle(state, chars) {
+        // Draw battlefield floor line
+        this.add.rectangle(CX, 565, W, 1, THEME.BORDER);
+        
         const cW = 85, gap = 15, total = chars.length, totalW = total * cW + (total - 1) * gap, sx = (W - totalW) / 2 + cW / 2;
         chars.forEach((d, i) => {
             const px = sx + i * (cW + gap);
@@ -161,6 +244,18 @@ export default class BattleScene extends Phaser.Scene {
             p.on("pointerdown", () => { if (this.turn !== "player") return; this._tapPortrait(p); });
             this.players.push(p);
 
+            // Render Player Sprite on Battlefield
+            const keyId = d.mc_id || d.id || d.slot;
+            if (d.sprite_path) {
+                p.battleSprite = this.add.sprite(px, 505, `sprite_${keyId}`).setScale(1.5);
+            } else {
+                // Placeholder
+                const b = this.add.rectangle(0, 0, 58, 58, THEME.PANEL, 0.7);
+                b.setStrokeStyle(1, THEME.BORDER);
+                const t = this.add.text(0, 0, "?", { fontSize: "20px", color: THEME.TEXT_SECONDARY }).setOrigin(0.5);
+                p.spriteObj = this.add.container(px, 520, [b, t]);
+            }
+
             // Fix: Sinkronisasi visual agar tidak terlihat "sehat" padahal sebenarnya terluka
             p.refreshVisual();
         });
@@ -173,6 +268,19 @@ export default class BattleScene extends Phaser.Scene {
             const ex = startX + (i * 140);
             const enemy = new Enemy(this, ex, 260, eData);
             enemy.index = i;
+            
+            // Render Enemy Sprite
+            let monsScale = state.enemies.length > 1 ? 0.6 : 1;
+            if (eData.sprite_path) {
+                enemy.battleSprite = this.add.sprite(ex, 260, `mons_${eData.id || eData.monster_id}`).setScale(monsScale);
+            } else {
+                // Placeholder
+                const b = this.add.rectangle(0, 0, 80, 80, THEME.PANEL, 0.7);
+                b.setStrokeStyle(1, THEME.BORDER);
+                const t = this.add.text(0, 0, "?", { fontSize: "30px", color: THEME.TEXT_SECONDARY }).setOrigin(0.5);
+                enemy.spriteObj = this.add.container(ex, 260, [b, t]);
+            }
+
             if (eData.current_hp !== undefined) enemy.hp = eData.current_hp;
             if (eData.current_ca !== undefined) enemy.chargeBar = eData.current_ca;
             if (eData.active_buffs && Array.isArray(eData.active_buffs)) enemy.activeEffects = [...eData.active_buffs];
@@ -184,7 +292,6 @@ export default class BattleScene extends Phaser.Scene {
         this.selectedTargetIndex = -1;
 
         this._setupUI();
-
 
         // Update turn text setelah UI dibangun
         if (this.turnText) this._updateTurnText();
@@ -210,7 +317,7 @@ export default class BattleScene extends Phaser.Scene {
     }
     _setupUI() {
         this._buildLayer1(); this._buildEnemyHUD(); this._buildArenaButtons();
-        this._buildPartySprites(); this._buildLayer4(); this._buildSidebar(); this._buildBattleLog();
+        this._buildLayer4(); this._buildSidebar(); this._buildBattleLog();
         this._startTimer(); this._refreshEnemyHUD();
         this._playStartAnimation();
 
@@ -425,17 +532,6 @@ export default class BattleScene extends Phaser.Scene {
         });
         this._attackBtnContainer.setVisible(this.turn === "player");
     }
-    _buildPartySprites() {
-        this.add.rectangle(CX, 565, W, 1, THEME.BORDER);
-        const cW = 85, gap = 15, total = this.players.length, totalW = total * cW + (total - 1) * gap, sx = (W - totalW) / 2 + cW / 2;
-        this.players.forEach((p, i) => {
-            const px = sx + i * (cW + gap);
-            const b = this.add.rectangle(0, 0, 58, 58, THEME.PANEL, 0.7);
-            b.setStrokeStyle(1, THEME.BORDER);
-            const t = this.add.text(0, 0, "?", { fontSize: "20px", color: THEME.TEXT_SECONDARY }).setOrigin(0.5);
-            p.spriteObj = this.add.container(px, 520, [b, t]);
-        });
-    }
 
     _buildLayer4() {
         const W = 480;
@@ -507,6 +603,21 @@ export default class BattleScene extends Phaser.Scene {
         this._sidebarOpen = true; this._renderSidebar();
         this.tweens.add({ targets: this._overlay, alpha: 0.5, duration: 200 });
         this.tweens.add({ targets: [this._sbPanel, this._sbBtns], x: this._sbShownX, duration: 220, ease: "Power2" });
+        
+        // Cinematic Portrait
+        if (this.activePlayer && this.activePlayer.mc_id) {
+            let portTex = null;
+            if (this.activePlayer._fullPortraitPath) {
+                portTex = `portrait_full_${this.activePlayer.mc_id}`;
+            } else if (this.activePlayer._portraitPath) {
+                portTex = `portrait_${this.activePlayer.mc_id}`;
+            }
+
+            if (portTex) {
+                this._cinematicPortrait = this.add.image(-150, H / 2, portTex).setDepth(298).setAlpha(0).setScale(0.8);
+                this.tweens.add({ targets: this._cinematicPortrait, x: CX - 120, alpha: 0.9, duration: 300, ease: "Power2" });
+            }
+        }
     }
     closeSidebar() {
         this._sidebarOpen = false;
@@ -516,6 +627,13 @@ export default class BattleScene extends Phaser.Scene {
         }
         this.tweens.add({ targets: this._overlay, alpha: 0, duration: 180 });
         this.tweens.add({ targets: [this._sbPanel, this._sbBtns], x: this._sbHiddenX, duration: 200, ease: "Power2" });
+        
+        if (this._cinematicPortrait) {
+            this.tweens.add({ 
+                targets: this._cinematicPortrait, x: -150, alpha: 0, duration: 180, 
+                onComplete: () => { if (this._cinematicPortrait) { this._cinematicPortrait.destroy(); this._cinematicPortrait = null; } } 
+            });
+        }
         this._setActive(null);
     }
     _renderSidebar() {
@@ -548,6 +666,24 @@ export default class BattleScene extends Phaser.Scene {
 
         // Placeholder Area untuk Splash Art (Subtle Background)
         const artPlaceholder = this.add.rectangle(0, -260, 168, 110, THEME.BG, 0.3).setOrigin(0.5);
+
+        // Render Portrait in Skill Window
+        if (p.mc_id && p._portraitPath) {
+            let portTex = `portrait_${p.mc_id}`;
+            const skillPort = this.add.image(0, -260, portTex);
+            // Crop or scale so it fits nicely. A scale of 0.25 to 0.35 usually works for high-res portraits.
+            skillPort.setScale(0.25);
+            // Mask it to fit inside the placeholder
+            const maskShape = this.make.graphics();
+            maskShape.fillStyle(0xffffff);
+            maskShape.fillRect(this._sbShownX - 84, (H / 2) - 260 - 55, 168, 110);
+            skillPort.setMask(new Phaser.Display.Masks.GeometryMask(this, maskShape));
+            this._sbBtns.add([skillPort]);
+        } else {
+            // Default Placeholder untuk Skill Window Portrait (Karakter polos/NULL)
+            const skillPortEmpty = this.add.text(0, -260, "?", { fontSize: "40px", color: THEME.TEXT_SECONDARY }).setOrigin(0.5);
+            this._sbBtns.add([skillPortEmpty]);
+        }
 
         // HP Bar
         const hpRatio = Math.max(0, p.hp / p.maxHp);

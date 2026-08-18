@@ -4,9 +4,7 @@ import { checkSession, saveCurrentScene, clearSession, getPlayerId } from '../ut
 import PartyApi from '../services/PartyApi.js';
 import { CameraScrollManager } from '../utils/cameraScroll.js';
 
-import fireRaw from '../../assets/icons/elements/fire.svg?raw';
-import windRaw from '../../assets/icons/elements/wind.svg?raw';
-import earthRaw from '../../assets/icons/elements/rock.svg?raw';
+// Element icons are loaded as PNGs in preload
 
 const W = 480, H = 880, CX = 240;
 
@@ -20,13 +18,9 @@ export default class InventoryScene extends Phaser.Scene {
     }
 
     preload() {
-        const fireUrl = URL.createObjectURL(new Blob([fireRaw], { type: 'image/svg+xml' }));
-        const windUrl = URL.createObjectURL(new Blob([windRaw], { type: 'image/svg+xml' }));
-        const earthUrl = URL.createObjectURL(new Blob([earthRaw], { type: 'image/svg+xml' }));
-        
-        this.load.svg('element_fire', fireUrl, { width: 16, height: 16 });
-        this.load.svg('element_wind', windUrl, { width: 16, height: 16 });
-        this.load.svg('element_earth', earthUrl, { width: 16, height: 16 });
+        this.load.image('element_fire', 'assets/icons/elements/fire.png');
+        this.load.image('element_wind', 'assets/icons/elements/wind.png');
+        this.load.image('element_earth', 'assets/icons/elements/rock.png');
     }
 
     create() {

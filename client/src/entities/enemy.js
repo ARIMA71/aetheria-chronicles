@@ -77,21 +77,25 @@ export default class Enemy extends Phaser.GameObjects.Container {
         // ── Visual: Sprite Placeholder di Arena ───────────────────────────────
         const elemColor = this._getElementColor(this.element);
 
+        this._spritePath = data.sprite_path;
         const shadow = scene.add.rectangle(5, 5, 130, 130, 0x000000).setAlpha(0.4);
         this._glow = scene.add.rectangle(0, 0, 138, 138, 0xffffff).setAlpha(0); // Glow Background
-        this._body = scene.add.rectangle(0, 0, 130, 130, 0x1c0a0a);
-        this._body.setStrokeStyle(3, elemColor);
-
-        const inner = scene.add.rectangle(0, 0, 110, 110, 0x000000, 0);
-        inner.setStrokeStyle(1, elemColor).setAlpha(0.4);
-
-        const h = scene.add.line(0, 0, -40, 0, 40, 0, elemColor).setAlpha(0.25);
-        const v = scene.add.line(0, 0, 0, -40, 0, 40, elemColor).setAlpha(0.25);
-
-        // Container untuk indikator status efek aktif (di-rebuild tiap refreshVisual)
         this._effectIndicators = scene.add.container(0, -80);
+        
+        if (!this._spritePath) {
+            this._body = scene.add.rectangle(0, 0, 130, 130, 0x1c0a0a);
+            this._body.setStrokeStyle(3, elemColor);
 
-        this.add([shadow, this._glow, this._body, inner, h, v, this._effectIndicators]);
+            const inner = scene.add.rectangle(0, 0, 110, 110, 0x000000, 0);
+            inner.setStrokeStyle(1, elemColor).setAlpha(0.4);
+
+            const h = scene.add.line(0, 0, -40, 0, 40, 0, elemColor).setAlpha(0.25);
+            const v = scene.add.line(0, 0, 0, -40, 0, 40, elemColor).setAlpha(0.25);
+            
+            this.add([shadow, this._glow, this._body, inner, h, v, this._effectIndicators]);
+        } else {
+            this.add([shadow, this._glow, this._effectIndicators]);
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
