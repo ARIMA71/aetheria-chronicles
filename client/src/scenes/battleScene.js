@@ -135,9 +135,11 @@ export default class BattleScene extends Phaser.Scene {
 
             // Render Player Sprite on Battlefield
             const keyId = d.mc_id || d.id || d.slot;
-            if (d.sprite_path) {
-                p.battleSprite = this.add.sprite(px, 505, `sprite_${keyId}`).setScale(1.5);
+            let texKey = `sprite_${keyId}`;
+            if (d.sprite_path && this.textures.exists(texKey)) {
+                p.battleSprite = this.add.sprite(px, 505, texKey).setScale(1.5);
             } else {
+                console.warn(`Sprite missing for Player ${d.name}. Using placeholder.`);
                 // Placeholder
                 const b = this.add.rectangle(0, 0, 58, 58, THEME.PANEL, 0.7);
                 b.setStrokeStyle(1, THEME.BORDER);
@@ -155,9 +157,11 @@ export default class BattleScene extends Phaser.Scene {
             this.enemies.push(enemy);
 
             let monsScale = j.data.enemies.length > 1 ? 0.6 : 1;
-            if (eData.sprite_path) {
-                enemy.battleSprite = this.add.sprite(ex, 260, `mons_${eData.id || eData.monster_id}`).setScale(monsScale);
+            let texKey = `mons_${eData.id || eData.monster_id}`;
+            if (eData.sprite_path && this.textures.exists(texKey)) {
+                enemy.battleSprite = this.add.sprite(ex, 260, texKey).setScale(monsScale);
             } else {
+                console.warn(`Sprite missing for Enemy ${eData.name}. Using placeholder.`);
                 // Placeholder
                 const b = this.add.rectangle(0, 0, 80, 80, THEME.PANEL, 0.7);
                 b.setStrokeStyle(1, THEME.BORDER);
@@ -246,9 +250,11 @@ export default class BattleScene extends Phaser.Scene {
 
             // Render Player Sprite on Battlefield
             const keyId = d.mc_id || d.id || d.slot;
-            if (d.sprite_path) {
-                p.battleSprite = this.add.sprite(px, 505, `sprite_${keyId}`).setScale(1.5);
+            let texKey = `sprite_${keyId}`;
+            if (d.sprite_path && this.textures.exists(texKey)) {
+                p.battleSprite = this.add.sprite(px, 505, texKey).setScale(1.5);
             } else {
+                console.warn(`Sprite missing for Player ${d.name}. Using placeholder.`);
                 // Placeholder
                 const b = this.add.rectangle(0, 0, 58, 58, THEME.PANEL, 0.7);
                 b.setStrokeStyle(1, THEME.BORDER);
@@ -271,9 +277,11 @@ export default class BattleScene extends Phaser.Scene {
             
             // Render Enemy Sprite
             let monsScale = state.enemies.length > 1 ? 0.6 : 1;
-            if (eData.sprite_path) {
-                enemy.battleSprite = this.add.sprite(ex, 260, `mons_${eData.id || eData.monster_id}`).setScale(monsScale);
+            let texKey = `mons_${eData.id || eData.monster_id}`;
+            if (eData.sprite_path && this.textures.exists(texKey)) {
+                enemy.battleSprite = this.add.sprite(ex, 260, texKey).setScale(monsScale);
             } else {
+                console.warn(`Sprite missing for Enemy ${eData.name}. Using placeholder.`);
                 // Placeholder
                 const b = this.add.rectangle(0, 0, 80, 80, THEME.PANEL, 0.7);
                 b.setStrokeStyle(1, THEME.BORDER);
@@ -607,15 +615,17 @@ export default class BattleScene extends Phaser.Scene {
         // Cinematic Portrait
         if (this.activePlayer && this.activePlayer.mc_id) {
             let portTex = null;
-            if (this.activePlayer._fullPortraitPath) {
+            if (this.activePlayer._fullPortraitPath && this.textures.exists(`portrait_full_${this.activePlayer.mc_id}`)) {
                 portTex = `portrait_full_${this.activePlayer.mc_id}`;
-            } else if (this.activePlayer._portraitPath) {
+            } else if (this.activePlayer._portraitPath && this.textures.exists(`portrait_${this.activePlayer.mc_id}`)) {
                 portTex = `portrait_${this.activePlayer.mc_id}`;
             }
 
             if (portTex) {
                 this._cinematicPortrait = this.add.image(-150, H / 2, portTex).setDepth(298).setAlpha(0).setScale(0.8);
                 this.tweens.add({ targets: this._cinematicPortrait, x: CX - 120, alpha: 0.9, duration: 300, ease: "Power2" });
+            } else {
+                console.warn(`Cinematic portrait missing for Player.`);
             }
         }
     }
@@ -904,14 +914,14 @@ export default class BattleScene extends Phaser.Scene {
     }
     _buildBattleLog() {
         // Popup Log Area (Top of Main Arena)
-        this.battleLogBg = this.add.rectangle(0, 50, W, 60, 0x000000, 0.7).setOrigin(0, 0).setDepth(200).setVisible(false);
-        this.battleLogText = this.add.text(15, 65, "", { fontSize: "14px", color: "#fff", align: "left", wordWrap: { width: W - 30 } }).setOrigin(0, 0).setDepth(201).setVisible(false);
+        this.battleLogBg = this.add.rectangle(0, 50, W, 60, 0x000000, 0.7).setOrigin(0, 0).setDepth(300).setVisible(false);
+        this.battleLogText = this.add.text(15, 65, "", { fontSize: "14px", color: "#fff", align: "left", wordWrap: { width: W - 30 } }).setOrigin(0, 0).setDepth(300).setVisible(false);
 
         this.logOverlay = this.add.rectangle(0, 0, this.cameras.main.width, this.cameras.main.height, 0x000000, 0.8)
             .setOrigin(0, 0).setDepth(249).setInteractive().setVisible(false);
 
         // BATTLE LOG UI (Fixed)
-        this.logContainer = this.add.container(240, 100).setDepth(250).setVisible(false);
+        this.logContainer = this.add.container(240, 100).setDepth(300).setVisible(false);
 
         const titleBg = this.add.rectangle(0, -25, 400, 30, 0x111111).setStrokeStyle(1, 0x333333);
         const title = this.add.text(0, -25, "BATTLE LOG HISTORY (Drag/Scroll)", { fontSize: "14px", color: "#f39c12", fontStyle: "bold" }).setOrigin(0.5);

@@ -218,18 +218,21 @@ export default class VictoryScene extends Phaser.Scene {
             }).setOrigin(0.5);
             cursorY += 80;
         } else {
-            // Grid config: 4 columns
-            const cols = 4;
+            // Grid config: max 4 columns
+            const maxCols = 4;
             const boxSize = 75;
             const padding = 15;
-            const gridW = (cols * boxSize) + ((cols - 1) * padding);
-            const gridStartX = (W - gridW) / 2 + (boxSize / 2);
 
             rewards.forEach((item, index) => {
-                const col = index % cols;
-                const row = Math.floor(index / cols);
+                const row = Math.floor(index / maxCols);
+                const colInRow = index % maxCols;
                 
-                const ix = gridStartX + col * (boxSize + padding);
+                // Calculate centering specifically for this row
+                const itemsInThisRow = Math.min(maxCols, rewards.length - row * maxCols);
+                const rowW = (itemsInThisRow * boxSize) + ((itemsInThisRow - 1) * padding);
+                const rowStartX = (W - rowW) / 2 + (boxSize / 2);
+                
+                const ix = rowStartX + colInRow * (boxSize + padding);
                 const iy = cursorY + row * (boxSize + padding) + (boxSize / 2);
 
                 const itemBg = this.add.rectangle(ix, iy, boxSize, boxSize, THEME.PANEL, 0.8);

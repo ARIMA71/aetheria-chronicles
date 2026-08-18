@@ -266,7 +266,7 @@ export default class GachaScene extends Phaser.Scene {
     }
 
     _buildDropRateModal() {
-        this.dropRateModal = this.add.container(0, 0).setDepth(150).setVisible(false);
+        this.dropRateModal = this.add.container(0, 0).setDepth(300).setVisible(false);
 
         const backdrop = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.9).setInteractive();
 
@@ -403,7 +403,7 @@ export default class GachaScene extends Phaser.Scene {
     }
 
     _buildResultModal() {
-        this.resultContainer = this.add.container(0, 0).setDepth(100).setVisible(false);
+        this.resultContainer = this.add.container(0, 0).setDepth(300).setVisible(false);
 
         // Dim backdrop
         const backdrop = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.9).setInteractive();
@@ -528,7 +528,7 @@ export default class GachaScene extends Phaser.Scene {
     }
 
     _buildNewCharacterModal() {
-        this.newCharContainer = this.add.container(0, 0).setDepth(110).setVisible(false);
+        this.newCharContainer = this.add.container(0, 0).setDepth(300).setVisible(false);
 
         const backdrop = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.95).setInteractive();
 
@@ -586,7 +586,7 @@ export default class GachaScene extends Phaser.Scene {
 
     // --- Header Menu Modal Implementation ---
     _buildMenuModal() {
-        this.menuContainer = this.add.container(0, 0).setDepth(195).setVisible(false);
+        this.menuContainer = this.add.container(0, 0).setDepth(300).setVisible(false);
 
         const sysW = this.scale.width;
         const sysH = this.scale.height;
@@ -673,7 +673,7 @@ export default class GachaScene extends Phaser.Scene {
         ]);
 
         // Confirmation Dialog
-        this.confirmContainer = this.add.container(0, 0).setDepth(200).setVisible(false);
+        this.confirmContainer = this.add.container(0, 0).setDepth(310).setVisible(false);
 
         const cBackdrop = this.add.rectangle(sysW / 2, sysH / 2, sysW, sysH, 0x000000, 0.8).setInteractive();
         cBackdrop.on('pointerdown', (pointer, localX, localY, event) => event.stopPropagation());

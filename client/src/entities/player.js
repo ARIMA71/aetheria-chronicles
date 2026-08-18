@@ -87,9 +87,10 @@ export default class Player extends Phaser.GameObjects.Container {
         this._bg = scene.add.rectangle(0, 0, this._W, this._H, 0x12192b);
         this._bg.setStrokeStyle(1, 0x334155);
 
-        if (this._portraitPath) {
-            const keyId = data.mc_id || data.id || data.slot;
-            let portTex = `portrait_${keyId}`;
+        const keyId = data.mc_id || data.id || data.slot;
+        let portTex = `portrait_${keyId}`;
+        
+        if (this._portraitPath && scene.textures.exists(portTex)) {
             this._portrait = scene.add.image(0, 0, portTex);
             this._portrait.setScale(0.25);
             

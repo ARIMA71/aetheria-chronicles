@@ -499,7 +499,7 @@ export default class CharacterDetailScene extends Phaser.Scene {
     }
 
     _buildMenuModal() {
-        this.menuContainer = this.add.container(0, 0).setDepth(150).setVisible(false).setScrollFactor(0);
+        this.menuContainer = this.add.container(0, 0).setDepth(300).setVisible(false).setScrollFactor(0);
 
         const sysW = this.scale.width;
         const sysH = this.scale.height;
@@ -569,7 +569,7 @@ export default class CharacterDetailScene extends Phaser.Scene {
             btnLogout.rect, btnLogout.text, closeBtnCircle, closeBtnText
         ]);
 
-        this.confirmContainer = this.add.container(0, 0).setDepth(160).setVisible(false).setScrollFactor(0);
+        this.confirmContainer = this.add.container(0, 0).setDepth(310).setVisible(false).setScrollFactor(0);
         const cBackdrop = this.add.rectangle(sysW / 2, sysH / 2, sysW, sysH, 0x000000, 0.8).setInteractive();
         cBackdrop.on('pointerdown', (p, x, y, e) => e.stopPropagation());
 

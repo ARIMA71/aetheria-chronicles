@@ -564,7 +564,7 @@ export default class QuestScene extends Phaser.Scene {
     }
 
     _buildMenuModal() {
-        this.menuContainer = this.add.container(0, 0).setDepth(95).setVisible(false);
+        this.menuContainer = this.add.container(0, 0).setDepth(300).setVisible(false);
 
         const sysW = this.scale.width;
         const sysH = this.scale.height;
@@ -634,7 +634,7 @@ export default class QuestScene extends Phaser.Scene {
             btnLogout.rect, btnLogout.text, closeBtnCircle, closeBtnText
         ]);
 
-        this.confirmContainer = this.add.container(0, 0).setDepth(100).setVisible(false);
+        this.confirmContainer = this.add.container(0, 0).setDepth(310).setVisible(false);
         const cBackdrop = this.add.rectangle(sysW / 2, sysH / 2, sysW, sysH, 0x000000, 0.8).setInteractive();
         cBackdrop.on('pointerdown', (p, x, y, e) => e.stopPropagation());
 

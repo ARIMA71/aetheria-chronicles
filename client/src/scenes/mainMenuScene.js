@@ -350,7 +350,7 @@ export default class MainMenuScene extends Phaser.Scene {
 
     _buildMenuModal() {
         // Container Menu (modal meluncur/tampil dari atas)
-        this.menuContainer = this.add.container(0, 0).setDepth(95).setVisible(false);
+        this.menuContainer = this.add.container(0, 0).setDepth(300).setVisible(false);
 
         // 1. Black low-opacity backdrop (full screen)
         const sysW = this.scale.width;
@@ -486,7 +486,7 @@ export default class MainMenuScene extends Phaser.Scene {
         ]);
 
         // ── CONFIRMATION DIALOG LAYER (hidden by default) ──
-        this.confirmContainer = this.add.container(0, 0).setDepth(100).setVisible(false);
+        this.confirmContainer = this.add.container(0, 0).setDepth(310).setVisible(false);
 
         const cBackdrop = this.add.rectangle(sysW / 2, sysH / 2, sysW, sysH, 0x000000, 0.8).setInteractive();
         cBackdrop.on('pointerdown', (pointer, localX, localY, event) => event.stopPropagation());

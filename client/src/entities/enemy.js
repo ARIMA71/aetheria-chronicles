@@ -78,11 +78,13 @@ export default class Enemy extends Phaser.GameObjects.Container {
         const elemColor = this._getElementColor(this.element);
 
         this._spritePath = data.sprite_path;
+        let texKey = `mons_${data.id || data.monster_id}`;
+
         const shadow = scene.add.rectangle(5, 5, 130, 130, 0x000000).setAlpha(0.4);
         this._glow = scene.add.rectangle(0, 0, 138, 138, 0xffffff).setAlpha(0); // Glow Background
         this._effectIndicators = scene.add.container(0, -80);
         
-        if (!this._spritePath) {
+        if (!this._spritePath || !scene.textures.exists(texKey)) {
             this._body = scene.add.rectangle(0, 0, 130, 130, 0x1c0a0a);
             this._body.setStrokeStyle(3, elemColor);
 
@@ -375,7 +377,7 @@ export default class Enemy extends Phaser.GameObjects.Container {
 
     updateEnrageVisual() {
         if (!this.isBoss) {
-            this._body.setStrokeStyle(3, this._getElementColor(this.element));
+            if (this._body) this._body.setStrokeStyle(3, this._getElementColor(this.element));
             if (this._glow) this._glow.setAlpha(0);
             return;
         }
@@ -383,13 +385,13 @@ export default class Enemy extends Phaser.GameObjects.Container {
         const ratio = this.modeBar / this.modeMax;
 
         if (this.modeState === 'enraged') {
-            this._body.setStrokeStyle(3, 0xe74c3c);
+            if (this._body) this._body.setStrokeStyle(3, 0xe74c3c);
             if (this._glow) this._glow.setFillStyle(0xe74c3c).setAlpha(0.6);
         } else if (this.modeState === 'exhausted') {
-            this._body.setStrokeStyle(3, 0x3498db);
+            if (this._body) this._body.setStrokeStyle(3, 0x3498db);
             if (this._glow) this._glow.setFillStyle(0x3498db).setAlpha(0.6);
         } else {
-            this._body.setStrokeStyle(3, this._getElementColor(this.element));
+            if (this._body) this._body.setStrokeStyle(3, this._getElementColor(this.element));
             if (this._glow) this._glow.setAlpha(0);
         }
     }

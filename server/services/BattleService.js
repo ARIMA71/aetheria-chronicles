@@ -239,13 +239,15 @@ class BattleService {
                     return skill;
                 });
 
+            let charPortrait = char.portrait_path;
+            if (charPortrait && !charPortrait.endsWith('.png')) charPortrait += '.png';
+            
+            let charSprite = char.sprite_path;
+            if (charSprite && !charSprite.endsWith('.png')) charSprite += '.png';
+
             let fullPortrait = null;
-            if (char.portrait_path) {
-                if (char.portrait_path.endsWith('.png')) {
-                    fullPortrait = char.portrait_path.replace('.png', '-full.png');
-                } else {
-                    fullPortrait = char.portrait_path + '-full';
-                }
+            if (charPortrait) {
+                fullPortrait = charPortrait.replace('.png', '-full.png');
             }
 
             return {
@@ -264,9 +266,9 @@ class BattleService {
                 current_hp: stats.final_hp,
                 current_sa: 0,
                 active_buffs: [],
-                portrait_path: char.portrait_path,
+                portrait_path: charPortrait,
                 full_portrait_path: fullPortrait,
-                sprite_path:   char.sprite_path,
+                sprite_path:   charSprite,
                 skills: charSkills
             };
         });
@@ -303,6 +305,21 @@ class BattleService {
                 // Override element if provided
                 const element = row.override_element || row.mon_element;
                 
+                // Suffix Element for Monster Sprite (e.g. -fire, -wind, -earth)
+                let monsterSprite = row.mon_sprite_path;
+                if (monsterSprite) {
+                    if (element && element.toLowerCase() !== 'none' && element.toLowerCase() !== 'any') {
+                        const elSuffix = element.toLowerCase();
+                        if (monsterSprite.endsWith('.png')) {
+                            monsterSprite = monsterSprite.replace('.png', `-${elSuffix}.png`);
+                        } else {
+                            monsterSprite = monsterSprite + `-${elSuffix}.png`;
+                        }
+                    } else if (!monsterSprite.endsWith('.png')) {
+                        monsterSprite += '.png';
+                    }
+                }
+
                 monsterMap[row.mon_id] = {
                     id: row.mon_id, name: row.mon_name, element: element, level: row.monster_level || 1,
                     is_boss: (row.mon_type === 'Boss'),
@@ -316,7 +333,7 @@ class BattleService {
                     mode_state: 'normal',
                     mode_bar: 0,
                     active_buffs: [],
-                    caMax: Number(row.mon_max_ca) || 5, icon_path: row.mon_icon_path, sprite_path: row.mon_sprite_path,
+                    caMax: Number(row.mon_max_ca) || 5, icon_path: row.mon_icon_path, sprite_path: monsterSprite,
                     ai_behaviors: []
                 };
             }
