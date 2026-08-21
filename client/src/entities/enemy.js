@@ -82,8 +82,8 @@ export default class Enemy extends Phaser.GameObjects.Container {
 
         const shadow = scene.add.rectangle(5, 5, 130, 130, 0x000000).setAlpha(0.4);
         this._glow = scene.add.rectangle(0, 0, 138, 138, 0xffffff).setAlpha(0); // Glow Background
-        this._effectIndicators = scene.add.container(0, -80);
-        
+        this._effectIndicators = scene.add.container(0, -140);
+
         if (!this._spritePath || !scene.textures.exists(texKey)) {
             this._body = scene.add.rectangle(0, 0, 130, 130, 0x1c0a0a);
             this._body.setStrokeStyle(3, elemColor);
@@ -93,10 +93,14 @@ export default class Enemy extends Phaser.GameObjects.Container {
 
             const h = scene.add.line(0, 0, -40, 0, 40, 0, elemColor).setAlpha(0.25);
             const v = scene.add.line(0, 0, 0, -40, 0, 40, elemColor).setAlpha(0.25);
-            
+
             this.add([shadow, this._glow, this._body, inner, h, v, this._effectIndicators]);
         } else {
-            this.add([shadow, this._glow, this._effectIndicators]);
+            this.battleSprite = scene.add.sprite(0, 0, texKey);
+            if (this.isBoss) {
+                this.battleSprite.setScale(1.5);
+            }
+            this.add([shadow, this._glow, this.battleSprite, this._effectIndicators]);
         }
     }
 

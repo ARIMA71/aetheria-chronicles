@@ -262,7 +262,7 @@ export default class VictoryScene extends Phaser.Scene {
                 }).setOrigin(0.5);
             });
 
-            const rows = Math.ceil(rewards.length / cols);
+            const rows = Math.ceil(rewards.length / maxCols);
             cursorY += rows * (boxSize + padding) + 20;
         }
 

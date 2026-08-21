@@ -156,18 +156,7 @@ export default class BattleScene extends Phaser.Scene {
             enemy.index = i;
             this.enemies.push(enemy);
 
-            let monsScale = j.data.enemies.length > 1 ? 0.6 : 1;
-            let texKey = `mons_${eData.id || eData.monster_id}`;
-            if (eData.sprite_path && this.textures.exists(texKey)) {
-                enemy.battleSprite = this.add.sprite(ex, 260, texKey).setScale(monsScale);
-            } else {
-                console.warn(`Sprite missing for Enemy ${eData.name}. Using placeholder.`);
-                // Placeholder
-                const b = this.add.rectangle(0, 0, 80, 80, THEME.PANEL, 0.7);
-                b.setStrokeStyle(1, THEME.BORDER);
-                const t = this.add.text(0, 0, "?", { fontSize: "30px", color: THEME.TEXT_SECONDARY }).setOrigin(0.5);
-                enemy.spriteObj = this.add.container(ex, 260, [b, t]);
-            }
+            // Visuals handled internally by Enemy container
         });
         this.selectedTargetIndex = -1;
         this._setupUI();
@@ -275,20 +264,7 @@ export default class BattleScene extends Phaser.Scene {
             const enemy = new Enemy(this, ex, 260, eData);
             enemy.index = i;
             
-            // Render Enemy Sprite
-            let monsScale = state.enemies.length > 1 ? 0.6 : 1;
-            let texKey = `mons_${eData.id || eData.monster_id}`;
-            if (eData.sprite_path && this.textures.exists(texKey)) {
-                enemy.battleSprite = this.add.sprite(ex, 260, texKey).setScale(monsScale);
-            } else {
-                console.warn(`Sprite missing for Enemy ${eData.name}. Using placeholder.`);
-                // Placeholder
-                const b = this.add.rectangle(0, 0, 80, 80, THEME.PANEL, 0.7);
-                b.setStrokeStyle(1, THEME.BORDER);
-                const t = this.add.text(0, 0, "?", { fontSize: "30px", color: THEME.TEXT_SECONDARY }).setOrigin(0.5);
-                enemy.spriteObj = this.add.container(ex, 260, [b, t]);
-            }
-
+            // Visuals handled internally by Enemy container
             if (eData.current_hp !== undefined) enemy.hp = eData.current_hp;
             if (eData.current_ca !== undefined) enemy.chargeBar = eData.current_ca;
             if (eData.active_buffs && Array.isArray(eData.active_buffs)) enemy.activeEffects = [...eData.active_buffs];
@@ -431,7 +407,7 @@ export default class BattleScene extends Phaser.Scene {
                 caSegments.push(f);
             }
 
-            const nameText = this.add.text(enemy.x, 340, enemy.charName + " \nLv." + enemy.level, { fontSize: "11px", color: "#ffffff", fontStyle: "bold", align: "center" }).setOrigin(0.5, 0);
+            const nameText = this.add.text(enemy.x, 400, enemy.charName + " \nLv." + enemy.level, { fontSize: "11px", color: "#ffffff", fontStyle: "bold", align: "center" }).setOrigin(0.5, 0);
 
             this.enemyHUDs.push({
                 icon, elemText, hpPct, hpBarBg, hpFill, hpEnrage, modeBarBg, modeFill, caSegmentsBg, caSegments, nameText
@@ -612,22 +588,7 @@ export default class BattleScene extends Phaser.Scene {
         this.tweens.add({ targets: this._overlay, alpha: 0.5, duration: 200 });
         this.tweens.add({ targets: [this._sbPanel, this._sbBtns], x: this._sbShownX, duration: 220, ease: "Power2" });
         
-        // Cinematic Portrait
-        if (this.activePlayer && this.activePlayer.mc_id) {
-            let portTex = null;
-            if (this.activePlayer._fullPortraitPath && this.textures.exists(`portrait_full_${this.activePlayer.mc_id}`)) {
-                portTex = `portrait_full_${this.activePlayer.mc_id}`;
-            } else if (this.activePlayer._portraitPath && this.textures.exists(`portrait_${this.activePlayer.mc_id}`)) {
-                portTex = `portrait_${this.activePlayer.mc_id}`;
-            }
-
-            if (portTex) {
-                this._cinematicPortrait = this.add.image(-150, H / 2, portTex).setDepth(298).setAlpha(0).setScale(0.8);
-                this.tweens.add({ targets: this._cinematicPortrait, x: CX - 120, alpha: 0.9, duration: 300, ease: "Power2" });
-            } else {
-                console.warn(`Cinematic portrait missing for Player.`);
-            }
-        }
+        // Cinematic Portrait removed as per user request
     }
     closeSidebar() {
         this._sidebarOpen = false;
@@ -638,12 +599,7 @@ export default class BattleScene extends Phaser.Scene {
         this.tweens.add({ targets: this._overlay, alpha: 0, duration: 180 });
         this.tweens.add({ targets: [this._sbPanel, this._sbBtns], x: this._sbHiddenX, duration: 200, ease: "Power2" });
         
-        if (this._cinematicPortrait) {
-            this.tweens.add({ 
-                targets: this._cinematicPortrait, x: -150, alpha: 0, duration: 180, 
-                onComplete: () => { if (this._cinematicPortrait) { this._cinematicPortrait.destroy(); this._cinematicPortrait = null; } } 
-            });
-        }
+        // No cinematic portrait to clean up
         this._setActive(null);
     }
     _renderSidebar() {
@@ -662,8 +618,9 @@ export default class BattleScene extends Phaser.Scene {
             return 0;
         });
 
-        // --- SECTION 1: Portrait & Stats ---
-        const portBg = this.add.rectangle(0, -260, 180, 180, THEME.PANEL);
+        // --- SECTION 1: Sprite & Stats ---
+        // Increase height to 220 to accommodate the sprite, shift it up to y: -280
+        const portBg = this.add.rectangle(0, -280, 180, 220, THEME.PANEL);
         portBg.setStrokeStyle(3, p._elemColor); // Border tebal berwarna elemen
 
         let displayName = p.charName;
@@ -671,28 +628,36 @@ export default class BattleScene extends Phaser.Scene {
             displayName = getPlayerUsername();
         }
 
-        const nameText = this.add.text(-75, -335, displayName, { fontSize: "13px", fontStyle: "bold", color: THEME.TEXT_PRIMARY }).setOrigin(0, 0.5);
-        const lvlText = this.add.text(75, -335, "Lv." + p.level, { fontSize: "10px", fontStyle: "bold", color: THEME.TEXT_SECONDARY }).setOrigin(1, 0.5);
+        // Shift Name & Level up
+        const nameText = this.add.text(-75, -375, displayName, { fontSize: "13px", fontStyle: "bold", color: THEME.TEXT_PRIMARY }).setOrigin(0, 0.5);
+        const lvlText = this.add.text(75, -375, "Lv." + p.level, { fontSize: "10px", fontStyle: "bold", color: THEME.TEXT_SECONDARY }).setOrigin(1, 0.5);
 
-        // Placeholder Area untuk Splash Art (Subtle Background)
-        const artPlaceholder = this.add.rectangle(0, -260, 168, 110, THEME.BG, 0.3).setOrigin(0.5);
-
-        // Render Portrait in Skill Window
+        // Render Darkened Portrait Silhouette as background
+        let sil = null;
         if (p.mc_id && p._portraitPath) {
             let portTex = `portrait_${p.mc_id}`;
-            const skillPort = this.add.image(0, -260, portTex);
-            // Crop or scale so it fits nicely. A scale of 0.25 to 0.35 usually works for high-res portraits.
-            skillPort.setScale(0.25);
-            // Mask it to fit inside the placeholder
-            const maskShape = this.make.graphics();
-            maskShape.fillStyle(0xffffff);
-            maskShape.fillRect(this._sbShownX - 84, (H / 2) - 260 - 55, 168, 110);
-            skillPort.setMask(new Phaser.Display.Masks.GeometryMask(this, maskShape));
-            this._sbBtns.add([skillPort]);
+            if (this.textures.exists(portTex)) {
+                sil = this.add.image(0, -280, portTex);
+                sil.setScale(0.35); // scale to cover background nicely
+                sil.setTint(0x333333).setAlpha(0.6); // darkened silhouette
+                
+                // Mask so it doesn't spill over HP bars or out of the card
+                const maskShape = this.make.graphics();
+                maskShape.fillStyle(0xffffff);
+                maskShape.fillRect(this._sbShownX - 84, (H / 2) - 365, 168, 145);
+                sil.setMask(new Phaser.Display.Masks.GeometryMask(this, maskShape));
+            }
+        }
+
+        // Render Player Sprite on top of the silhouette
+        const keyId = p.mc_id || p.id || p.slot;
+        const texKey = `sprite_${keyId}`;
+        let spriteImg = null;
+        let spriteEmpty = null;
+        if (this.textures.exists(texKey)) {
+            spriteImg = this.add.sprite(0, -280, texKey).setScale(1.5);
         } else {
-            // Default Placeholder untuk Skill Window Portrait (Karakter polos/NULL)
-            const skillPortEmpty = this.add.text(0, -260, "?", { fontSize: "40px", color: THEME.TEXT_SECONDARY }).setOrigin(0.5);
-            this._sbBtns.add([skillPortEmpty]);
+            spriteEmpty = this.add.text(0, -280, "?", { fontSize: "40px", color: THEME.TEXT_SECONDARY }).setOrigin(0.5);
         }
 
         // HP Bar
@@ -709,7 +674,13 @@ export default class BattleScene extends Phaser.Scene {
         const saFill = this.add.rectangle(-45, -180, 110 * saRatio, 10, THEME.GOLD).setOrigin(0, 0.5);
         const saText = this.add.text(10, -180, `${Math.floor(saRatio * 100)}%`, { fontSize: "8px", fontStyle: "bold", color: saRatio >= 1 ? THEME.TEXT_PRIMARY : THEME.TEXT_SECONDARY }).setOrigin(0.5);
 
-        this._sbBtns.add([portBg, nameText, lvlText, artPlaceholder, hpLbl, hpBg, hpFill, hpText, saLbl, saBg, saFill, saText]);
+        const elementsToAdd = [portBg];
+        if (sil) elementsToAdd.push(sil);
+        if (spriteImg) elementsToAdd.push(spriteImg);
+        if (spriteEmpty) elementsToAdd.push(spriteEmpty);
+        elementsToAdd.push(nameText, lvlText, hpLbl, hpBg, hpFill, hpText, saLbl, saBg, saFill, saText);
+
+        this._sbBtns.add(elementsToAdd);
 
         // Divider 1
         const div1 = this.add.rectangle(0, -160, 180, 1, THEME.BORDER);
