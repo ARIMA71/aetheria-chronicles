@@ -112,10 +112,6 @@ class AiBehaviorService {
         // 3. AVAILABILITY FILTER (COOLDOWN & ONE-TIME USE CHECKS)
         // ─────────────────────────────────────────────────────────────────────────
         const readySkills = candidateSkills.filter(s => {
-            // Check cooldown
-            const cooldown = s.currentCooldown !== undefined ? s.currentCooldown : s.cooldownCount;
-            if (cooldown > 0) return false;
-
             // Check one-time use
             const mods = s.score_modifiers || s.modifiers || {};
             const isOverride = mods.override_hp_trigger !== undefined || mods.Trigger_HP_Threshold !== undefined;

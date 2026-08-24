@@ -755,3 +755,57 @@ exports.endTurn = async (req, res) => {
         });
     }
 };
+
+/**
+ * POST /api/battle/process-turn
+ * Eksekusi batch aksi giliran player (Tactical Command Queue).
+ */
+exports.processTurnBatch = async (req, res) => {
+    try {
+        const { bsId, character_actions } = req.body;
+
+        // Input validation
+        if (!bsId) {
+            return res.status(400).json({ status: 'error', message: 'bsId wajib diisi!' });
+        }
+        if (!Array.isArray(character_actions) || character_actions.length === 0) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'character_actions harus berupa array dan tidak boleh kosong!'
+            });
+        }
+
+        // Validate each action entry has a slot and action_type
+        for (const action of character_actions) {
+            if (!action.slot || !action.action_type) {
+                return res.status(400).json({
+                    status: 'error',
+                    message: `Setiap aksi dalam character_actions harus memiliki 'slot' dan 'action_type'. Periksa payload Anda.`
+                });
+            }
+        }
+
+        const result = await BattleService.processTurnBatch(bsId, { character_actions });
+
+        return res.status(200).json({
+            status: 'success',
+            message: 'Batch Turn Berhasil Dieksekusi',
+            data: result
+        });
+    } catch (error) {
+        console.error('[processTurnBatch] Error:', error);
+
+        if (error.message && error.message.startsWith('RACE_CONDITION')) {
+            return res.status(429).json({
+                status: 'error',
+                message: 'Giliran sebelumnya masih diproses. Harap tunggu sebentar.'
+            });
+        }
+
+        return res.status(500).json({
+            status: 'error',
+            message: 'Gagal memproses batch turn.',
+            error_detail: error.message
+        });
+    }
+};

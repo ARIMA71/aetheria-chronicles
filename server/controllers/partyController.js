@@ -79,9 +79,9 @@ exports.getPartyPresets = async (req, res) => {
 exports.getPlayerInventory = async (req, res) => {
     const { playerId } = req.params;
     try {
-        // Fetch player username to replace MC name
-        const [userRows] = await db.query('SELECT username FROM players WHERE player_id = ?', [playerId]);
+        const [userRows] = await db.query('SELECT username, gender FROM players WHERE player_id = ?', [playerId]);
         const username = userRows.length > 0 ? userRows[0].username : 'Main Character';
+        const genderSuffix = (userRows.length > 0 && userRows[0].gender ? userRows[0].gender : 'Male').toLowerCase();
 
         // 1. Fetch characters
         const [characters] = await db.query(`
@@ -124,6 +124,15 @@ exports.getPlayerInventory = async (req, res) => {
         for (const char of characters) {
             if (char.master_item_id === 1) {
                 char.mc_name = username;
+                if (char.mc_portrait_path) char.mc_portrait_path += `-${genderSuffix}`;
+                if (char.mc_sprite_path) char.mc_sprite_path += `-${genderSuffix}`;
+            }
+
+            if (char.mc_portrait_path && !char.mc_portrait_path.endsWith('.png')) char.mc_portrait_path += '.png';
+            if (char.mc_sprite_path && !char.mc_sprite_path.endsWith('.png')) char.mc_sprite_path += '.png';
+            
+            if (char.mc_portrait_path) {
+                char.mc_full_portrait_path = char.mc_portrait_path.replace('.png', '-full.png');
             }
             char.skills = charSkillsMap[char.master_item_id] || [];
             if (char.sa_id) {

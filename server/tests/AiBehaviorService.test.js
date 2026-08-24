@@ -56,8 +56,6 @@ const createSkillBehavior = (overrides = {}) => ({
     base_utility: 1.0,
     modifiers: {},
     score_modifiers: {},
-    currentCooldown: 0,
-    cooldownCount: 0,
     skill: { id: Math.floor(Math.random() * 9000) + 1, name: 'Test Skill', type: 'Damage' },
     ...overrides
 });
@@ -75,45 +73,12 @@ describe('AiBehaviorService.calculateBossAction() — Edge Cases', () => {
         expect(AiBehaviorService.calculateBossAction(null, [createSkillBehavior()])).toBeNull();
     });
 
-    test('Mengembalikan null jika semua skill masih cooldown (CA tidak ready)', () => {
+    test('Mengembalikan null jika CA bar belum penuh (CA tidak ready)', () => {
         const state = createBattleState();
         // CA tidak penuh → skill non-override tidak lolos filter
-        const skill = createSkillBehavior({ currentCooldown: 0 });
+        const skill = createSkillBehavior();
         // boss current_ca = 0, caMax = 5 → CA tidak ready
         expect(AiBehaviorService.calculateBossAction(state, [skill])).toBeNull();
-    });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SUITE 2: Cooldown Filter
-// ─────────────────────────────────────────────────────────────────────────────
-describe('AiBehaviorService — Cooldown Filter (Tahap 3)', () => {
-    // Buat state dengan CA penuh agar skill bisa masuk kandidat
-    const createFullCaState = () => {
-        const state = createBattleState();
-        state.enemies[0].current_ca = 5; // CA penuh
-        state.enemies[0].caMax = 5;
-        return state;
-    };
-
-    test('Skill dengan currentCooldown > 0 tidak dipilih', () => {
-        const state = createFullCaState();
-        const skillOnCooldown = createSkillBehavior({ currentCooldown: 2 });
-        // Skill kedua yang ready
-        const skillReady = createSkillBehavior({ currentCooldown: 0, base_utility: 99 });
-        const result = AiBehaviorService.calculateBossAction(state, [skillOnCooldown, skillReady]);
-        // Harus memilih skillReady, bukan skillOnCooldown
-        expect(result).not.toBeNull();
-        expect(result.base_utility).toBe(99);
-    });
-
-    test('Jika semua skill cooldown → return null', () => {
-        const state = createFullCaState();
-        const allCooldown = [
-            createSkillBehavior({ currentCooldown: 3 }),
-            createSkillBehavior({ currentCooldown: 1 })
-        ];
-        expect(AiBehaviorService.calculateBossAction(state, allCooldown)).toBeNull();
     });
 });
 

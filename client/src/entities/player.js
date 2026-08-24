@@ -47,6 +47,10 @@ export default class Player extends Phaser.GameObjects.Container {
         this.cooldowns = {};
         this.isSAReady = false;
 
+        // ── Action Queue & AUTO ───────────────────────────────────────────────
+        this.queuedAction = { type: 'none' };
+        this.isAuto = false;
+
         // ── Normalisasi Skills dari API ───────────────────────────────────────
         // API sudah mengirim ms_action_type sebagai 'type' dan status_effects[]
         // Passive dibuang — tidak ditampilkan di skill window
@@ -78,7 +82,7 @@ export default class Player extends Phaser.GameObjects.Container {
 
         // ── Dimensi & Warna ───────────────────────────────────────────────────
         this._W = 85;
-        this._H = 120;
+        this._H = 145;
         this._elemColor = this._getElementColor(this.element);
         this._baseX = x;
         this._isHighlight = false;
@@ -92,7 +96,9 @@ export default class Player extends Phaser.GameObjects.Container {
         
         if (this._portraitPath && scene.textures.exists(portTex)) {
             this._portrait = scene.add.image(0, 0, portTex);
-            this._portrait.setScale(0.25);
+            // Scale based on width to maintain aspect ratio (no ugly stretching)
+            const imgW = this._portrait.width || 1;
+            this._portrait.setScale(this._W / imgW);
             
             const maskShape = scene.make.graphics();
             maskShape.fillStyle(0xffffff);
@@ -103,20 +109,24 @@ export default class Player extends Phaser.GameObjects.Container {
             this._portrait = scene.add.text(0, 0, "?", { fontSize: "32px", color: "#94a3b8" }).setOrigin(0.5);
         }
 
+        this._gradientFade = scene.add.graphics();
+        this._gradientFade.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0, 0, 1.0, 1.0);
+        this._gradientFade.fillRect(-(this._W / 2), -10, this._W, (this._H / 2) + 10);
+
         this._accent = scene.add.rectangle(0, -(this._H / 2) + 5, this._W, 10, this._elemColor);
 
         // HP Bar
-        this._hpBarBg = scene.add.rectangle(0, 32, 60, 10, 0x222222);
-        this._hpFill = scene.add.rectangle(-30, 32, 60, 10, 0x27ae60).setOrigin(0, 0.5);
-        this._hpText = scene.add.text(0, 32, `${this.hp}`, {
+        this._hpBarBg = scene.add.rectangle(0, 42, 60, 10, 0x222222);
+        this._hpFill = scene.add.rectangle(-30, 42, 60, 10, 0x27ae60).setOrigin(0, 0.5);
+        this._hpText = scene.add.text(0, 42, `${this.hp}`, {
             fontSize: '11px', color: '#ffffff', fontStyle: 'bold',
             stroke: '#000000', strokeThickness: 3
         }).setOrigin(0.5, 0.5);
 
         // SA Bar
-        this._saBarBg = scene.add.rectangle(-8, 44, 42, 4, 0x111111);
-        this._saFill = scene.add.rectangle(-29, 44, 0, 4, 0xf1c40f).setOrigin(0, 0.5);
-        this._saPctText = scene.add.text(15, 44, '0%', {
+        this._saBarBg = scene.add.rectangle(0, 56, 60, 6, 0x111111);
+        this._saFill = scene.add.rectangle(-30, 56, (this.specialBar / this.specialMax) * 60, 6, 0xf1c40f).setOrigin(0, 0.5);
+        this._saPctText = scene.add.text(32, 56, `${Math.floor((this.specialBar / this.specialMax) * 100)}%`, {
             fontSize: '8px', color: '#f1c40f', fontStyle: 'bold'
         }).setOrigin(0, 0.5);
 
@@ -133,12 +143,17 @@ export default class Player extends Phaser.GameObjects.Container {
         // Container untuk indikator status efek aktif (di-rebuild tiap refreshVisual)
         this._effectIndicators = scene.add.container(0, 16);
 
+        // ── Action Badge ──────────────────────────────────────────────────────
+        this._actionBadgeBg = scene.add.circle(28, -(this._H / 2) + 20, 12, 0x1e293b).setStrokeStyle(1, 0x94a3b8).setAlpha(0);
+        this._actionBadgeText = scene.add.text(28, -(this._H / 2) + 20, '', { fontSize: '12px' }).setOrigin(0.5).setAlpha(0);
+
         this.add([
-            this._bg, this._portrait, this._accent,
+            this._bg, this._portrait, this._gradientFade, this._accent,
             this._hpBarBg, this._hpFill, this._hpText,
             this._saBarBg, this._saFill, this._saPctText, this._saReadyGem,
             this._koOverlay, this._koText,
-            this._effectIndicators
+            this._effectIndicators,
+            this._actionBadgeBg, this._actionBadgeText
         ]);
     }
 
@@ -231,6 +246,48 @@ export default class Player extends Phaser.GameObjects.Container {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // ACTION QUEUE & AUTO
+    // ─────────────────────────────────────────────────────────────────────────
+
+    updateActionBadge() {
+        if (this.hp <= 0) {
+            this._actionBadgeBg.setAlpha(0);
+            this._actionBadgeText.setAlpha(0);
+            return;
+        }
+        
+        let icon = '';
+        let color = 0x94a3b8;
+        
+        if (this.isAuto) {
+            icon = '🤖';
+            color = 0x3b82f6; // blue
+        } else if (this.queuedAction.type === 'basic_attack') {
+            icon = '⚔️';
+            color = 0xef4444; // red
+        } else if (this.queuedAction.type === 'special_attack') {
+            icon = '✦';
+            color = 0xf59e0b; // gold
+        } else if (this.queuedAction.type === 'skill') {
+            icon = '🌀';
+            color = 0x8b5cf6; // purple
+        } else if (this.queuedAction.type === 'skip') {
+            icon = '💤';
+            color = 0x64748b; // gray
+        }
+
+        if (icon) {
+            this._actionBadgeBg.setStrokeStyle(1, color);
+            this._actionBadgeText.setText(icon);
+            this._actionBadgeBg.setAlpha(1);
+            this._actionBadgeText.setAlpha(1);
+        } else {
+            this._actionBadgeBg.setAlpha(0);
+            this._actionBadgeText.setAlpha(0);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // PUBLIC VISUAL
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -282,11 +339,19 @@ export default class Player extends Phaser.GameObjects.Container {
             this._bg.setStrokeStyle(1, 0x444444);
             this._accent.setFillStyle(0x444444);
             this.setSAReady(false);
+            if (this.battleSprite) {
+                this.battleSprite.setAlpha(0.25);
+                this.battleSprite.setTint(0x555555);
+            }
         } else {
             this._koOverlay.setAlpha(0);
             this._koText.setAlpha(0);
             this._bg.setStrokeStyle(1, 0x334155);
             this._accent.setFillStyle(this._elemColor);
+            if (this.battleSprite) {
+                this.battleSprite.setAlpha(1.0);
+                this.battleSprite.clearTint();
+            }
         }
 
         // ── Status Effect Indicators ──

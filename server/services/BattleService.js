@@ -201,8 +201,8 @@ class BattleService {
         charRows.forEach(row => {
             if (row.role_slot === 'Main Character' || row.mc_id === 1) {
                 row.name = username;
-                if (row.portrait_path) row.portrait_path += `-${genderSuffix}.png`;
-                if (row.sprite_path) row.sprite_path += `-${genderSuffix}.png`;
+                if (row.portrait_path) row.portrait_path += `-${genderSuffix}`;
+                if (row.sprite_path) row.sprite_path += `-${genderSuffix}`;
             }
         });
 
@@ -508,12 +508,453 @@ class BattleService {
             return null;
         }
 
+        let clientState = null;
+        try {
+            clientState = JSON.parse(session.battle_state_json);
+            clientState = await this.rehydrateStateAssets(clientState, playerId);
+        } catch (e) {
+            clientState = JSON.parse(session.battle_state_json);
+        }
+
         return {
             bs_id: session.bs_id,
             mq_id: session.mq_id,
             remaining_time: adjustedRemaining,
-            battle_state_json: session.battle_state_json
+            battle_state_json: JSON.stringify(clientState)
         };
+    }
+
+    /**
+     * Live Asset Re-Hydration:
+     * Menyegarkan kembali path aset statis (portrait_path, full_portrait_path, sprite_path)
+     * dari tabel master secara live pada saat sesi pertarungan dipulihkan (resume).
+     * Mencegah data visual basi (stale assets) sekaligus menjaga keutuhan State Pertarungan (HP, Turn, Cooldown).
+     */
+    async rehydrateStateAssets(state, playerId) {
+        if (!state) return state;
+
+        try {
+            // 1. Fetch Player Gender untuk suffix MC
+            const [playerRows] = await db.query('SELECT gender FROM players WHERE player_id = ?', [playerId]);
+            const genderSuffix = (playerRows && playerRows[0] && playerRows[0].gender ? playerRows[0].gender : 'Male').toLowerCase();
+
+            // 2. Rehydrate Karakter (Party)
+            if (state.player_party && Array.isArray(state.player_party.characters)) {
+                const mcIds = state.player_party.characters.map(c => c.mc_id || c.id).filter(Boolean);
+                if (mcIds.length > 0) {
+                    const [charMaster] = await db.query(
+                        'SELECT mc_id, mc_portrait_path, mc_sprite_path FROM master_characters WHERE mc_id IN (?)',
+                        [mcIds]
+                    );
+                    const charMap = new Map();
+                    charMaster.forEach(m => charMap.set(m.mc_id, m));
+
+                    state.player_party.characters.forEach(c => {
+                        const mcId = c.mc_id || c.id;
+                        const master = charMap.get(mcId);
+                        if (master) {
+                            let pPath = master.mc_portrait_path;
+                            let sPath = master.mc_sprite_path;
+
+                            if (c.slot === 'Main Character' || mcId === 1) {
+                                if (pPath) pPath += `-${genderSuffix}`;
+                                if (sPath) sPath += `-${genderSuffix}`;
+                            }
+
+                            if (pPath && !pPath.endsWith('.png')) pPath += '.png';
+                            if (sPath && !sPath.endsWith('.png')) sPath += '.png';
+
+                            c.portrait_path = pPath;
+                            c.full_portrait_path = pPath ? pPath.replace('.png', '-full.png') : null;
+                            c.sprite_path = sPath;
+                        }
+                    });
+                }
+            }
+
+            // 3. Rehydrate Musuh (Monsters)
+            if (Array.isArray(state.enemies)) {
+                const monIds = state.enemies.map(e => e.id || e.monster_id).filter(Boolean);
+                if (monIds.length > 0) {
+                    const [monMaster] = await db.query(
+                        'SELECT mon_id, mon_sprite_path, mon_element FROM master_monsters WHERE mon_id IN (?)',
+                        [monIds]
+                    );
+                    const monMap = new Map();
+                    monMaster.forEach(m => monMap.set(m.mon_id, m));
+
+                    state.enemies.forEach(e => {
+                        const monId = e.id || e.monster_id;
+                        const master = monMap.get(monId);
+                        if (master) {
+                            const element = e.element || master.mon_element;
+                            let mSprite = master.mon_sprite_path;
+                            if (mSprite) {
+                                if (element && element.toLowerCase() !== 'none' && element.toLowerCase() !== 'any') {
+                                    const elSuffix = element.toLowerCase();
+                                    if (mSprite.endsWith('.png')) {
+                                        mSprite = mSprite.replace('.png', `-${elSuffix}.png`);
+                                    } else {
+                                        mSprite = mSprite + `-${elSuffix}.png`;
+                                    }
+                                } else if (!mSprite.endsWith('.png')) {
+                                    mSprite += '.png';
+                                }
+                            }
+                            e.sprite_path = mSprite;
+                        }
+                    });
+                }
+            }
+        } catch (err) {
+            console.error('[rehydrateStateAssets] Error rehydrating session assets:', err.message);
+        }
+
+        return state;
+    }
+
+    /**
+     * Process a batch of character actions (Tactical Command Queue) server-side.
+     * Iterates through character_actions array (Slot 0 -> 1 -> 2 -> 3):
+     * - Validates target HP. If target is dead, auto-retargets to an alive enemy in the wave.
+     * - If ALL enemies in the wave/battle die early, STOPS BATCH ITERATION for remaining characters.
+     * - Unexecuted character skills/SA are NOT put on cooldown / NOT consumed.
+     * - Resolves cooldown decrements, DoT damage, and Enemy AI counter-attack at turn end.
+     */
+    async processTurnBatch(bsId, batchData) {
+        let state = BattleMemoryStore.get(bsId);
+        if (!state) {
+            const [rows] = await db.query('SELECT battle_state_json FROM battle_sessions WHERE bs_id = ?', [bsId]);
+            if (rows.length > 0 && rows[0].battle_state_json) {
+                try { state = JSON.parse(rows[0].battle_state_json); } catch (e) { }
+            }
+        }
+
+        if (!state) throw new Error('Battle session not found or expired');
+
+        if (state.is_processing) {
+            throw new Error('RACE_CONDITION: Action is already being processed');
+        }
+        state.is_processing = true;
+
+        try {
+            const events = [];
+            const characterActions = batchData.character_actions || [];
+
+            // Tracking executed skills in this turn to avoid double cooldown decrement
+            const executedSkillsThisTurn = new Set();
+
+            // Tracking karakter yang cooldown-nya sudah di-decrement di blok STUN
+            // agar turn-end tidak double-decrement mereka lagi
+            const stunnedCharacterSlots = new Set();
+
+            // Iterate character actions sequentially (Slot 0 -> 1 -> 2 -> 3)
+            for (const actionInfo of characterActions) {
+                const { slot, action_type, skill_id, target_index } = actionInfo;
+                if (!action_type || action_type === 'none') continue;
+
+                // Find party member for this action
+                const character = (state.player_party.characters || []).find(
+                    c => c.slot === slot || c.id === slot || c.inv_id == slot || c.mc_id == slot
+                );
+
+                // Skip if character is dead
+                if (!character || (character.current_hp !== undefined ? character.current_hp : character.hp) <= 0) {
+                    continue;
+                }
+
+                // Check if character is STUNNED -> skip their action but still tick skill cooldowns
+                const isStunned = (character.active_buffs || []).some(b =>
+                    (b.target_stat || '').toUpperCase() === 'STUN' ||
+                    (b.effect_name || '').toUpperCase().includes('STUN')
+                );
+                if (isStunned) {
+                    // Cooldown masih harus berkurang meskipun karakter terstun,
+                    // karena mereka tetap "melewati" giliran mereka (waktu berlalu).
+                    if (character.skills) {
+                        character.skills.forEach(s => {
+                            const execKey = `${character.inv_id || character.slot}_${s.id}`;
+                            // Hanya decrement jika skill BELUM dieksekusi di turn ini dan masih dalam cooldown
+                            if (!executedSkillsThisTurn.has(execKey) && s.current_cooldown && s.current_cooldown > 0) {
+                                s.current_cooldown -= 1;
+                            }
+                        });
+                    }
+
+                    // Tandai karakter ini sudah di-decrement agar turn-end tidak decrement ulang
+                    stunnedCharacterSlots.add(character.inv_id || character.slot);
+
+                    events.push({
+                        type: 'stun_skip',
+                        sourceId: character.slot || character.id || 'mc',
+                        targetId: character.slot || character.id || 'mc',
+                        skillName: 'STUNNED',
+                        value: 0
+                    });
+                    continue;
+                }
+
+                // CATATAN: Validasi "karakter belum punya aksi" (action_type === 'none')
+                // sepenuhnya ditangani di FRONTEND via modal reminder sebelum payload dikirim.
+                // Backend hanya menerima aksi yang valid: 'basic_attack', 'special_attack', 'skill'.
+
+                // Check 1: Are all enemies in current wave dead?
+                const aliveEnemies = (state.enemies || []).filter(e => (e.current_hp !== undefined ? e.current_hp : e.hp) > 0);
+                if (aliveEnemies.length === 0) {
+                    // ALL ENEMIES DEAD -> Stop batch processing!
+                    // Remaining character actions are UNEXECUTED (no CD, no SA consume).
+                    break;
+                }
+
+                // Check 2: Target validation & Auto-retargeting
+                let targetEnemy = (state.enemies || [])[target_index || 0];
+                if (!targetEnemy || (targetEnemy.current_hp !== undefined ? targetEnemy.current_hp : targetEnemy.hp) <= 0) {
+                    // Retarget to the first alive enemy in current wave
+                    targetEnemy = aliveEnemies[0];
+                }
+                const resolvedTargetIndex = (state.enemies || []).indexOf(targetEnemy);
+                const targetEntityId = `enemy_${resolvedTargetIndex >= 0 ? resolvedTargetIndex : 0}`;
+                const sourceEntityId = character.slot || character.id || 'mc';
+
+                // EXECUTE CHARACTER ACTION
+                if (action_type === 'basic_attack') {
+                    // Basic Attack
+                    const dummySkill = { name: 'Basic Attack', type: 'Damage', modifier: 1.0, element: character.element };
+                    const calcResult = DamageCalculatorService.calculateDamage(character, targetEnemy, dummySkill);
+                    targetEnemy.current_hp = Math.max(0, (targetEnemy.current_hp !== undefined ? targetEnemy.current_hp : targetEnemy.final_stats.hp) - calcResult.damage);
+
+                    // SA Gauge: +20% per Basic Attack (Aether gauge TIDAK bertambah dari Basic Attack)
+                    character.current_sa = Math.min(100, (character.current_sa || 0) + 20);
+
+                    events.push({
+                        type: 'damage',
+                        sourceId: sourceEntityId,
+                        targetId: targetEntityId,
+                        value: calcResult.damage,
+                        isCrit: calcResult.isCrit,
+                        mitigation: calcResult.mitigationPercent,
+                        skillName: 'Basic Attack',
+                        elementMultiplier: calcResult.elementMultiplier,
+                        sourceElement: character.element || 'Neutral'
+                    });
+                }
+                else if (action_type === 'special_attack') {
+                    // Special Attack / Limit Break
+                    if ((character.current_sa || 0) >= 100) {
+                        character.current_sa = 0; // Consume SA Gauge ONLY on successful execution!
+
+                        // Aether Gauge: +20% setelah Special Attack berhasil dilancarkan
+                        state.aether_gauge = Math.min(100, (state.aether_gauge || 0) + 20);
+
+                        const spSkill = (character.skills || []).find(s => (s.category || '').toLowerCase() === 'special') || {
+                            name: 'Special Attack', type: 'Damage', modifier: 3.5, element: character.element
+                        };
+
+                        const calcResult = DamageCalculatorService.calculateDamage(character, targetEnemy, spSkill);
+                        targetEnemy.current_hp = Math.max(0, (targetEnemy.current_hp !== undefined ? targetEnemy.current_hp : targetEnemy.final_stats.hp) - calcResult.damage);
+
+                        events.push({
+                            type: 'damage',
+                            sourceId: sourceEntityId,
+                            targetId: targetEntityId,
+                            value: calcResult.damage,
+                            isCrit: calcResult.isCrit,
+                            mitigation: calcResult.mitigationPercent,
+                            skillName: spSkill.name || 'Special Attack',
+                            elementMultiplier: calcResult.elementMultiplier,
+                            sourceElement: spSkill.element || character.element || 'Neutral'
+                        });
+                    }
+                }
+                else if (action_type === 'skill') {
+                    const skill = (character.skills || []).find(s => s.id == skill_id);
+                    if (skill && (!skill.current_cooldown || skill.current_cooldown <= 0)) {
+                        // Put skill on cooldown ONLY on successful execution!
+                        skill.current_cooldown = skill.cooldown || 0;
+                        executedSkillsThisTurn.add(`${character.inv_id || character.slot}_${skill.id}`);
+
+                        const sType = (skill.type || '').toLowerCase();
+                        if (sType === 'damage') {
+                            const calcResult = DamageCalculatorService.calculateDamage(character, targetEnemy, skill);
+                            targetEnemy.current_hp = Math.max(0, (targetEnemy.current_hp !== undefined ? targetEnemy.current_hp : targetEnemy.final_stats.hp) - calcResult.damage);
+
+                            events.push({
+                                type: 'damage',
+                                sourceId: sourceEntityId,
+                                targetId: targetEntityId,
+                                value: calcResult.damage,
+                                isCrit: calcResult.isCrit,
+                                mitigation: calcResult.mitigationPercent,
+                                skillName: skill.name,
+                                elementMultiplier: calcResult.elementMultiplier,
+                                sourceElement: skill.element || character.element || 'Neutral'
+                            });
+                        }
+                        else if (sType === 'heal' || sType === 'support') {
+                            const triggerHealPct = parseFloat(skill.trigger_heal_pct) || 0.25;
+                            const maxHp = character.final_stats ? character.final_stats.hp : 1000;
+                            const healAmt = Math.floor(maxHp * triggerHealPct);
+                            character.current_hp = Math.min((character.current_hp || maxHp) + healAmt, maxHp);
+
+                            events.push({
+                                type: 'heal',
+                                sourceId: sourceEntityId,
+                                targetId: sourceEntityId,
+                                value: healAmt,
+                                skillName: skill.name
+                            });
+                        }
+
+                        // Apply Status Effects if any
+                        if (skill.status_effects && Array.isArray(skill.status_effects)) {
+                            skill.status_effects.forEach(eff => {
+                                const isBuff = (eff.effect_type || '').toLowerCase() === 'buff';
+                                const effTarget = isBuff ? character : targetEnemy;
+                                effTarget.active_buffs = effTarget.active_buffs || [];
+                                effTarget.active_buffs.push({ ...eff });
+
+                                events.push({
+                                    type: 'effect_applied',
+                                    targetId: isBuff ? sourceEntityId : targetEntityId,
+                                    sourceId: sourceEntityId,
+                                    skillName: skill.name,
+                                    effectName: eff.effect_name || eff.target_stat,
+                                    effectType: isBuff ? 'buff' : 'debuff'
+                                });
+                            });
+                        }
+                    }
+                }
+
+                // Check Wave Clear after each character's action execution
+                this._checkWaveClear(state, events);
+            }
+
+            // Check if enemies are still alive
+            const remainingAliveEnemies = (state.enemies || []).filter(e => (e.current_hp !== undefined ? e.current_hp : e.hp) > 0);
+
+            if (remainingAliveEnemies.length > 0) {
+                // TURN END RESOLUTION (If battle continues)
+
+                // 1. Decrement skill cooldowns for all characters
+                // Skip karakter yang sudah di-decrement saat mereka terstun (anti double-decrement)
+                if (state.player_party && Array.isArray(state.player_party.characters)) {
+                    state.player_party.characters.forEach(char => {
+                        const charKey = char.inv_id || char.slot;
+                        if (stunnedCharacterSlots.has(charKey)) return; // Sudah di-decrement di blok STUN
+
+                        if (char.skills) {
+                            char.skills.forEach(s => {
+                                const execKey = `${char.inv_id || char.slot}_${s.id}`;
+                                if (!executedSkillsThisTurn.has(execKey) && s.current_cooldown && s.current_cooldown > 0) {
+                                    s.current_cooldown -= 1;
+                                }
+                            });
+                        }
+
+                        // Decrement active_buffs / active_debuffs duration on player characters
+                        if (char.active_buffs && char.active_buffs.length > 0) {
+                            for (let i = char.active_buffs.length - 1; i >= 0; i--) {
+                                const buff = char.active_buffs[i];
+                                // Support both 'duration' and 'mse_duration' keys
+                                const durKey = buff.duration !== undefined ? 'duration' : (buff.mse_duration !== undefined ? 'mse_duration' : null);
+                                if (durKey && buff[durKey] > 0) {
+                                    buff[durKey] -= 1;
+                                    if (buff[durKey] <= 0) {
+                                        events.push({
+                                            type: 'effect_removed',
+                                            targetId: char.slot || char.id,
+                                            effectName: buff.effect_name || buff.target_stat
+                                        });
+                                        char.active_buffs.splice(i, 1);
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+
+                // Decrement active_buffs on enemies (debuffs applied by skills)
+                for (const enemy of remainingAliveEnemies) {
+                    if (enemy.active_buffs && enemy.active_buffs.length > 0) {
+                        for (let i = enemy.active_buffs.length - 1; i >= 0; i--) {
+                            const buff = enemy.active_buffs[i];
+                            const durKey = buff.duration !== undefined ? 'duration' : (buff.mse_duration !== undefined ? 'mse_duration' : (buff.duration_turns !== undefined ? 'duration_turns' : null));
+                            if (durKey && buff[durKey] > 0) {
+                                buff[durKey] -= 1;
+                                if (buff[durKey] <= 0) {
+                                    events.push({
+                                        type: 'effect_removed',
+                                        targetId: `enemy_${state.enemies.indexOf(enemy)}`,
+                                        effectName: buff.effect_name || buff.target_stat
+                                    });
+                                    enemy.active_buffs.splice(i, 1);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 2. Enemy AI Counter-Attack & SA Gauge Gain from Taking Damage
+                for (const enemy of remainingAliveEnemies) {
+                    const aliveParty = (state.player_party.characters || []).filter(c => (c.current_hp !== undefined ? c.current_hp : c.hp) > 0);
+                    if (aliveParty.length === 0) break;
+
+                    // Select target (random or first alive)
+                    const targetChar = aliveParty[Math.floor(Math.random() * aliveParty.length)];
+                    const enemySkill = { name: enemy.name ? `${enemy.name} Strike` : 'Monster Attack', type: 'Damage', modifier: 1.0, element: enemy.element || 'Neutral' };
+                    const calcResult = DamageCalculatorService.calculateDamage(enemy, targetChar, enemySkill);
+
+                    targetChar.current_hp = Math.max(0, (targetChar.current_hp !== undefined ? targetChar.current_hp : targetChar.final_stats.hp) - calcResult.damage);
+
+                    // SA GAUGE MECHANIC WHEN ATTACKED:
+                    // Single target enemy attack -> +20% SA Gauge for the hit character!
+                    targetChar.current_sa = Math.min(100, (targetChar.current_sa || 0) + 20);
+
+                    events.push({
+                        type: 'damage',
+                        sourceId: `enemy_${Math.max(0, state.enemies.indexOf(enemy))}`,
+                        targetId: targetChar.slot || targetChar.id,
+                        value: calcResult.damage,
+                        isCrit: calcResult.isCrit,
+                        mitigation: calcResult.mitigationPercent,
+                        skillName: enemySkill.name,
+                        elementMultiplier: calcResult.elementMultiplier,
+                        sourceElement: enemy.element || 'Neutral'
+                    });
+
+                    events.push({
+                        type: 'effect_applied',
+                        targetId: targetChar.slot || targetChar.id,
+                        sourceId: `enemy_${Math.max(0, state.enemies.indexOf(enemy))}`,
+                        skillName: 'Hit Recovery',
+                        effectName: '+20% SA Bar',
+                        effectType: 'buff'
+                    });
+                }
+
+                // 3. Increment Turn Counter
+                state.current_turn = (state.current_turn || 1) + 1;
+            }
+
+            // Re-hydrate live asset paths for client display
+            if (state.player_id) {
+                await this.rehydrateStateAssets(state, state.player_id);
+            }
+
+            state.is_processing = false;
+            await db.query(
+                `UPDATE battle_sessions SET battle_state_json = ? WHERE bs_id = ? AND bs_status = 'ACTIVE'`,
+                [JSON.stringify(state), bsId]
+            ).catch(e => console.error('[processTurnBatch] DB update error:', e));
+
+            BattleMemoryStore.set(bsId, state);
+
+            return { events, stateSnapshot: state };
+        } catch (error) {
+            state.is_processing = false;
+            throw error;
+        }
     }
 
     /**

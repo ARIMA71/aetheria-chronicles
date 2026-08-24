@@ -165,4 +165,25 @@ export default class BattleApi {
             throw error;
         }
     }
+
+    /**
+     * Executes a batch of player actions.
+     * @param {number|string} bsId
+     * @param {Array} character_actions - Array of { slot, action_type, skill_id, target_index }
+     * @returns {Promise<object>}
+     */
+    static async processTurnBatch(bsId, character_actions) {
+        try {
+            const res = await fetch(`${API_BASE}/process-turn`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ bsId, character_actions })
+            });
+            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+            return await res.json();
+        } catch (error) {
+            console.error("Failed to process turn batch:", error);
+            throw error;
+        }
+    }
 }

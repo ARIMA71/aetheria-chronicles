@@ -80,11 +80,11 @@ export default class Enemy extends Phaser.GameObjects.Container {
         this._spritePath = data.sprite_path;
         let texKey = `mons_${data.id || data.monster_id}`;
 
-        const shadow = scene.add.rectangle(5, 5, 130, 130, 0x000000).setAlpha(0.4);
         this._glow = scene.add.rectangle(0, 0, 138, 138, 0xffffff).setAlpha(0); // Glow Background
-        this._effectIndicators = scene.add.container(0, -140);
+        this._effectIndicators = scene.add.container(0, -60);
 
         if (!this._spritePath || !scene.textures.exists(texKey)) {
+            const shadow = scene.add.rectangle(5, 5, 130, 130, 0x000000).setAlpha(0.4);
             this._body = scene.add.rectangle(0, 0, 130, 130, 0x1c0a0a);
             this._body.setStrokeStyle(3, elemColor);
 
@@ -97,10 +97,20 @@ export default class Enemy extends Phaser.GameObjects.Container {
             this.add([shadow, this._glow, this._body, inner, h, v, this._effectIndicators]);
         } else {
             this.battleSprite = scene.add.sprite(0, 0, texKey);
-            if (this.isBoss) {
-                this.battleSprite.setScale(1.5);
-            }
-            this.add([shadow, this._glow, this.battleSprite, this._effectIndicators]);
+            const baseScale = this.isBoss ? 1.5 : 0.75;
+            this.battleSprite.setScale(baseScale);
+            this._effectIndicators.y = -(this.battleSprite.displayHeight / 2) - 15;
+
+            scene.tweens.add({
+                targets: this.battleSprite,
+                scaleY: baseScale * 1.03,
+                duration: 1300,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.easeInOut'
+            });
+            // NO black box shadow added for real sprites!
+            this.add([this._glow, this.battleSprite, this._effectIndicators]);
         }
     }
 
