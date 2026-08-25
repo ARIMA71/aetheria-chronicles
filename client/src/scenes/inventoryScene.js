@@ -79,10 +79,27 @@ export default class InventoryScene extends Phaser.Scene {
 
     async loadData() {
         const res = await PartyApi.getInventory(this.playerId);
+        const presetsRes = await PartyApi.getPresets(this.playerId);
+        
         if (res.status === 'success') {
             this.characters = res.data.characters || [];
             this.weapons = res.data.weapons || [];
             this.materials = res.data.materials || [];
+            
+            this.equippedItemIds = new Set();
+            if (presetsRes.status === 'success' && presetsRes.data) {
+                const activePreset = presetsRes.data.find(p => p.is_active) || presetsRes.data[0];
+                if (activePreset) {
+                    const keys = [
+                        'main_char_inv_id', 'char_slot_1_inv_id', 'char_slot_2_inv_id', 'char_slot_3_inv_id',
+                        'weap_grid_1_inv_id', 'weap_grid_2_inv_id', 'weap_grid_3_inv_id', 'weap_grid_4_inv_id', 'weap_grid_5_inv_id'
+                    ];
+                    keys.forEach(k => {
+                        if (activePreset[k]) this.equippedItemIds.add(activePreset[k]);
+                    });
+                }
+            }
+
             this.loadingText.destroy();
             this.renderUI();
         } else {
@@ -336,6 +353,13 @@ export default class InventoryScene extends Phaser.Scene {
                     const elLetter = element ? element.charAt(0).toUpperCase() : '?';
                     const elTxt = this.add.text(ix + boxW/2 - 10, iy - boxH/2 + 10, elLetter, { fontSize: '9px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5);
                     this.scrollGroup.addMultiple([elCircle, elTxt]);
+                }
+
+                // EQUIPPED Indicator at top left
+                if (this.equippedItemIds && this.equippedItemIds.has(item.inv_id)) {
+                    const eBg = this.add.circle(ix - boxW/2 + 10, iy - boxH/2 + 10, 7, 0x3b82f6).setStrokeStyle(1, THEME.PANEL);
+                    const eTxt = this.add.text(ix - boxW/2 + 10, iy - boxH/2 + 10, 'E', { fontSize: '9px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5);
+                    this.scrollGroup.addMultiple([eBg, eTxt]);
                 }
                 
                 // Display Info below art box

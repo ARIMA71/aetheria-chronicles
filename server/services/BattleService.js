@@ -631,7 +631,6 @@ class BattleService {
         }
 
         if (!state) throw new Error('Battle session not found or expired');
-
         if (state.is_processing) {
             throw new Error('RACE_CONDITION: Action is already being processed');
         }
@@ -640,50 +639,72 @@ class BattleService {
         try {
             const events = [];
             const characterActions = batchData.character_actions || [];
-
-            // Tracking executed skills in this turn to avoid double cooldown decrement
             const executedSkillsThisTurn = new Set();
+            
+            // Helper function to resolve targets based on ms_target_type
+            const resolveTargets = (sourceEntity, targetType, targetIndex, isEnemySource = false) => {
+                const aliveEnemies = (state.enemies || []).filter(e => (e.current_hp !== undefined ? e.current_hp : e.hp) > 0);
+                const aliveParty = (state.player_party.characters || []).filter(c => (c.current_hp !== undefined ? c.current_hp : c.hp) > 0);
+                
+                if (targetType === 'Self') {
+                    return [{ entity: sourceEntity, type: isEnemySource ? 'enemy' : 'player', index: isEnemySource ? state.enemies.indexOf(sourceEntity) : -1 }];
+                } else if (targetType === 'All_Enemies') {
+                    return isEnemySource 
+                        ? aliveParty.map(p => ({ entity: p, type: 'player', index: -1 })) 
+                        : aliveEnemies.map(e => ({ entity: e, type: 'enemy', index: state.enemies.indexOf(e) }));
+                } else if (targetType === 'All_Allies') {
+                    return isEnemySource 
+                        ? aliveEnemies.map(e => ({ entity: e, type: 'enemy', index: state.enemies.indexOf(e) }))
+                        : aliveParty.map(p => ({ entity: p, type: 'player', index: -1 }));
+                } else if (targetType === 'Single_Ally') {
+                    if (isEnemySource) {
+                        const tgt = aliveEnemies[targetIndex] || aliveEnemies[0];
+                        return tgt ? [{ entity: tgt, type: 'enemy', index: state.enemies.indexOf(tgt) }] : [];
+                    } else {
+                        const tgt = aliveParty[targetIndex] || aliveParty[0];
+                        return tgt ? [{ entity: tgt, type: 'player', index: -1 }] : [];
+                    }
+                } else { // Single_Enemy (Default)
+                    if (isEnemySource) {
+                        const tgt = aliveParty[targetIndex] || aliveParty[0];
+                        return tgt ? [{ entity: tgt, type: 'player', index: -1 }] : [];
+                    } else {
+                        let tgt = (state.enemies || [])[targetIndex];
+                        if (!tgt || (tgt.current_hp !== undefined ? tgt.current_hp : tgt.hp) <= 0) {
+                            tgt = aliveEnemies[0];
+                        }
+                        return tgt ? [{ entity: tgt, type: 'enemy', index: state.enemies.indexOf(tgt) }] : [];
+                    }
+                }
+            };
 
-            // Tracking karakter yang cooldown-nya sudah di-decrement di blok STUN
-            // agar turn-end tidak double-decrement mereka lagi
-            const stunnedCharacterSlots = new Set();
+            const getEntityId = (targetObj) => {
+                if (targetObj.type === 'enemy') return `enemy_${Math.max(0, targetObj.index)}`;
+                return targetObj.entity.slot || targetObj.entity.id || 'mc';
+            };
 
-            // Iterate character actions sequentially (Slot 0 -> 1 -> 2 -> 3)
+            // ==========================================
+            // PHASE 1: PLAYER PHASE
+            // ==========================================
+            let waveCleared = false;
             for (const actionInfo of characterActions) {
                 const { slot, action_type, skill_id, target_index } = actionInfo;
                 if (!action_type || action_type === 'none') continue;
 
-                // Find party member for this action
                 const character = (state.player_party.characters || []).find(
                     c => c.slot === slot || c.id === slot || c.inv_id == slot || c.mc_id == slot
                 );
 
-                // Skip if character is dead
                 if (!character || (character.current_hp !== undefined ? character.current_hp : character.hp) <= 0) {
                     continue;
                 }
 
-                // Check if character is STUNNED -> skip their action but still tick skill cooldowns
+                // Stun Check (Hanya disable aksi, JANGAN tick durasi di sini!)
                 const isStunned = (character.active_buffs || []).some(b =>
                     (b.target_stat || '').toUpperCase() === 'STUN' ||
                     (b.effect_name || '').toUpperCase().includes('STUN')
                 );
                 if (isStunned) {
-                    // Cooldown masih harus berkurang meskipun karakter terstun,
-                    // karena mereka tetap "melewati" giliran mereka (waktu berlalu).
-                    if (character.skills) {
-                        character.skills.forEach(s => {
-                            const execKey = `${character.inv_id || character.slot}_${s.id}`;
-                            // Hanya decrement jika skill BELUM dieksekusi di turn ini dan masih dalam cooldown
-                            if (!executedSkillsThisTurn.has(execKey) && s.current_cooldown && s.current_cooldown > 0) {
-                                s.current_cooldown -= 1;
-                            }
-                        });
-                    }
-
-                    // Tandai karakter ini sudah di-decrement agar turn-end tidak decrement ulang
-                    stunnedCharacterSlots.add(character.inv_id || character.slot);
-
                     events.push({
                         type: 'stun_skip',
                         sourceId: character.slot || character.id || 'mc',
@@ -691,67 +712,71 @@ class BattleService {
                         skillName: 'STUNNED',
                         value: 0
                     });
-                    continue;
+                    continue; 
                 }
 
-                // CATATAN: Validasi "karakter belum punya aksi" (action_type === 'none')
-                // sepenuhnya ditangani di FRONTEND via modal reminder sebelum payload dikirim.
-                // Backend hanya menerima aksi yang valid: 'basic_attack', 'special_attack', 'skill'.
-
-                // Check 1: Are all enemies in current wave dead?
-                const aliveEnemies = (state.enemies || []).filter(e => (e.current_hp !== undefined ? e.current_hp : e.hp) > 0);
-                if (aliveEnemies.length === 0) {
-                    // ALL ENEMIES DEAD -> Stop batch processing!
-                    // Remaining character actions are UNEXECUTED (no CD, no SA consume).
-                    break;
-                }
-
-                // Check 2: Target validation & Auto-retargeting
-                let targetEnemy = (state.enemies || [])[target_index || 0];
-                if (!targetEnemy || (targetEnemy.current_hp !== undefined ? targetEnemy.current_hp : targetEnemy.hp) <= 0) {
-                    // Retarget to the first alive enemy in current wave
-                    targetEnemy = aliveEnemies[0];
-                }
-                const resolvedTargetIndex = (state.enemies || []).indexOf(targetEnemy);
-                const targetEntityId = `enemy_${resolvedTargetIndex >= 0 ? resolvedTargetIndex : 0}`;
                 const sourceEntityId = character.slot || character.id || 'mc';
 
-                // EXECUTE CHARACTER ACTION
+                // Evaluate Action Type
+                let skillObj = null;
                 if (action_type === 'basic_attack') {
-                    // Basic Attack
-                    const dummySkill = { name: 'Basic Attack', type: 'Damage', modifier: 1.0, element: character.element };
-                    const calcResult = DamageCalculatorService.calculateDamage(character, targetEnemy, dummySkill);
-                    targetEnemy.current_hp = Math.max(0, (targetEnemy.current_hp !== undefined ? targetEnemy.current_hp : targetEnemy.final_stats.hp) - calcResult.damage);
-
-                    // SA Gauge: +20% per Basic Attack (Aether gauge TIDAK bertambah dari Basic Attack)
-                    character.current_sa = Math.min(100, (character.current_sa || 0) + 20);
-
-                    events.push({
-                        type: 'damage',
-                        sourceId: sourceEntityId,
-                        targetId: targetEntityId,
-                        value: calcResult.damage,
-                        isCrit: calcResult.isCrit,
-                        mitigation: calcResult.mitigationPercent,
-                        skillName: 'Basic Attack',
-                        elementMultiplier: calcResult.elementMultiplier,
-                        sourceElement: character.element || 'Neutral'
-                    });
+                    skillObj = { name: 'Basic Attack', type: 'Damage', target_type: 'Single_Enemy', modifier: 1.0, element: character.element, status_effects: [] };
+                } else if (action_type === 'special_attack') {
+                    if ((character.current_sa || 0) < 100) continue; 
+                    character.current_sa = 0; // Consume SA
+                    state.aether_gauge = Math.min(100, (state.aether_gauge || 0) + 20); // +20% Aether
+                    skillObj = (character.skills || []).find(s => (s.category || '').toLowerCase() === 'special') || {
+                        name: 'Special Attack', type: 'Damage', target_type: 'Single_Enemy', modifier: 3.5, element: character.element, status_effects: []
+                    };
+                } else if (action_type === 'skill') {
+                    const foundSkill = (character.skills || []).find(s => s.id == skill_id);
+                    if (!foundSkill || (foundSkill.current_cooldown && foundSkill.current_cooldown > 0)) continue;
+                    skillObj = foundSkill;
+                    skillObj.current_cooldown = skillObj.cooldown || 0; // Set Cooldown
+                    executedSkillsThisTurn.add(`${character.inv_id || character.slot}_${skillObj.id}`);
                 }
-                else if (action_type === 'special_attack') {
-                    // Special Attack / Limit Break
-                    if ((character.current_sa || 0) >= 100) {
-                        character.current_sa = 0; // Consume SA Gauge ONLY on successful execution!
 
-                        // Aether Gauge: +20% setelah Special Attack berhasil dilancarkan
-                        state.aether_gauge = Math.min(100, (state.aether_gauge || 0) + 20);
+                if (!skillObj) continue;
 
-                        const spSkill = (character.skills || []).find(s => (s.category || '').toLowerCase() === 'special') || {
-                            name: 'Special Attack', type: 'Damage', modifier: 3.5, element: character.element
-                        };
+                // Execute Action based on ms_target_type
+                const targets = resolveTargets(character, skillObj.target_type || 'Single_Enemy', target_index || 0, false);
+                const sType = (skillObj.type || skillObj.action_type || '').toLowerCase(); // Note: DB mapping is 'type'
+                
+                // Track if SA gain was applied for basic attacks (so AoE basic doesn't give +20% per hit)
+                let saGained = false;
 
-                        const calcResult = DamageCalculatorService.calculateDamage(character, targetEnemy, spSkill);
-                        targetEnemy.current_hp = Math.max(0, (targetEnemy.current_hp !== undefined ? targetEnemy.current_hp : targetEnemy.final_stats.hp) - calcResult.damage);
+                for (const tgtObj of targets) {
+                    const targetEntity = tgtObj.entity;
+                    const targetEntityId = getEntityId(tgtObj);
+
+                    if (sType === 'damage') {
+                        const calcResult = DamageCalculatorService.calculateDamage(character, targetEntity, skillObj);
+                        targetEntity.current_hp = Math.max(0, (targetEntity.current_hp !== undefined ? targetEntity.current_hp : targetEntity.final_stats.hp) - calcResult.damage);
+
+                        if (action_type === 'basic_attack' && !saGained) {
+                            character.current_sa = Math.min(100, (character.current_sa || 0) + 20);
+                            saGained = true;
+                        }
+
+                        if (targetEntity.is_boss) {
+                            const threshold = (targetEntity.final_stats.hp || targetEntity.max_hp) * 0.20;
+                            const currentState = targetEntity.mode_state || 'normal';
+
+                            if (currentState === 'normal') {
+                                targetEntity.mode_bar = (targetEntity.mode_bar !== undefined ? targetEntity.mode_bar : 0) + calcResult.damage;
+                                if (targetEntity.mode_bar >= threshold) {
+                                    targetEntity.mode_bar = threshold;
+                                    targetEntity.pending_mode_transition = 'enraged';
+                                }
+                            } else if (currentState === 'enraged' && targetEntity.pending_mode_transition !== 'enraged') {
+                                let currentModeBar = targetEntity.mode_bar !== undefined ? targetEntity.mode_bar : threshold;
+                                targetEntity.mode_bar = currentModeBar - calcResult.damage;
+                                if (targetEntity.mode_bar <= 0) {
+                                    targetEntity.mode_bar = 0;
+                                    targetEntity.pending_mode_transition = 'exhausted';
+                                }
+                            }
+                        }
 
                         events.push({
                             type: 'damage',
@@ -760,23 +785,221 @@ class BattleService {
                             value: calcResult.damage,
                             isCrit: calcResult.isCrit,
                             mitigation: calcResult.mitigationPercent,
-                            skillName: spSkill.name || 'Special Attack',
+                            skillName: skillObj.name,
                             elementMultiplier: calcResult.elementMultiplier,
-                            sourceElement: spSkill.element || character.element || 'Neutral'
+                            sourceElement: skillObj.element || character.element || 'Neutral',
+                            modeBar: targetEntity.mode_bar,
+                            modeState: targetEntity.mode_state
                         });
+                    } 
+                    else if (sType === 'heal' || sType === 'support' || sType === 'cleanse') {
+                        const triggerHealPct = parseFloat(skillObj.trigger_heal_pct) || (sType === 'heal' ? 0.25 : 0);
+                        if (triggerHealPct > 0) {
+                            const maxHp = targetEntity.final_stats ? targetEntity.final_stats.hp : 1000;
+                            const healAmt = Math.floor(maxHp * triggerHealPct);
+                            targetEntity.current_hp = Math.min((targetEntity.current_hp || maxHp) + healAmt, maxHp);
+
+                            events.push({
+                                type: 'heal',
+                                sourceId: sourceEntityId,
+                                targetId: targetEntityId,
+                                value: healAmt,
+                                skillName: skillObj.name
+                            });
+                        }
+                        
+                        if (sType === 'cleanse') {
+                            if (targetEntity.active_buffs) {
+                                // Remove all debuffs
+                                for (let i = targetEntity.active_buffs.length - 1; i >= 0; i--) {
+                                    if ((targetEntity.active_buffs[i].effect_type || '').toLowerCase() === 'debuff') {
+                                        events.push({
+                                            type: 'effect_removed',
+                                            targetId: targetEntityId,
+                                            effectName: targetEntity.active_buffs[i].effect_name || targetEntity.active_buffs[i].target_stat
+                                        });
+                                        targetEntity.active_buffs.splice(i, 1);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    else if (sType === 'revive') {
+                        if (targetEntity.current_hp <= 0) {
+                            const triggerHealPct = parseFloat(skillObj.trigger_heal_pct) || 0.3;
+                            const maxHp = targetEntity.final_stats ? targetEntity.final_stats.hp : 1000;
+                            const healAmt = Math.floor(maxHp * triggerHealPct);
+                            targetEntity.current_hp = healAmt;
+
+                            events.push({
+                                type: 'heal',
+                                sourceId: sourceEntityId,
+                                targetId: targetEntityId,
+                                value: healAmt,
+                                skillName: skillObj.name
+                            });
+                        }
                     }
                 }
-                else if (action_type === 'skill') {
-                    const skill = (character.skills || []).find(s => s.id == skill_id);
-                    if (skill && (!skill.current_cooldown || skill.current_cooldown <= 0)) {
-                        // Put skill on cooldown ONLY on successful execution!
-                        skill.current_cooldown = skill.cooldown || 0;
-                        executedSkillsThisTurn.add(`${character.inv_id || character.slot}_${skill.id}`);
 
-                        const sType = (skill.type || '').toLowerCase();
+                // Apply Status Effects independently based on their own `effect_target`
+                if (skillObj.status_effects && Array.isArray(skillObj.status_effects)) {
+                    skillObj.status_effects.forEach(eff => {
+                        const isBuff = (eff.effect_type || '').toLowerCase() === 'buff';
+                        const effTargetType = eff.effect_target || 'Target'; 
+                        
+                        let resolveType = 'Single_Enemy';
+                        if (effTargetType === 'Self') resolveType = 'Self';
+                        else if (effTargetType === 'Allies') resolveType = 'All_Allies';
+                        else {
+                            // Target inherits skill's target
+                            resolveType = skillObj.target_type || 'Single_Enemy';
+                        }
+                        
+                        const effTargets = resolveTargets(character, resolveType, target_index || 0, false);
+                        
+                        effTargets.forEach(tgtObj => {
+                            const targetEntity = tgtObj.entity;
+                            targetEntity.active_buffs = targetEntity.active_buffs || [];
+                            targetEntity.active_buffs.push({ ...eff });
+
+                            events.push({
+                                type: 'effect_applied',
+                                targetId: getEntityId(tgtObj),
+                                sourceId: sourceEntityId,
+                                skillName: skillObj.name,
+                                effectName: eff.effect_name || eff.target_stat,
+                                effectType: isBuff ? 'buff' : 'debuff'
+                            });
+                        });
+                    });
+                }
+
+                // Check Wave Clear
+                const prevWaveIndex = state.current_wave_index;
+                this._checkWaveClear(state, events);
+                const aliveEnemies = (state.enemies || []).filter(e => (e.current_hp !== undefined ? e.current_hp : e.hp) > 0);
+                
+                // Break if wave changed (went to next wave) OR if all enemies are dead (last wave)
+                if (state.current_wave_index > prevWaveIndex || aliveEnemies.length === 0) {
+                    waveCleared = true;
+                    break;
+                }
+            }
+
+            // ==========================================
+            // PHASE 2: ENEMY PHASE
+            // ==========================================
+            const remainingAliveEnemies = (state.enemies || []).filter(e => (e.current_hp !== undefined ? e.current_hp : e.hp) > 0);
+            if (!waveCleared && remainingAliveEnemies.length > 0) {
+                events.push({ type: 'delay', delayMs: 500 });
+                for (const enemy of remainingAliveEnemies) {
+                    const isStunned = (enemy.active_buffs || []).some(b =>
+                        (b.target_stat || '').toUpperCase() === 'STUN' ||
+                        (b.effect_name || '').toUpperCase().includes('STUN')
+                    );
+                    if (isStunned) {
+                        events.push({
+                            type: 'stun_skip',
+                            sourceId: `enemy_${state.enemies.indexOf(enemy)}`,
+                            targetId: `enemy_${state.enemies.indexOf(enemy)}`,
+                            skillName: 'STUNNED',
+                            value: 0
+                        });
+                        continue;
+                    }
+
+                    const aliveParty = (state.player_party.characters || []).filter(c => (c.current_hp !== undefined ? c.current_hp : c.hp) > 0);
+                    if (aliveParty.length === 0) break;
+
+                    let caSkill = null;
+                    if (enemy.is_boss) {
+                        // Resolve pending mode transitions at the START of Enemy Turn
+                        if (enemy.pending_mode_transition === 'enraged') {
+                            enemy.mode_state = 'enraged';
+                            enemy.enrage_turns = 3;
+                            enemy.mode_changed_this_turn = true;
+                            enemy.pending_mode_transition = null;
+                            events.push({ type: 'enrage', targetId: `enemy_${state.enemies.indexOf(enemy)}` });
+                        } else if (enemy.pending_mode_transition === 'exhausted') {
+                            enemy.mode_state = 'exhausted';
+                            enemy.exhaust_turns = 2;
+                            enemy.enrage_turns = 0;
+                            enemy.mode_changed_this_turn = true;
+                            enemy.pending_mode_transition = null;
+                            events.push({ type: 'break', targetId: `enemy_${state.enemies.indexOf(enemy)}` });
+                        }
+
+                        caSkill = AiBehaviorService.calculateBossAction(state, enemy.ai_behaviors || enemy.aiBehaviors);
+                        if (!caSkill) {
+                            const currentCa = enemy.current_ca !== undefined ? enemy.current_ca : 0;
+                            const caMax = enemy.caMax !== undefined ? enemy.caMax : (enemy.final_stats && enemy.final_stats.caMax) !== undefined ? enemy.final_stats.caMax : 5;
+                            const isExhausted = (enemy.mode_state || enemy.modeState) === 'exhausted';
+                            
+                            if (currentCa >= caMax && !isExhausted) {
+                                const specialSkills = (enemy.ai_behaviors || enemy.aiBehaviors || []).filter(b => {
+                                    const cat = (b.skill ? b.skill.category : b.category) || '';
+                                    return cat.toLowerCase() === 'special';
+                                });
+                                if (specialSkills.length > 0) caSkill = specialSkills[Math.floor(Math.random() * specialSkills.length)];
+                            }
+                        }
+                    } else {
+                        const currentCa = enemy.current_ca !== undefined ? enemy.current_ca : 0;
+                        const caMax = enemy.caMax !== undefined ? enemy.caMax : (enemy.final_stats && enemy.final_stats.caMax) !== undefined ? enemy.final_stats.caMax : 5;
+                        const availableSkills = enemy.ai_behaviors || enemy.aiBehaviors || [];
+                        if (currentCa >= caMax && availableSkills.length > 0) {
+                            caSkill = availableSkills[Math.floor(Math.random() * availableSkills.length)];
+                        }
+                    }
+
+                    let enemySkill = null;
+                    if (caSkill) {
+                        enemySkill = caSkill.skill || caSkill;
+                        // Record one-time use or HP trigger usage
+                        if (!state.used_skills) state.used_skills = [];
+                        if (!state.used_skills.includes(enemySkill.id)) state.used_skills.push(enemySkill.id);
+
+                        if (!enemySkill.isHpTrigger) {
+                            enemy.current_ca = 0; // Reset CA
+                        }
+                    } else {
+                        enemySkill = { name: enemy.name ? `${enemy.name} Strike` : 'Monster Attack', type: 'Damage', target_type: 'Single_Enemy', modifier: 1.0, element: enemy.element || 'Neutral' };
+                        const currentCa = enemy.current_ca !== undefined ? enemy.current_ca : 0;
+                        const caMax = enemy.caMax !== undefined ? enemy.caMax : (enemy.final_stats && enemy.final_stats.caMax) !== undefined ? enemy.final_stats.caMax : 5;
+                        const isExhausted = (enemy.mode_state || enemy.modeState) === 'exhausted';
+                        if (!isExhausted) {
+                            enemy.current_ca = Math.min(caMax, currentCa + 1);
+                        }
+                    }
+
+                    let targetIndex = Math.floor(Math.random() * aliveParty.length);
+                    if (caSkill && (caSkill.modifiers || caSkill.score_modifiers)) {
+                        const smartTargetId = this._determineSmartTarget(aliveParty, caSkill.modifiers || caSkill.score_modifiers || {});
+                        const sIdx = aliveParty.findIndex(p => (p.slot || p.id) === smartTargetId);
+                        if (sIdx !== -1) targetIndex = sIdx;
+                    }
+                    
+                    const targets = resolveTargets(enemy, enemySkill.target_type || 'Single_Enemy', targetIndex, true);
+                    const sType = (enemySkill.type || enemySkill.action_type || 'damage').toLowerCase();
+                    const sourceEntityId = `enemy_${state.enemies.indexOf(enemy)}`;
+
+                    if (caSkill) {
+                        const enemyName = enemy.name || 'ENEMY';
+                        events.push({ type: 'log', message: `💀 ${enemyName.toUpperCase()} SPECIAL ATTACK: ${enemySkill.name}!` });
+                    }
+
+                    for (const tgtObj of targets) {
+                        const targetEntity = tgtObj.entity;
+                        const targetEntityId = getEntityId(tgtObj);
+
                         if (sType === 'damage') {
-                            const calcResult = DamageCalculatorService.calculateDamage(character, targetEnemy, skill);
-                            targetEnemy.current_hp = Math.max(0, (targetEnemy.current_hp !== undefined ? targetEnemy.current_hp : targetEnemy.final_stats.hp) - calcResult.damage);
+                            const calcResult = DamageCalculatorService.calculateDamage(enemy, targetEntity, enemySkill);
+                            targetEntity.current_hp = Math.max(0, (targetEntity.current_hp !== undefined ? targetEntity.current_hp : targetEntity.final_stats.hp) - calcResult.damage);
+
+                            if (tgtObj.type === 'player') {
+                                targetEntity.current_sa = Math.min(100, (targetEntity.current_sa || 0) + 20);
+                            }
 
                             events.push({
                                 type: 'damage',
@@ -785,64 +1008,141 @@ class BattleService {
                                 value: calcResult.damage,
                                 isCrit: calcResult.isCrit,
                                 mitigation: calcResult.mitigationPercent,
-                                skillName: skill.name,
+                                skillName: enemySkill.name,
                                 elementMultiplier: calcResult.elementMultiplier,
-                                sourceElement: skill.element || character.element || 'Neutral'
+                                sourceElement: enemySkill.element || enemy.element || 'Neutral'
                             });
-                        }
-                        else if (sType === 'heal' || sType === 'support') {
-                            const triggerHealPct = parseFloat(skill.trigger_heal_pct) || 0.25;
-                            const maxHp = character.final_stats ? character.final_stats.hp : 1000;
-                            const healAmt = Math.floor(maxHp * triggerHealPct);
-                            character.current_hp = Math.min((character.current_hp || maxHp) + healAmt, maxHp);
-
-                            events.push({
-                                type: 'heal',
-                                sourceId: sourceEntityId,
-                                targetId: sourceEntityId,
-                                value: healAmt,
-                                skillName: skill.name
-                            });
-                        }
-
-                        // Apply Status Effects if any
-                        if (skill.status_effects && Array.isArray(skill.status_effects)) {
-                            skill.status_effects.forEach(eff => {
-                                const isBuff = (eff.effect_type || '').toLowerCase() === 'buff';
-                                const effTarget = isBuff ? character : targetEnemy;
-                                effTarget.active_buffs = effTarget.active_buffs || [];
-                                effTarget.active_buffs.push({ ...eff });
+                        } 
+                        else if (sType === 'heal' || sType === 'support' || sType === 'cleanse') {
+                            const triggerHealPct = parseFloat(enemySkill.trigger_heal_pct) || (sType === 'heal' ? 0.25 : 0);
+                            if (triggerHealPct > 0) {
+                                const maxHp = targetEntity.final_stats ? targetEntity.final_stats.hp : 1000;
+                                const healAmt = Math.floor(maxHp * triggerHealPct);
+                                targetEntity.current_hp = Math.min((targetEntity.current_hp || maxHp) + healAmt, maxHp);
 
                                 events.push({
-                                    type: 'effect_applied',
-                                    targetId: isBuff ? sourceEntityId : targetEntityId,
+                                    type: 'heal',
                                     sourceId: sourceEntityId,
-                                    skillName: skill.name,
-                                    effectName: eff.effect_name || eff.target_stat,
-                                    effectType: isBuff ? 'buff' : 'debuff'
+                                    targetId: targetEntityId,
+                                    value: healAmt,
+                                    skillName: enemySkill.name
                                 });
+                            }
+                        }
+                        
+                        if (sType === 'cleanse') {
+                            if (targetEntity.active_buffs) {
+                                targetEntity.active_buffs = targetEntity.active_buffs.filter(b => (b.effect_type || b.type || '').toLowerCase() !== 'debuff');
+                            }
+                            events.push({
+                                type: 'cleanse',
+                                sourceId: sourceEntityId,
+                                targetId: targetEntityId,
+                                skillName: enemySkill.name
                             });
+                        }
+
+                        // Apply Status Effects for enemy skill
+                        if (enemySkill.status_effects && Array.isArray(enemySkill.status_effects)) {
+                            for (const eff of enemySkill.status_effects) {
+                                if (!targetEntity.active_buffs) targetEntity.active_buffs = [];
+                                targetEntity.active_buffs.push({
+                                    effect_id: eff.id || eff.effect_id,
+                                    effect_name: eff.name || eff.effect_name,
+                                    effect_type: eff.type || eff.effect_type,
+                                    target_stat: eff.target_stat,
+                                    modifier_value: eff.modifier_value || eff.modifier,
+                                    duration_turns: eff.duration_turns || eff.duration,
+                                    is_dot: (eff.type || eff.effect_type || '').toLowerCase() === 'dot',
+                                    is_new: true // Prevent ticking down on the turn it's applied
+                                });
+                                events.push({
+                                    type: 'effect_applied',
+                                    sourceId: sourceEntityId,
+                                    targetId: targetEntityId,
+                                    effectName: eff.name || eff.effect_name,
+                                    effectType: eff.type || eff.effect_type
+                                });
+                            }
                         }
                     }
                 }
-
-                // Check Wave Clear after each character's action execution
-                this._checkWaveClear(state, events);
             }
 
-            // Check if enemies are still alive
-            const remainingAliveEnemies = (state.enemies || []).filter(e => (e.current_hp !== undefined ? e.current_hp : e.hp) > 0);
+            // ==========================================
+            // PHASE 3: END OF TURN PHASE (RESOLUTION)
+            // ==========================================
+            if (!waveCleared && remainingAliveEnemies.length > 0) {
+                // 1. Calculate DoT (Poison/Burn/dll)
+                const applyDoT = (entity, isEnemy) => {
+                    const entityId = isEnemy ? `enemy_${state.enemies.indexOf(entity)}` : (entity.slot || entity.id);
+                    if (entity.active_buffs && entity.active_buffs.length > 0) {
+                        entity.active_buffs.forEach(buff => {
+                            if ((buff.effect_type || '').toLowerCase() === 'dot') {
+                                const maxHp = entity.final_stats ? entity.final_stats.hp : 1000;
+                                const dotDamage = Math.floor(maxHp * (buff.value || 0.05));
+                                entity.current_hp = Math.max(0, entity.current_hp - dotDamage);
+                                events.push({
+                                    type: 'damage',
+                                    sourceId: entityId,
+                                    targetId: entityId,
+                                    value: dotDamage,
+                                    isCrit: false,
+                                    mitigation: 0,
+                                    skillName: buff.effect_name || 'Poison/Burn',
+                                    elementMultiplier: 1.0,
+                                    sourceElement: 'Neutral'
+                                });
+                            }
+                        });
+                    }
+                };
 
-            if (remainingAliveEnemies.length > 0) {
-                // TURN END RESOLUTION (If battle continues)
+                (state.player_party.characters || []).filter(c => (c.current_hp !== undefined ? c.current_hp : c.hp) > 0).forEach(c => applyDoT(c, false));
+                remainingAliveEnemies.filter(e => (e.current_hp !== undefined ? e.current_hp : e.hp) > 0).forEach(e => applyDoT(e, true));
 
-                // 1. Decrement skill cooldowns for all characters
-                // Skip karakter yang sudah di-decrement saat mereka terstun (anti double-decrement)
+                // Re-evaluate alive states after DoT damage
+                const prevWaveIndexPhase3 = state.current_wave_index;
+                this._checkWaveClear(state, events);
+                
+                // Jika wave berubah karena DoT, skip sisa Phase 3 karena _checkWaveClear sudah menghandle simulasi 1 Turn
+                if (state.current_wave_index > prevWaveIndexPhase3) {
+                    waveCleared = true;
+                }
+                
+                if (!waveCleared) {
+                    // 2. Tick Buffs/Debuffs (Kurangi durasi sebesar 1)
+                const tickBuffs = (entity, isEnemy) => {
+                    const entityId = isEnemy ? `enemy_${state.enemies.indexOf(entity)}` : (entity.slot || entity.id);
+                    if (entity.active_buffs && entity.active_buffs.length > 0) {
+                        for (let i = entity.active_buffs.length - 1; i >= 0; i--) {
+                            const buff = entity.active_buffs[i];
+                            const durKey = buff.duration !== undefined ? 'duration' : (buff.mse_duration !== undefined ? 'mse_duration' : (buff.duration_turns !== undefined ? 'duration_turns' : null));
+                            if (durKey && buff[durKey] > 0) {
+                                if (buff.is_new) {
+                                    buff.is_new = false; // Skip ticking down this turn
+                                } else {
+                                    buff[durKey] -= 1;
+                                    if (buff[durKey] <= 0) {
+                                        events.push({
+                                            type: 'effect_removed',
+                                            targetId: entityId,
+                                            effectName: buff.effect_name || buff.target_stat
+                                        });
+                                        entity.active_buffs.splice(i, 1);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                };
+
+                (state.player_party.characters || []).forEach(c => tickBuffs(c, false));
+                remainingAliveEnemies.forEach(e => tickBuffs(e, true));
+
+                // 3. Tick Cooldowns (kecuali skill yang baru dieksekusi)
                 if (state.player_party && Array.isArray(state.player_party.characters)) {
                     state.player_party.characters.forEach(char => {
-                        const charKey = char.inv_id || char.slot;
-                        if (stunnedCharacterSlots.has(charKey)) return; // Sudah di-decrement di blok STUN
-
                         if (char.skills) {
                             char.skills.forEach(s => {
                                 const execKey = `${char.inv_id || char.slot}_${s.id}`;
@@ -851,90 +1151,12 @@ class BattleService {
                                 }
                             });
                         }
-
-                        // Decrement active_buffs / active_debuffs duration on player characters
-                        if (char.active_buffs && char.active_buffs.length > 0) {
-                            for (let i = char.active_buffs.length - 1; i >= 0; i--) {
-                                const buff = char.active_buffs[i];
-                                // Support both 'duration' and 'mse_duration' keys
-                                const durKey = buff.duration !== undefined ? 'duration' : (buff.mse_duration !== undefined ? 'mse_duration' : null);
-                                if (durKey && buff[durKey] > 0) {
-                                    buff[durKey] -= 1;
-                                    if (buff[durKey] <= 0) {
-                                        events.push({
-                                            type: 'effect_removed',
-                                            targetId: char.slot || char.id,
-                                            effectName: buff.effect_name || buff.target_stat
-                                        });
-                                        char.active_buffs.splice(i, 1);
-                                    }
-                                }
-                            }
-                        }
                     });
                 }
 
-                // Decrement active_buffs on enemies (debuffs applied by skills)
-                for (const enemy of remainingAliveEnemies) {
-                    if (enemy.active_buffs && enemy.active_buffs.length > 0) {
-                        for (let i = enemy.active_buffs.length - 1; i >= 0; i--) {
-                            const buff = enemy.active_buffs[i];
-                            const durKey = buff.duration !== undefined ? 'duration' : (buff.mse_duration !== undefined ? 'mse_duration' : (buff.duration_turns !== undefined ? 'duration_turns' : null));
-                            if (durKey && buff[durKey] > 0) {
-                                buff[durKey] -= 1;
-                                if (buff[durKey] <= 0) {
-                                    events.push({
-                                        type: 'effect_removed',
-                                        targetId: `enemy_${state.enemies.indexOf(enemy)}`,
-                                        effectName: buff.effect_name || buff.target_stat
-                                    });
-                                    enemy.active_buffs.splice(i, 1);
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // 2. Enemy AI Counter-Attack & SA Gauge Gain from Taking Damage
-                for (const enemy of remainingAliveEnemies) {
-                    const aliveParty = (state.player_party.characters || []).filter(c => (c.current_hp !== undefined ? c.current_hp : c.hp) > 0);
-                    if (aliveParty.length === 0) break;
-
-                    // Select target (random or first alive)
-                    const targetChar = aliveParty[Math.floor(Math.random() * aliveParty.length)];
-                    const enemySkill = { name: enemy.name ? `${enemy.name} Strike` : 'Monster Attack', type: 'Damage', modifier: 1.0, element: enemy.element || 'Neutral' };
-                    const calcResult = DamageCalculatorService.calculateDamage(enemy, targetChar, enemySkill);
-
-                    targetChar.current_hp = Math.max(0, (targetChar.current_hp !== undefined ? targetChar.current_hp : targetChar.final_stats.hp) - calcResult.damage);
-
-                    // SA GAUGE MECHANIC WHEN ATTACKED:
-                    // Single target enemy attack -> +20% SA Gauge for the hit character!
-                    targetChar.current_sa = Math.min(100, (targetChar.current_sa || 0) + 20);
-
-                    events.push({
-                        type: 'damage',
-                        sourceId: `enemy_${Math.max(0, state.enemies.indexOf(enemy))}`,
-                        targetId: targetChar.slot || targetChar.id,
-                        value: calcResult.damage,
-                        isCrit: calcResult.isCrit,
-                        mitigation: calcResult.mitigationPercent,
-                        skillName: enemySkill.name,
-                        elementMultiplier: calcResult.elementMultiplier,
-                        sourceElement: enemy.element || 'Neutral'
-                    });
-
-                    events.push({
-                        type: 'effect_applied',
-                        targetId: targetChar.slot || targetChar.id,
-                        sourceId: `enemy_${Math.max(0, state.enemies.indexOf(enemy))}`,
-                        skillName: 'Hit Recovery',
-                        effectName: '+20% SA Bar',
-                        effectType: 'buff'
-                    });
-                }
-
-                // 3. Increment Turn Counter
+                // 4. Turn Counter: Naikkan current_turn + 1
                 state.current_turn = (state.current_turn || 1) + 1;
+                }
             }
 
             // Re-hydrate live asset paths for client display

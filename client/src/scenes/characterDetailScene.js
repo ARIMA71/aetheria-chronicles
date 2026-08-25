@@ -364,14 +364,32 @@ export default class CharacterDetailScene extends Phaser.Scene {
                 };
 
                 const updateQty = (delta) => {
-                    qty += delta;
-                    if (qty < 1) qty = 1;
-                    if (qty > crystalCount) qty = crystalCount > 0 ? crystalCount : 1;
+                    let tempQty = qty + delta;
+                    if (tempQty < 1) tempQty = 1;
+                    if (tempQty > crystalCount) tempQty = crystalCount > 0 ? crystalCount : 1;
+
+                    const maxLvl = this.calculateMaxLevel();
+                    let maxExpReq = 0;
+                    for (let i = 2; i <= maxLvl; i++) {
+                        maxExpReq += Math.floor(50 * Math.pow(i, 1.6));
+                    }
+
+                    const expNeeded = maxExpReq - currentExp;
+                    if (expNeeded > 0) {
+                        const maxQtyToMaxLvl = Math.ceil(expNeeded / 80000);
+                        if (tempQty > maxQtyToMaxLvl) {
+                            tempQty = maxQtyToMaxLvl;
+                        }
+                    } else {
+                        tempQty = 0;
+                    }
+
+                    qty = tempQty;
                     qtyText.setText(`${qty}`);
                     costText.setText(`Biaya: ${qty * costPerItem} Gold`);
 
                     const tLvl = calculateTargetLvl(qty);
-                    targetLevelText.setText(`Target Level: ${tLvl}${tLvl === this.calculateMaxLevel() ? ' (MAX)' : ''}`);
+                    targetLevelText.setText(`Target Level: ${tLvl}${tLvl >= maxLvl ? ' (MAX)' : ''}`);
                 };
                 updateQty(0); // Initialize text
 

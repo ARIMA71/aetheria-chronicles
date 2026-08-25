@@ -40,10 +40,12 @@ const LevelingSystem = {
             return 20; 
         }
         if (rarity === 'SSR') {
-            return 60; 
+            // Base max 40, LB1 unlocks up to 60
+            return Math.min(60, 40 + (limitBreakLevel * 20)); 
         }
         if (rarity === 'SR') {
-            return 50; 
+            // Base max 30, LB1 unlocks up to 50
+            return Math.min(50, 30 + (limitBreakLevel * 20)); 
         }
         return 1; // Fallback
     },

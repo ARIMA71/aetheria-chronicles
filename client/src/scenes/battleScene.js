@@ -35,6 +35,9 @@ export default class BattleScene extends Phaser.Scene {
         if (this._attackBtnContainer) {
             this._attackBtnContainer.setVisible(newTurn === "player");
         }
+        if (this._globalAutoBtnContainer) {
+            this._globalAutoBtnContainer.setVisible(newTurn === "player");
+        }
     }
     create() {
         if (!checkSession(this)) return;
@@ -551,6 +554,34 @@ export default class BattleScene extends Phaser.Scene {
             if (this.turn === "player" && !this.attackBtnLocked) this.playerAttack();
         });
         this._attackBtnContainer.setVisible(this.turn === "player");
+
+        // GLOBAL AUTO BUTTON
+        this.globalAutoState = false;
+        this._globalAutoBtnContainer = this.add.container(0, 0);
+        const gab = this.add.rectangle(70, 505, 100, 40, THEME.BG).setDepth(10);
+        gab.setStrokeStyle(1, THEME.BORDER);
+        const gat = this.add.text(70, 505, "AUTO: OFF", { fontSize: "12px", color: THEME.TEXT_SECONDARY, fontStyle: "bold", align: "center" }).setOrigin(0.5).setDepth(10);
+        this._globalAutoBtnContainer.add([gab, gat]);
+        gab.setInteractive(); gab.on("pointerdown", () => {
+            if (this.turn === "player") {
+                this.globalAutoState = !this.globalAutoState;
+                gat.setText("AUTO: " + (this.globalAutoState ? "ON" : "OFF"));
+                gat.setColor(this.globalAutoState ? THEME.TEXT_PRIMARY : THEME.TEXT_SECONDARY);
+                gab.setStrokeStyle(1, this.globalAutoState ? THEME.AETHER : THEME.BORDER);
+                
+                // Toggle all players
+                this.players.forEach(p => {
+                    p.isAuto = this.globalAutoState;
+                    p.updateActionBadge();
+                });
+                
+                // Update local action window auto button if open
+                if (this.activePlayer) {
+                    this._renderActionWindow();
+                }
+            }
+        });
+        this._globalAutoBtnContainer.setVisible(this.turn === "player");
     }
 
     _buildLayer4() {
@@ -845,30 +876,49 @@ export default class BattleScene extends Phaser.Scene {
             onComplete: () => { sprite.x = ox; }
         });
     }
-    playCharacterAttackAnim(p) {
-        const sprite = p.battleSprite || p.spriteObj;
-        if (!sprite) return;
-
-        const baseX = p._spriteBaseX !== undefined ? p._spriteBaseX : sprite.x;
-        const baseY = p._spriteBaseY !== undefined ? p._spriteBaseY : sprite.y;
-
-        // Forward Lunge towards enemy (Left)
-        this.tweens.add({
-            targets: sprite,
-            x: baseX - 80,
-            y: baseY + 10,
-            duration: 180,
-            ease: 'Power2',
-            onComplete: () => {
-                // Return to base position
-                this.tweens.add({
-                    targets: sprite,
-                    x: baseX,
-                    y: baseY,
-                    duration: 220,
-                    ease: 'Power1'
-                });
+    playCharacterLungeAnim(p) {
+        return new Promise(resolve => {
+            const sprite = p.battleSprite || p.spriteObj;
+            if (!sprite) {
+                resolve();
+                return;
             }
+
+            const baseX = p._spriteBaseX !== undefined ? p._spriteBaseX : sprite.x;
+            const baseY = p._spriteBaseY !== undefined ? p._spriteBaseY : sprite.y;
+
+            // Forward Lunge towards enemy (Left)
+            this.tweens.add({
+                targets: sprite,
+                x: baseX - 80,
+                y: baseY + 10,
+                duration: 180,
+                ease: 'Power2',
+                onComplete: resolve
+            });
+        });
+    }
+
+    playCharacterReturnAnim(p) {
+        return new Promise(resolve => {
+            const sprite = p.battleSprite || p.spriteObj;
+            if (!sprite) {
+                resolve();
+                return;
+            }
+
+            const baseX = p._spriteBaseX !== undefined ? p._spriteBaseX : sprite.x;
+            const baseY = p._spriteBaseY !== undefined ? p._spriteBaseY : sprite.y;
+
+            // Return to base position
+            this.tweens.add({
+                targets: sprite,
+                x: baseX,
+                y: baseY,
+                duration: 220,
+                ease: 'Power1',
+                onComplete: resolve
+            });
         });
     }
     playStunVibrateAnim(p) {
@@ -1443,7 +1493,7 @@ export default class BattleScene extends Phaser.Scene {
         }
 
         for (const ev of events) {
-            await new Promise(resolve => {
+            await new Promise(async resolve => {
                 let delay = 500;
 
                 let target = null;
@@ -1465,12 +1515,14 @@ export default class BattleScene extends Phaser.Scene {
                             if (ev.modeBar !== undefined && target) target.modeBar = ev.modeBar;
                             if (ev.modeState !== undefined && target) target.modeState = ev.modeState;
                             this._refreshEnemyHUD();
-                            if (target && ev.skillName !== 'STUNNED') target.playHitAnim();
                         } else {
                             target.refreshVisual();
-                            this.playSpriteHitAnim(target);
                         }
+
                         if (ev.isDoT) {
+                            if (this.enemies.includes(target) && target && ev.skillName !== 'STUNNED') target.playHitAnim();
+                            else if (!this.enemies.includes(target)) this.playSpriteHitAnim(target);
+
                             const colorStr = ev.effectName === 'Burn' ? "#e67e22" : "#9b59b6";
                             const emoji = ev.effectName === 'Burn' ? "🔥" : "💀";
                             const logSource = String(target.slot || target.monsterId).startsWith('enemy') ? 'enemy' : 'player';
@@ -1491,14 +1543,22 @@ export default class BattleScene extends Phaser.Scene {
                                 logText = `[${skillDisplay}] ${sourceName} attacks!`;
                                 this.showLog(`${sourceName} used ${skillDisplay}!`, 'popup');
 
-                                // Lunge Animation for attacking player character
+                                // Lunge Animation for attacking player character (AWAIT)
                                 if (source && source.battleSprite) {
-                                    this.playCharacterAttackAnim(source);
+                                    await this.playCharacterLungeAnim(source);
                                 }
 
+                                if (this.enemies.includes(target) && target && ev.skillName !== 'STUNNED') target.playHitAnim();
+                                else if (!this.enemies.includes(target)) this.playSpriteHitAnim(target);
+
                                 this.showFloatingDamage(target, ev.value, ev.isCrit, ev.elementMultiplier, ev.sourceElement);
+
+                                // Return Animation (AWAIT)
+                                if (source && source.battleSprite) {
+                                    await this.playCharacterReturnAnim(source);
+                                }
                             }
-                            delay = ev.skillName === 'STUNNED' ? 400 : 850;
+                            delay = ev.skillName === 'STUNNED' ? 400 : 250;
                         }
                     }
                 } else if (ev.type === 'heal') {
@@ -1548,9 +1608,18 @@ export default class BattleScene extends Phaser.Scene {
                         this._refreshEnemyHUD();
                         delay = 800;
                     }
+                } else if (ev.type === 'stun_skip') {
+                    if (target) {
+                        const sourceName = target.charName || (target.monsterId ? 'ENEMY' : 'Character');
+                        this.showLog(`💫 ${sourceName} is STUNNED and cannot move!`, 'popup');
+                        this.playStunVibrateAnim(target);
+                        delay = 400;
+                    }
                 } else if (ev.type === 'log') {
                     this.showLog(ev.message, 'system');
                     delay = 600;
+                } else if (ev.type === 'delay') {
+                    delay = ev.delayMs || 500;
                 } else if (ev.type === 'wave_change') {
                     waveChanged = true;
                     this._isWaveChanging = true;
@@ -1801,6 +1870,8 @@ export default class BattleScene extends Phaser.Scene {
         this.setTurn("attacking");
         this.closeActionWindow();
 
+        await new Promise(r => setTimeout(r, 500));
+
         try {
             const res = await BattleApi.processTurnBatch(this.bsId, character_actions);
             if (res.status === 'success') {
@@ -1821,9 +1892,7 @@ export default class BattleScene extends Phaser.Scene {
             return;
         }
 
-        if (this.turn === "player") return;
-
-        this.time.delayedCall(800, () => this._processEnemyTurn());
+        this.setTurn("player");
     }
 
     _syncState(state) {
@@ -1842,8 +1911,17 @@ export default class BattleScene extends Phaser.Scene {
                 const pObj = this.players.find(p => p.slot === pd.slot || p.id === pd.id);
                 if (pObj) {
                     pObj.hp = pd.current_hp !== undefined ? pd.current_hp : pObj.hp;
-                    if (pd.current_sp !== undefined) pObj.specialBar = pd.current_sp;
-                    if (pd.cooldowns) pObj.cooldowns = { ...pd.cooldowns };
+                    if (pd.current_sa !== undefined) pObj.specialBar = pd.current_sa;
+                    
+                    if (pd.skills) {
+                        pObj.cooldowns = {};
+                        pd.skills.forEach(sk => {
+                            if (sk.current_cooldown !== undefined && sk.current_cooldown > 0) {
+                                pObj.cooldowns[sk.id] = sk.current_cooldown;
+                            }
+                        });
+                    }
+
                     if (pd.active_buffs) pObj.activeEffects = [...pd.active_buffs];
                     else pObj.activeEffects = [];
                     pObj.refreshVisual();
