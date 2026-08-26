@@ -81,8 +81,6 @@ export default class Enemy extends Phaser.GameObjects.Container {
         let texKey = `mons_${data.id || data.monster_id}`;
 
         this._glow = scene.add.rectangle(0, 0, 138, 138, 0xffffff).setAlpha(0); // Glow Background
-        this._effectIndicators = scene.add.container(0, -60);
-
         if (!this._spritePath || !scene.textures.exists(texKey)) {
             const shadow = scene.add.rectangle(5, 5, 130, 130, 0x000000).setAlpha(0.4);
             this._body = scene.add.rectangle(0, 0, 130, 130, 0x1c0a0a);
@@ -94,12 +92,11 @@ export default class Enemy extends Phaser.GameObjects.Container {
             const h = scene.add.line(0, 0, -40, 0, 40, 0, elemColor).setAlpha(0.25);
             const v = scene.add.line(0, 0, 0, -40, 0, 40, elemColor).setAlpha(0.25);
 
-            this.add([shadow, this._glow, this._body, inner, h, v, this._effectIndicators]);
+            this.add([shadow, this._glow, this._body, inner, h, v]);
         } else {
             this.battleSprite = scene.add.sprite(0, 0, texKey);
             const baseScale = this.isBoss ? 1.5 : 0.75;
             this.battleSprite.setScale(baseScale);
-            this._effectIndicators.y = -(this.battleSprite.displayHeight / 2) - 15;
 
             scene.tweens.add({
                 targets: this.battleSprite,
@@ -110,7 +107,7 @@ export default class Enemy extends Phaser.GameObjects.Container {
                 ease: 'Sine.easeInOut'
             });
             // NO black box shadow added for real sprites!
-            this.add([this._glow, this.battleSprite, this._effectIndicators]);
+            this.add([this._glow, this.battleSprite]);
         }
     }
 
@@ -198,35 +195,18 @@ export default class Enemy extends Phaser.GameObjects.Container {
 
     /** Refresh visual indikator efek status aktif pada musuh */
     refreshVisual() {
-        this._effectIndicators.removeAll(true);
-        const visibleEffects = this.activeEffects.filter(e =>
-            ['ATK', 'DEF', 'CRIT', 'STUN', 'POISON'].includes(e.target_stat)
-        );
-
-        const sups = { 0: '', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹' };
-        visibleEffects.forEach((e, idx) => {
-            const isBuff = (e.effect_type || '').toLowerCase() === 'buff';
-            const color = isBuff ? '#f1c40f' : '#7ec8e3'; // Kuning untuk Buff, Biru Muda untuk Debuff
-
-            let emoji = '❓';
-            if (e.target_stat === 'ATK') emoji = '⚔️';
-            else if (e.target_stat === 'DEF') emoji = '🛡️';
-            else if (e.target_stat === 'CRIT') emoji = '✨';
-            else if (e.target_stat === 'STUN') emoji = '💫';
-            else if (e.target_stat === 'POISON') emoji = '🤢';
-
-            const durSup = sups[e.duration] || e.duration || '';
-            const label = `${emoji}${durSup}`;
-
-            const txt = this.scene.add.text(
-                (idx - Math.floor(visibleEffects.length / 2)) * 32,
-                0,
-                label,
-                { fontSize: '10px', color, fontStyle: 'bold', stroke: '#000', strokeThickness: 2 }
-            ).setOrigin(0.5, 0.5);
-
-            this._effectIndicators.add(txt);
-        });
+        // Only glow update remains here, effect indicators moved to BattleScene HUD
+        if (this._glow) {
+            if (this.modeState === 'enraged') {
+                this._glow.setAlpha(0.4);
+                this._glow.setFillStyle(0xff0000);
+            } else if (this.modeState === 'exhausted') {
+                this._glow.setAlpha(0.2);
+                this._glow.setFillStyle(0x3498db);
+            } else {
+                this._glow.setAlpha(0);
+            }
+        }
     }
 
     /**

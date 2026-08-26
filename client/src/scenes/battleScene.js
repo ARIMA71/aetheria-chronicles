@@ -97,6 +97,12 @@ export default class BattleScene extends Phaser.Scene {
         this.potionCount = j.data.potion_count !== undefined ? j.data.potion_count : 0;
         this.healsRemaining = Math.min(3, this.potionCount);
         this.fullPotionCount = j.data.full_potion_count !== undefined ? j.data.full_potion_count : 0;
+        
+        // Initialize wave counter
+        this.totalWaves = j.data.waves ? j.data.waves.length : 1;
+        this.currentWave = 1;
+        this.currentTurn = 1;
+        this.aetherGauge = 0;
 
         let assetsToLoad = 0;
         const chars = j.data.player_party.characters.slice(0, 4);
@@ -204,6 +210,15 @@ export default class BattleScene extends Phaser.Scene {
         // Restore turn counter
         this.currentTurn = state.current_turn || 1;
         this.aetherGauge = state.aether_gauge || 0;
+        
+        this.totalWaves = state.waves ? state.waves.length : 1;
+        if (state.current_wave_index !== undefined) {
+             this.currentWave = state.current_wave_index + 1;
+        } else if (state.wave !== undefined) {
+             this.currentWave = state.wave;
+        } else {
+             this.currentWave = 1;
+        }
 
         let assetsToLoad = 0;
         const chars = state.player_party.characters.slice(0, 4);
@@ -388,13 +403,21 @@ export default class BattleScene extends Phaser.Scene {
 
     _updateTurnText() {
         if (!this.turnText) return;
-        let txt = "TURN " + this.currentTurn;
-        if (this.currentWaveLabel) txt += "  |  " + this.currentWaveLabel;
-        this.turnText.setText(txt);
+        this.turnText.setText("TURN " + this.currentTurn);
+        if (this.waveText && this.totalWaves > 1) {
+            this.waveText.setText(`WAVE ${this.currentWave}/${this.totalWaves}`);
+        }
     }
     _buildLayer1() {
         this.turnText = this.add.text(20, 26, "TURN 1", { fontSize: "13px", color: THEME.TEXT_SECONDARY, fontStyle: "bold" }).setOrigin(0, 0.5);
-        this.timerText = this.add.text(CX, 26, "44:59", { fontSize: "18px", color: THEME.TEXT_PRIMARY, fontStyle: "bold" }).setOrigin(0.5, 0.5);
+        
+        const timeX = this.totalWaves > 1 ? 300 : CX;
+        
+        if (this.totalWaves > 1) {
+            this.waveText = this.add.text(160, 26, `WAVE ${this.currentWave}/${this.totalWaves}`, { fontSize: "13px", color: THEME.TEXT_SECONDARY, fontStyle: "bold", align: "center" }).setOrigin(0.5, 0.5);
+        }
+        
+        this.timerText = this.add.text(timeX, 26, "44:59", { fontSize: "18px", color: THEME.TEXT_PRIMARY, fontStyle: "bold" }).setOrigin(0.5, 0.5);
 
         const mb = this.add.rectangle(435, 26, 50, 34, THEME.PANEL).setInteractive();
         mb.setStrokeStyle(1, THEME.BORDER);
@@ -425,6 +448,13 @@ export default class BattleScene extends Phaser.Scene {
             const hpBarBg = this.add.rectangle(65, baseY + 4, 360, 12, THEME.BG).setOrigin(0, 0.5).setStrokeStyle(2, THEME.BORDER);
             const hpFill = this.add.rectangle(65, baseY + 4, 356, 10, THEME.DAMAGE).setOrigin(0, 0.5);
             const hpEnrage = this.add.rectangle(65, baseY + 4, 360, 12, 0, 0).setOrigin(0, 0.5).setAlpha(0);
+            
+            const effectIndicators = this.add.container(65, baseY - 12);
+            
+            const hitArea = this.add.rectangle(65, baseY + 4, 360, 24, 0x000000, 0).setOrigin(0, 0.5);
+            hitArea.setInteractive({ useHandCursor: true });
+            hitArea.on('pointerdown', () => this._showEnemyStatusModal(enemy));
+
 
             const modeBarBg = this.add.rectangle(65, baseY + 14, 360, 4, THEME.BG).setOrigin(0, 0.5).setStrokeStyle(1, THEME.BORDER);
             const modeFill = this.add.rectangle(65, baseY + 14, 0, 4, 0xffffff).setOrigin(0, 0.5);
@@ -448,7 +478,7 @@ export default class BattleScene extends Phaser.Scene {
             const nameText = this.add.text(enemy.x, nameY, enemy.charName + " \nLv." + enemy.level, { fontSize: "11px", color: "#ffffff", fontStyle: "bold", align: "center" }).setOrigin(0.5, 0);
 
             this.enemyHUDs.push({
-                icon, elemText, hpPct, hpBarBg, hpFill, hpEnrage, modeBarBg, modeFill, caSegmentsBg, caSegments, nameText
+                icon, elemText, hpPct, hpBarBg, hpFill, hpEnrage, modeBarBg, modeFill, caSegmentsBg, caSegments, nameText, effectIndicators, hitArea
             });
         });
     }
@@ -482,6 +512,37 @@ export default class BattleScene extends Phaser.Scene {
             if (hud.caSegments) {
                 const caColor = (enemy.modeState === "exhausted") ? 0x3498db : 0xffaa00;
                 hud.caSegments.forEach((f, i) => { f.setFillStyle(caColor); f.setAlpha(i < enemy.caBar ? 1 : 0); });
+            }
+            
+            if (hud.effectIndicators) {
+                hud.effectIndicators.removeAll(true);
+                const visibleEffects = enemy.activeEffects || [];
+                const sups = { 0: '', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹' };
+                visibleEffects.forEach((e, idx) => {
+                    const isBuff = (e.effect_type || '').toLowerCase() === 'buff';
+                    const color = isBuff ? '#f1c40f' : '#7ec8e3'; 
+
+                    let emoji = '❓';
+                    const stat = (e.target_stat || '').toUpperCase();
+                    if (stat === 'ATK') emoji = '⚔️';
+                    else if (stat === 'DEF') emoji = '🛡️';
+                    else if (stat === 'CRIT') emoji = '✨';
+                    else if (stat === 'STUN') emoji = '💫';
+                    else if (stat === 'POISON') emoji = '🤢';
+                    else if (stat === 'BURN') emoji = '🔥';
+                    else if (stat === 'HP') emoji = '💚';
+                    else if (stat === 'AGI') emoji = '💨';
+
+                    const durSup = sups[e.duration] || e.duration || '';
+                    const label = `${emoji}${durSup}`;
+
+                    const txt = this.add.text(
+                        idx * 24, 0, label, 
+                        { fontSize: '11px', color, fontStyle: 'bold', stroke: '#000', strokeThickness: 3 }
+                    ).setOrigin(0, 0.5);
+
+                    hud.effectIndicators.add(txt);
+                });
             }
 
             if (hud.nameText) {
@@ -1899,11 +1960,16 @@ export default class BattleScene extends Phaser.Scene {
         if (!state) return;
 
         // Sync Turn & Wave
+        if (state.current_wave_index !== undefined) {
+            this.currentWave = state.current_wave_index + 1;
+        } else if (state.wave !== undefined) {
+            this.currentWave = state.wave;
+        }
+        
         if (state.current_turn !== undefined) {
             this.currentTurn = state.current_turn;
-            this._updateTurnText();
+            this._updateTurnText(); // Akan mengupdate Turn Text dan Wave Text dengan benar
         }
-        if (state.wave !== undefined) this.currentWave = state.wave;
 
         // Sync Players
         if (state.player_party && state.player_party.characters) {
@@ -2271,5 +2337,68 @@ export default class BattleScene extends Phaser.Scene {
         if (this._menu && this._menu.active) return;
         this._menu = new BattleMenu(this, CX, H / 2, W, H, THEME);
         this._menu.on('destroy', () => { this._menu = null; });
+    }
+    
+    _showEnemyStatusModal(enemy) {
+        if (!enemy || enemy.hp <= 0) return;
+        
+        const modalContainer = this.add.container(0, 0).setDepth(150);
+
+        const cover = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.7).setInteractive();
+        cover.on("pointerdown", (pointer, x, y, event) => {
+            event.stopPropagation();
+        });
+        modalContainer.add(cover);
+
+        const windowBg = this.add.rectangle(CX, H / 2, 380, 400, 0x0d1b2a);
+        windowBg.setStrokeStyle(2, 0xe74c3c);
+        modalContainer.add(windowBg);
+
+        const title = this.add.text(CX, H / 2 - 170, `${enemy.charName} - STATUS`, { fontSize: "16px", color: "#e74c3c", fontStyle: "bold" }).setOrigin(0.5);
+        modalContainer.add(title);
+
+        let currentY = H / 2 - 130;
+        
+        const visibleEffects = enemy.activeEffects || [];
+        if (visibleEffects.length === 0) {
+            const noEffectTxt = this.add.text(CX, currentY + 50, "No Active Status Effects", { fontSize: "13px", color: "#aaaaaa", fontStyle: "italic" }).setOrigin(0.5);
+            modalContainer.add(noEffectTxt);
+        } else {
+            visibleEffects.forEach((e) => {
+                const isBuff = (e.effect_type || '').toLowerCase() === 'buff';
+                const color = isBuff ? '#f1c40f' : '#7ec8e3'; 
+
+                let emoji = '❓';
+                const stat = (e.target_stat || '').toUpperCase();
+                if (stat === 'ATK') emoji = '⚔️';
+                else if (stat === 'DEF') emoji = '🛡️';
+                else if (stat === 'CRIT') emoji = '✨';
+                else if (stat === 'STUN') emoji = '💫';
+                else if (stat === 'POISON') emoji = '🤢';
+                else if (stat === 'BURN') emoji = '🔥';
+                else if (stat === 'HP') emoji = '💚';
+                else if (stat === 'AGI') emoji = '💨';
+
+                const effectName = e.effect_name || e.target_stat;
+                const durText = e.duration ? `(${e.duration} Turns)` : "(Permanent)";
+                const valueText = e.value ? `Value: ${Math.floor(e.value * 100)}%` : "";
+                
+                const box = this.add.rectangle(CX, currentY, 340, 40, 0x111111).setStrokeStyle(1, 0x333333);
+                const emojiTxt = this.add.text(CX - 150, currentY, emoji, { fontSize: "16px" }).setOrigin(0.5);
+                const nameTxt = this.add.text(CX - 120, currentY, `${effectName} ${durText}`, { fontSize: "12px", color: color, fontStyle: "bold" }).setOrigin(0, 0.5);
+                const valTxt = this.add.text(CX + 150, currentY, valueText, { fontSize: "11px", color: "#aaaaaa" }).setOrigin(1, 0.5);
+                
+                modalContainer.add([box, emojiTxt, nameTxt, valTxt]);
+                currentY += 45;
+            });
+        }
+        
+        const closeBtn = this.add.rectangle(CX, H / 2 + 160, 100, 30, 0x2a0d0d).setStrokeStyle(1.5, 0xe74c3c).setInteractive({ useHandCursor: true });
+        const closeText = this.add.text(CX, H / 2 + 160, "CLOSE", { fontSize: "11px", color: "#ff8a80", fontStyle: "bold" }).setOrigin(0.5);
+        modalContainer.add([closeBtn, closeText]);
+
+        closeBtn.on("pointerover", () => closeBtn.setFillStyle(0x401515));
+        closeBtn.on("pointerout", () => closeBtn.setFillStyle(0x2a0d0d));
+        closeBtn.on("pointerdown", () => modalContainer.destroy());
     }
 }
