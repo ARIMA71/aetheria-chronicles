@@ -621,7 +621,7 @@ export default class BattleScene extends Phaser.Scene {
         // 3. BATTLE LOG BUTTON (Center Y = 830, Width = 440)
         this._logBtnBg = this.add.rectangle(CX, 812, 440, 30, THEME.PANEL);
         this._logBtnBg.setStrokeStyle(1, THEME.BORDER);
-        this.add.text(CX, 812, "📜 BATTLE LOG", { fontSize: "12px", color: THEME.TEXT_SECONDARY, fontStyle: "bold", letterSpacing: 1 }).setOrigin(0.5);
+        this.add.text(CX, 812, "BATTLE LOG", { fontSize: "12px", color: THEME.TEXT_SECONDARY, fontStyle: "bold", letterSpacing: 1 }).setOrigin(0.5);
         this._logBtnBg.setInteractive();
         this._logBtnBg.on("pointerdown", () => {
             this.logOverlay.setVisible(true);
@@ -2150,7 +2150,7 @@ export default class BattleScene extends Phaser.Scene {
     checkVictory() {
         if (this.enemies.every(e => e.hp <= 0)) {
             this.turn = "none";
-            this._showCenterAnim("VICTORY! 🎉", "#ffeb3b");
+            this._showCenterAnim("VICTORY!", "#ffeb3b");
             this.time.delayedCall(1500, () => {
                 this.scene.stop();
                 this.scene.start('LoadingScene', {

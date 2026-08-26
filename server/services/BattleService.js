@@ -683,9 +683,35 @@ class BattleService {
                 return targetObj.entity.slot || targetObj.entity.id || 'mc';
             };
 
+            const tickBuffsForPhase = (entity, isEnemy, currentPhase) => {
+                const entityId = isEnemy ? `enemy_${state.enemies.indexOf(entity)}` : (entity.slot || entity.id || 'mc');
+                if (entity.active_buffs && entity.active_buffs.length > 0) {
+                    for (let i = entity.active_buffs.length - 1; i >= 0; i--) {
+                        const buff = entity.active_buffs[i];
+                        if (buff.applied_in !== currentPhase) continue;
+                        
+                        const durKey = buff.duration !== undefined ? 'duration' : (buff.mse_duration !== undefined ? 'mse_duration' : (buff.duration_turns !== undefined ? 'duration_turns' : null));
+                        if (durKey && buff[durKey] > 0) {
+                            buff[durKey] -= 1;
+                            if (buff[durKey] <= 0) {
+                                events.push({
+                                    type: 'effect_removed',
+                                    targetId: entityId,
+                                    effectName: buff.effect_name || buff.target_stat
+                                });
+                                entity.active_buffs.splice(i, 1);
+                            }
+                        }
+                    }
+                }
+            };
+
             // ==========================================
             // PHASE 1: PLAYER PHASE
             // ==========================================
+            (state.player_party.characters || []).forEach(c => tickBuffsForPhase(c, false, 'player'));
+            state.enemies.forEach(e => tickBuffsForPhase(e, true, 'player'));
+            
             let waveCleared = false;
             for (const actionInfo of characterActions) {
                 const { slot, action_type, skill_id, target_index } = actionInfo;
@@ -861,7 +887,7 @@ class BattleService {
                         effTargets.forEach(tgtObj => {
                             const targetEntity = tgtObj.entity;
                             targetEntity.active_buffs = targetEntity.active_buffs || [];
-                            targetEntity.active_buffs.push({ ...eff });
+                            targetEntity.active_buffs.push({ ...eff, applied_in: 'player' });
 
                             events.push({
                                 type: 'effect_applied',
@@ -890,6 +916,9 @@ class BattleService {
             // ==========================================
             // PHASE 2: ENEMY PHASE
             // ==========================================
+            (state.player_party.characters || []).forEach(c => tickBuffsForPhase(c, false, 'enemy'));
+            state.enemies.forEach(e => tickBuffsForPhase(e, true, 'enemy'));
+
             const remainingAliveEnemies = (state.enemies || []).filter(e => (e.current_hp !== undefined ? e.current_hp : e.hp) > 0);
             if (!waveCleared && remainingAliveEnemies.length > 0) {
                 events.push({ type: 'delay', delayMs: 500 });
@@ -1054,7 +1083,7 @@ class BattleService {
                                     modifier_value: eff.modifier_value || eff.modifier,
                                     duration_turns: eff.duration_turns || eff.duration,
                                     is_dot: (eff.type || eff.effect_type || '').toLowerCase() === 'dot',
-                                    is_new: true // Prevent ticking down on the turn it's applied
+                                    applied_in: 'enemy'
                                 });
                                 events.push({
                                     type: 'effect_applied',
@@ -1111,34 +1140,8 @@ class BattleService {
                 }
                 
                 if (!waveCleared) {
-                    // 2. Tick Buffs/Debuffs (Kurangi durasi sebesar 1)
-                const tickBuffs = (entity, isEnemy) => {
-                    const entityId = isEnemy ? `enemy_${state.enemies.indexOf(entity)}` : (entity.slot || entity.id);
-                    if (entity.active_buffs && entity.active_buffs.length > 0) {
-                        for (let i = entity.active_buffs.length - 1; i >= 0; i--) {
-                            const buff = entity.active_buffs[i];
-                            const durKey = buff.duration !== undefined ? 'duration' : (buff.mse_duration !== undefined ? 'mse_duration' : (buff.duration_turns !== undefined ? 'duration_turns' : null));
-                            if (durKey && buff[durKey] > 0) {
-                                if (buff.is_new) {
-                                    buff.is_new = false; // Skip ticking down this turn
-                                } else {
-                                    buff[durKey] -= 1;
-                                    if (buff[durKey] <= 0) {
-                                        events.push({
-                                            type: 'effect_removed',
-                                            targetId: entityId,
-                                            effectName: buff.effect_name || buff.target_stat
-                                        });
-                                        entity.active_buffs.splice(i, 1);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                };
+                    // Tick Buffs/Debuffs is now handled at the start of Player/Enemy phases
 
-                (state.player_party.characters || []).forEach(c => tickBuffs(c, false));
-                remainingAliveEnemies.forEach(e => tickBuffs(e, true));
 
                 // 3. Tick Cooldowns (kecuali skill yang baru dieksekusi)
                 if (state.player_party && Array.isArray(state.player_party.characters)) {
@@ -1413,7 +1416,8 @@ class BattleService {
                     effect_name: 'DEF Down',
                     target_stat: 'def',
                     modifier_value: -0.25,
-                    duration_turns: 2
+                    duration_turns: 2,
+                    applied_in: 'player'
                 });
 
                 events.push({
@@ -1720,8 +1724,7 @@ class BattleService {
                     effectTargets.forEach(effTarget => {
                         if (effTarget && ((effTarget.current_hp !== undefined && effTarget.current_hp > 0) || (effTarget.hp !== undefined && effTarget.hp > 0))) {
                             if (!effTarget.active_buffs) effTarget.active_buffs = [];
-                            const isEnemySource = String(sourceId).startsWith('enemy');
-                            effTarget.active_buffs.push({ ...eff, applied_by_enemy_this_turn: isEnemySource });
+                            effTarget.active_buffs.push({ ...eff, applied_in: isEnemySource ? 'enemy' : 'player' });
                             
                             let tid = 'unknown';
                             if (effTarget.id !== undefined && state.enemies.find(e => e.id === effTarget.id)) {
