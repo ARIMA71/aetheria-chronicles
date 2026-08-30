@@ -27,27 +27,7 @@ export default class BattleApi {
         }
     }
 
-    /**
-     * Fetches AI decision for the boss based on the current battle state.
-     * @param {number|string} bsId - Battle Session ID
-     * @param {object} battleState - Current state snapshot
-     * @param {Array} bossSkills - Array of AI behaviors
-     * @returns {Promise<object>} JSON response from server
-     */
-    static async getAiDecision(bsId, battleState, bossSkills) {
-        try {
-            const res = await fetch(`${API_BASE}/ai-decision`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ bsId, battleState, bossSkills })
-            });
-            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-            return await res.json();
-        } catch (error) {
-            console.error("Failed to fetch AI decision:", error);
-            throw error; // Will be caught by caller to trigger AI Fallback
-        }
-    }
+
 
     /**
      * Saves the final battle result (victory/defeat) to the server.
@@ -85,45 +65,7 @@ export default class BattleApi {
         }
     }
 
-    /**
-     * Sinkronisasi state pertempuran ke server (fire-and-forget di Turn End).
-     * Tidak menunggu response — jika gagal, hanya log ke console.
-     * @param {number|string} bsId
-     * @param {object} battleState
-     * @param {number} remainingTime
-     */
-    static syncBattleState(bsId, battleState, remainingTime) {
-        fetch(`${API_BASE}/sync`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                bsId,
-                battleStateJson: battleState,
-                remainingTime
-            })
-        }).catch(err => console.error("[syncState] Fire-and-forget DB write failed:", err.message));
-    }
 
-    /**
-     * Executes a battle action on the server.
-     * @param {number|string} bsId
-     * @param {object} actionData
-     * @returns {Promise<object>} JSON response from server
-     */
-    static async executeAction(bsId, actionData) {
-        try {
-            const res = await fetch(`${API_BASE}/action`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ bsId, actionData })
-            });
-            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-            return await res.json();
-        } catch (error) {
-            console.error("Failed to execute action:", error);
-            throw error;
-        }
-    }
 
     /**
      * Player menyerah. Sesi diubah ke FAILED. Stamina hangus.
@@ -146,25 +88,7 @@ export default class BattleApi {
         }
     }
 
-    /**
-     * Ends the current turn and resolves pending server-side state transitions.
-     * @param {number|string} bsId
-     * @returns {Promise<object>} JSON response from server
-     */
-    static async endTurn(bsId) {
-        try {
-            const res = await fetch(`${API_BASE}/end_turn`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ bsId })
-            });
-            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-            return await res.json();
-        } catch (error) {
-            console.error("Failed to end turn:", error);
-            throw error;
-        }
-    }
+
 
     /**
      * Executes a batch of player actions.

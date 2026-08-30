@@ -634,6 +634,10 @@ class BattleService {
         if (state.is_processing) {
             throw new Error('RACE_CONDITION: Action is already being processed');
         }
+        
+        // [ANTI-CORRUPTION] Buat Snapshot aman sebelum state dimanipulasi
+        const originalStateString = JSON.stringify(state);
+
         state.is_processing = true;
 
         try {
@@ -1177,7 +1181,8 @@ class BattleService {
 
             return { events, stateSnapshot: state };
         } catch (error) {
-            state.is_processing = false;
+            // [ANTI-CORRUPTION] Kembalikan state di RAM persis seperti sebelum eksekusi dimulai (Rollback)
+            BattleMemoryStore.set(bsId, JSON.parse(originalStateString));
             throw error;
         }
     }
@@ -1318,6 +1323,10 @@ class BattleService {
         if (state.is_processing) {
             throw new Error('RACE_CONDITION: Action is already being processed');
         }
+        
+        // [ANTI-CORRUPTION] Buat Snapshot aman sebelum state dimanipulasi
+        const originalStateString = JSON.stringify(state);
+
         state.is_processing = true;
 
         try {
@@ -1724,7 +1733,7 @@ class BattleService {
                     effectTargets.forEach(effTarget => {
                         if (effTarget && ((effTarget.current_hp !== undefined && effTarget.current_hp > 0) || (effTarget.hp !== undefined && effTarget.hp > 0))) {
                             if (!effTarget.active_buffs) effTarget.active_buffs = [];
-                            effTarget.active_buffs.push({ ...eff, applied_in: isEnemySource ? 'enemy' : 'player' });
+                            effTarget.active_buffs.push({ ...eff, applied_in: sourceId.startsWith('enemy_') ? 'enemy' : 'player' });
                             
                             let tid = 'unknown';
                             if (effTarget.id !== undefined && state.enemies.find(e => e.id === effTarget.id)) {
@@ -1782,7 +1791,8 @@ class BattleService {
                 stateSnapshot: state
             };
         } catch (err) {
-            state.is_processing = false;
+            // [ANTI-CORRUPTION] Kembalikan state di RAM persis seperti sebelum eksekusi dimulai (Rollback)
+            BattleMemoryStore.set(bsId, JSON.parse(originalStateString));
             throw err;
         }
     }

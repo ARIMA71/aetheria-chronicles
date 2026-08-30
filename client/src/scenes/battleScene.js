@@ -1676,6 +1676,23 @@ export default class BattleScene extends Phaser.Scene {
                         this.playStunVibrateAnim(target);
                         delay = 400;
                     }
+                } else if (ev.type === 'effect_removed') {
+                    // [Fix Minor #1] Real-time remove expired buff/debuff dari entity
+                    if (target) {
+                        const effName = ev.effectName || '';
+                        if (this.enemies.includes(target)) {
+                            target.activeEffects = (target.activeEffects || []).filter(
+                                e => (e.effect_name || e.target_stat || '') !== effName
+                            );
+                            this._refreshEnemyHUD();
+                        } else {
+                            target.activeEffects = (target.activeEffects || []).filter(
+                                e => (e.effect_name || e.target_stat || '') !== effName
+                            );
+                            target.refreshVisual();
+                        }
+                        delay = 100; // Minimal delay, tidak perlu animasi
+                    }
                 } else if (ev.type === 'log') {
                     this.showLog(ev.message, 'system');
                     delay = 600;
@@ -1970,6 +1987,20 @@ export default class BattleScene extends Phaser.Scene {
             this.currentTurn = state.current_turn;
             this._updateTurnText(); // Akan mengupdate Turn Text dan Wave Text dengan benar
         }
+
+        // [Fix Bug #2] Sync Aether Gauge dari server snapshot
+        // Server mengelola state.aether_gauge sepenuhnya (SA gain, Burst consume, dll.)
+        if (state.aether_gauge !== undefined) {
+            this.aetherGauge = state.aether_gauge;
+            this._refreshAetherUI();
+        }
+
+        // [Fix Bug #3] Sync Heal counters dari server snapshot agar tidak desync
+        if (state.heals_remaining !== undefined) {
+            this.healsRemaining = state.heals_remaining;
+            this._refreshHealButtonUI();
+        }
+        if (state.potions_used !== undefined) this.potionsUsed = state.potions_used;
 
         // Sync Players
         if (state.player_party && state.player_party.characters) {
@@ -2315,7 +2346,8 @@ export default class BattleScene extends Phaser.Scene {
                         mc.destroy();
                         this.fullPotionsUsed++;
                         await this._playActionEvents(res.data.events);
-                        if (res.data.state) this._syncState(res.data.state);
+                        // [Fix Minor #3] Key yang benar adalah stateSnapshot, bukan state
+                        if (res.data.stateSnapshot) this._syncState(res.data.stateSnapshot);
                         this.setTurn('player');
                     } else {
                         this.showLog("Revive gagal!");

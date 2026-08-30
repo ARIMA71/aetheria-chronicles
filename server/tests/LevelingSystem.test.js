@@ -23,12 +23,14 @@ describe('LevelingSystem.getCharMaxLevel()', () => {
         expect(LevelingSystem.getCharMaxLevel(1, 'SR', 5)).toBe(20);
     });
 
-    test('Karakter SSR memiliki max level 60', () => {
-        expect(LevelingSystem.getCharMaxLevel(10, 'SSR', 0)).toBe(60);
+    test('Karakter SSR memiliki max level 40 pada LB0 dan 60 pada LB1', () => {
+        expect(LevelingSystem.getCharMaxLevel(10, 'SSR', 0)).toBe(40);
+        expect(LevelingSystem.getCharMaxLevel(10, 'SSR', 1)).toBe(60);
     });
 
-    test('Karakter SR memiliki max level 50', () => {
-        expect(LevelingSystem.getCharMaxLevel(5, 'SR', 0)).toBe(50);
+    test('Karakter SR memiliki max level 30 pada LB0 dan 50 pada LB1', () => {
+        expect(LevelingSystem.getCharMaxLevel(5, 'SR', 0)).toBe(30);
+        expect(LevelingSystem.getCharMaxLevel(5, 'SR', 1)).toBe(50);
     });
 
     test('Rarity tidak dikenal (fallback) mengembalikan 1', () => {

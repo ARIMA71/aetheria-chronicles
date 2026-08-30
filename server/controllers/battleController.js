@@ -536,42 +536,9 @@ exports.saveBattleResult = async (req, res) => {
     }
 };
 
-exports.getBossAction = async (req, res) => {
-    try {
-        const { bsId, battleState, bossSkills } = req.body;
-
-        // Log to file for debugging
-        try {
-            require('fs').writeFileSync('req-body-log.json', JSON.stringify({ bsId, battleState, bossSkills }, null, 2));
-        } catch (e) {
-            console.error('Failed to write log file:', e);
-        }
-
-        if (!bsId || !battleState || !bossSkills) {
-            return res.status(400).json({
-                status: 'error',
-                message: 'bsId, battleState, dan bossSkills wajib diisi untuk sinkronisasi state!'
-            });
-        }
-
-        const selectedSkill = await BattleService.getAiDecision(bsId, battleState, bossSkills);
-
-        return res.status(200).json({
-            status: 'success',
-            message: 'Boss action calculated successfully',
-            data: {
-                selected_skill: selectedSkill
-            }
-        });
-    } catch (error) {
-        console.error('[getBossAction] Error:', error);
-        return res.status(500).json({
-            status: 'error',
-            message: 'Terjadi kesalahan pada server saat sinkronisasi state dan menghitung aksi bos.',
-            error_detail: error.message
-        });
-    }
-};
+// [DEPRECATED & REMOVED] exports.getBossAction (versi lama client-sends-bossSkills)
+// Digantikan oleh endpoint /api/battle/ai-decision di bawah yang menggunakan
+// BattleService.processEnemyTurn() — fully server-authoritative.
 
 /**
  * GET /api/battle/active/:playerId
