@@ -213,3 +213,130 @@ describe('AiBehaviorService — Phase Filtering (Tahap 2)', () => {
         }
     });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SUITE 6: Adaptivitas AI — Keputusan Berubah Saat Kondisi Party Berubah
+// Membuktikan bahwa AI tidak statis: skill yang dipilih berganti sesuai state.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('AiBehaviorService — Adaptivitas AI (Tahap 5 — Perubahan Keputusan)', () => {
+    const createFullCaState = (overrides = {}) => {
+        const state = createBattleState(overrides);
+        state.enemies[0].current_ca = 5;
+        state.enemies[0].caMax = 5;
+        return state;
+    };
+
+    test('AI beralih dari AoE ke Execute saat salah satu karakter mendekati kematian', () => {
+        // State A: Tim HP 100%, 0 Buff → AoE skill lebih disukai
+        const aoESkill = createSkillBehavior({
+            base_utility: 1.5,
+            score_modifiers: { party_total_hp_pct: 0.5 } // lebih tinggi saat HP party tinggi
+        });
+        // Execute skill: tinggi saat ada karakter sekarat
+        const executeSkill = createSkillBehavior({
+            base_utility: 1.0,
+            score_modifiers: { party_lowest_hp_missing_pct: 2.0 } // naik saat ada yang sekarat
+        });
+
+        // State A: party HP 100% → aoESkill menang
+        const stateA = createFullCaState({ partyHpPct: 1.0 });
+        const resultA = AiBehaviorService.calculateBossAction(stateA, [aoESkill, executeSkill]);
+        expect(resultA).not.toBeNull();
+        expect(resultA.base_utility).toBe(1.5); // AoE menang
+
+        // State B: party HP 10% → executeSkill skor melonjak, menang atas AoE
+        const stateB = createFullCaState({ partyHpPct: 0.1 });
+        const resultB = AiBehaviorService.calculateBossAction(stateB, [aoESkill, executeSkill]);
+        expect(resultB).not.toBeNull();
+        // Skill yang dipilih harus BERBEDA dari State A (membuktikan adaptivitas)
+        expect(resultB.score_modifiers?.party_lowest_hp_missing_pct).toBeDefined();
+    });
+
+    test('AI beralih ke Dispel saat party mengakumulasi banyak Buff', () => {
+        // Dispel skill: disukai saat party punya banyak buff
+        const dispelSkill = createSkillBehavior({
+            base_utility: 0.8,
+            score_modifiers: { party_buff_count: 2.0 } // naik drastis per buff
+        });
+        // Damage skill: stabil, tidak terpengaruh buff
+        const damageSkill = createSkillBehavior({ base_utility: 2.0 });
+
+        // State tanpa Buff → damage skill menang
+        const stateNoBuff = createFullCaState({ partyBuffs: 0 });
+        const resultNoBuff = AiBehaviorService.calculateBossAction(stateNoBuff, [dispelSkill, damageSkill]);
+        expect(resultNoBuff).not.toBeNull();
+        expect(resultNoBuff.base_utility).toBe(2.0); // damage menang
+
+        // State dengan 4 Buff → dispelSkill skor = 0.8 + 4*2.0 = 8.8 > 2.0
+        const stateManyBuffs = createFullCaState({ partyBuffs: 4 });
+        const resultManyBuffs = AiBehaviorService.calculateBossAction(stateManyBuffs, [dispelSkill, damageSkill]);
+        expect(resultManyBuffs).not.toBeNull();
+        // Dispel harus menang karena buff count tinggi
+        expect(resultManyBuffs.score_modifiers?.party_buff_count).toBeDefined();
+    });
+
+    test('Skor skill debuff berkurang ketika party sudah menanggung banyak Debuff', () => {
+        // Skill debuff: skor turun ketika party sudah banyak debuff (enggan tumpuk)
+        const debuffSkill = createSkillBehavior({
+            base_utility: 5.0,
+            score_modifiers: { party_debuff_count: -1.5 } // berkurang per debuff aktif
+        });
+        const pureSkill = createSkillBehavior({ base_utility: 3.0 });
+
+        // State dengan 3 debuff → debuffSkill skor = 5.0 + 3*(-1.5) = 0.5 < 3.0
+        const state = createFullCaState({ partyDebuffs: 3 });
+        const result = AiBehaviorService.calculateBossAction(state, [debuffSkill, pureSkill]);
+        expect(result).not.toBeNull();
+        // Pure skill harus menang karena debuff stack menghukum debuffSkill
+        expect(result.base_utility).toBe(3.0);
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SUITE 7: Determinisme & Phase Fallback
+// Membuktikan AI 100% deterministik dan Phase Fallback bekerja benar.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('AiBehaviorService — Determinisme & Phase Fallback', () => {
+    const createFullCaState = (overrides = {}) => {
+        const state = createBattleState(overrides);
+        state.enemies[0].current_ca = 5;
+        state.enemies[0].caMax = 5;
+        return state;
+    };
+
+    test('State identik menghasilkan keputusan AI yang identik (100% Deterministik)', () => {
+        const state = createFullCaState({ partyHpPct: 0.6, partyBuffs: 2 });
+        const skills = [
+            createSkillBehavior({ base_utility: 1.0, score_modifiers: { party_buff_count: 1.5 }, skill: { id: 1, name: 'Flute' } }),
+            createSkillBehavior({ base_utility: 2.0, score_modifiers: { party_total_hp_pct: 1.0 }, skill: { id: 2, name: 'Typhoon' } }),
+            createSkillBehavior({ base_utility: 1.5, score_modifiers: { party_lowest_hp_missing_pct: 2.0 }, skill: { id: 3, name: 'Slingshot' } }),
+        ];
+
+        // Eksekusi kalkulasi AI dua kali dengan state dan skills yang identik
+        const result1 = AiBehaviorService.calculateBossAction(state, skills);
+        const result2 = AiBehaviorService.calculateBossAction(state, skills);
+
+        expect(result1).not.toBeNull();
+        expect(result2).not.toBeNull();
+        // Skill yang dipilih harus identik (deterministik, bukan acak)
+        expect(result1.skill?.id).toBe(result2.skill?.id);
+    });
+
+    test('Phase Fallback: saat semua skill fase aktif habis, sistem melebarkan kandidat', () => {
+        // Skenario: Boss dalam fase Normal, hanya ada skill Enraged
+        // → Phase Filter → kosong → sistem melebarkan ke semua skill
+        // → Skill Enraged (satu-satunya) harus terpilih setelah fallback
+        const state = createFullCaState({ modeState: 'normal' });
+        const enragedOnlySkill = createSkillBehavior({
+            phase: 'Enraged',
+            base_utility: 2.0,
+            skill: { id: 10, name: 'Rage Strike' }
+        });
+
+        const result = AiBehaviorService.calculateBossAction(state, [enragedOnlySkill]);
+        // Setelah fallback ke semua skill, Rage Strike harus terpilih
+        // (karena satu-satunya kandidat setelah pelebaran)
+        expect(result).not.toBeNull();
+        expect(result.skill?.id).toBe(10);
+    });
+});

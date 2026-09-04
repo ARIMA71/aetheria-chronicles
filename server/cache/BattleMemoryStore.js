@@ -12,11 +12,7 @@ class BattleMemoryStore {
         if (!BattleMemoryStore.instance) {
             this.store = new Map();
             this.MAX_SESSIONS = 1000;
-            this.MAX_AGE_MS = 60 * 60 * 1000; // 1 hour
-            
-            // Run Garbage Collector every 30 minutes
-            this.gcInterval = setInterval(() => this.runGarbageCollection(), 30 * 60 * 1000);
-            
+            // GC interval is now orchestrated by BattleService
             BattleMemoryStore.instance = this;
         }
         return BattleMemoryStore.instance;
@@ -70,28 +66,25 @@ class BattleMemoryStore {
     }
 
     /**
-     * Routine to clean up abandoned sessions to prevent memory leaks.
+     * Dapatkan semua sesi yang sudah melampaui batas waktu inactivity.
+     * @param {number} maxAgeMs - Waktu maksimal (dalam ms) sebelum dianggap expired.
      */
-    runGarbageCollection() {
+    getExpiredSessions(maxAgeMs) {
         const now = Date.now();
-        let cleanedCount = 0;
-
+        const expiredIds = [];
         for (const [bsId, session] of this.store.entries()) {
-            if (now - session.lastAccessed > this.MAX_AGE_MS) {
-                // Sesi sudah kadaluarsa (lebih dari 1 jam tidak ada aktivitas)
-                this.store.delete(bsId);
-                cleanedCount++;
-                
-                // Note: For Skripsi completeness, you might want to call a DB query here 
-                // to set the status of this bsId to 'ABANDONED' in MySQL, but for now 
-                // removing it from RAM is sufficient to prevent leaks.
-                console.log(`[BattleMemoryStore GC] Cleared abandoned session: ${bsId}`);
+            if (now - session.lastAccessed > maxAgeMs) {
+                expiredIds.push(bsId);
             }
         }
-        
-        if (cleanedCount > 0) {
-            console.log(`[BattleMemoryStore GC] Cleaned ${cleanedCount} sessions. Current Map Size: ${this.store.size}`);
-        }
+        return expiredIds;
+    }
+
+    /**
+     * Dapatkan array dari semua bsId yang saat ini aktif di memory.
+     */
+    getActiveSessionIds() {
+        return Array.from(this.store.keys());
     }
 }
 

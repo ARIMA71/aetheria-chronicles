@@ -1222,11 +1222,36 @@ class BattleService {
      */
     async runActiveSessionGC() {
         try {
-            const [result] = await db.query(
-                'UPDATE battle_sessions SET bs_status = \'FAILED\', remaining_time = 0 WHERE bs_status = \'ACTIVE\' AND TIMESTAMPDIFF(SECOND, started_at, NOW()) > 2700'
-            );
+            // 1. Dapatkan semua session ID yang sudah tidak ada aktivitas > 45 menit (2700000 ms) di Memory
+            const expiredIds = BattleMemoryStore.getExpiredSessions(45 * 60 * 1000);
+            
+            if (expiredIds.length > 0) {
+                // Hapus dari memory
+                expiredIds.forEach(id => BattleMemoryStore.delete(id));
+                
+                // Update status di database menjadi FAILED
+                await db.query(
+                    'UPDATE battle_sessions SET bs_status = \'FAILED\', remaining_time = 0 WHERE bs_id IN (?)',
+                    [expiredIds]
+                );
+                console.log(`[BattleService GC] Swept ${expiredIds.length} abandoned sessions from Memory to FAILED.`);
+            }
+            
+            // 2. Fallback: Bersihkan session ACTIVE di database yang mungkin tidak ada di memory 
+            // (misal server pernah restart) tapi sudah lewat 45 menit sejak started_at.
+            // Kita skip session yang saat ini sedang aktif di RAM agar tidak salah sweeping.
+            const activeIdsInRam = BattleMemoryStore.getActiveSessionIds();
+            let query = 'UPDATE battle_sessions SET bs_status = \'FAILED\', remaining_time = 0 WHERE bs_status = \'ACTIVE\' AND TIMESTAMPDIFF(SECOND, started_at, NOW()) > 2700';
+            let params = [];
+            
+            if (activeIdsInRam.length > 0) {
+                query += ' AND bs_id NOT IN (?)';
+                params.push(activeIdsInRam);
+            }
+            
+            const [result] = await db.query(query, params);
             if (result.affectedRows > 0) {
-                console.log(`[BattleService GC] Swept ${result.affectedRows} expired ACTIVE sessions to FAILED.`);
+                console.log(`[BattleService GC] Swept ${result.affectedRows} stale DB sessions to FAILED.`);
             }
         } catch (err) {
             console.error('[BattleService GC] Error during active session sweep:', err.message);

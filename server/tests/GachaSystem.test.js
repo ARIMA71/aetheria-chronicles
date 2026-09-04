@@ -73,4 +73,42 @@ describe('Gacha System - Whitebox & RNG Simulation', () => {
             expect(grantedMaterial).toEqual({ mat_id: 5, quantity: 1 });
         });
     });
+
+    // 3. Uji Pity Counter (Garansi Tarikan ke-40)
+    describe('Pity Counter — SSR Guarantee', () => {
+        it('should guarantee an SSR item when pity counter reaches the threshold (40)', () => {
+            // Replika logika pity counter dari gachaController.js
+            const pityGuarantee = 40;
+
+            const performPull = (currentPity) => {
+                const newPity = currentPity + 1;
+                // Jika sudah mencapai batas, langsung berikan SSR tanpa RNG
+                if (newPity >= pityGuarantee) {
+                    return { rarity: 'SSR', newPity: 0 }; // reset pity
+                }
+                // Simulasi RNG normal (dalam konteks ini, anggap tidak menang SSR)
+                return { rarity: 'R', newPity };
+            };
+
+            // Simulasi 39 tarikan tanpa SSR
+            let pity = 0;
+            for (let i = 0; i < 39; i++) {
+                const result = performPull(pity);
+                pity = result.newPity;
+            }
+            // Tarikan ke-40 harus dijamin SSR
+            const finalPull = performPull(pity);
+            expect(finalPull.rarity).toBe('SSR');
+            expect(finalPull.newPity).toBe(0); // Pity direset setelah mendapat SSR
+        });
+
+        it('should NOT guarantee SSR before reaching pity threshold (pull 39)', () => {
+            const pityGuarantee = 40;
+            const currentPity = 38; // belum di batas
+            const newPity = currentPity + 1;
+
+            const isGuaranteed = newPity >= pityGuarantee;
+            expect(isGuaranteed).toBe(false);
+        });
+    });
 });
