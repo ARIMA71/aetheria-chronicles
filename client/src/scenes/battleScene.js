@@ -447,23 +447,23 @@ export default class BattleScene extends Phaser.Scene {
             const baseY = 88 + (index * 45);
             const ec = this._elemColor(enemy.element);
 
-            const icon = this.add.rectangle(45, baseY + 8, 30, 30, THEME.PANEL).setStrokeStyle(2, ec);
-            const elemText = this.add.text(45, baseY + 8, enemy.element.substring(0, 2).toUpperCase(), { fontSize: "8px", color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
-            const hpPct = this.add.text(65, baseY - 2, "100%", { fontSize: "10px", color: "#ffffff", fontStyle: "bold" }).setOrigin(0, 1);
+            const icon = this.add.rectangle(58, baseY + 10, 40, 40, THEME.PANEL).setStrokeStyle(2, ec);
+            const elemText = this.add.text(58, baseY + 10, enemy.element.substring(0, 2).toUpperCase(), { fontSize: "14px", fontStyle: "bold", color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
+            const hpPct = this.add.text(83, baseY - 2, "100%", { fontSize: "10px", color: "#ffffff", fontStyle: "bold" }).setOrigin(0, 1);
 
-            const hpBarBg = this.add.rectangle(65, baseY + 4, 360, 12, THEME.BG).setOrigin(0, 0.5).setStrokeStyle(2, THEME.BORDER);
-            const hpFill = this.add.rectangle(65, baseY + 4, 356, 10, THEME.DAMAGE).setOrigin(0, 0.5);
-            const hpEnrage = this.add.rectangle(65, baseY + 4, 360, 12, 0, 0).setOrigin(0, 0.5).setAlpha(0);
+            const hpBarBg = this.add.rectangle(83, baseY + 4, 360, 12, THEME.BG).setOrigin(0, 0.5).setStrokeStyle(2, THEME.BORDER);
+            const hpFill = this.add.rectangle(83, baseY + 4, 356, 10, THEME.DAMAGE).setOrigin(0, 0.5);
+            const hpEnrage = this.add.rectangle(83, baseY + 4, 360, 12, 0, 0).setOrigin(0, 0.5).setAlpha(0);
             
-            const effectIndicators = this.add.container(65, baseY - 12);
+            const effectIndicators = this.add.container(123, baseY - 12);
             
-            const hitArea = this.add.rectangle(65, baseY + 4, 360, 24, 0x000000, 0).setOrigin(0, 0.5);
+            const hitArea = this.add.rectangle(83, baseY + 4, 360, 24, 0x000000, 0).setOrigin(0, 0.5);
             hitArea.setInteractive({ useHandCursor: true });
             hitArea.on('pointerdown', () => this._showEnemyStatusModal(enemy));
 
 
-            const modeBarBg = this.add.rectangle(65, baseY + 14, 360, 4, THEME.BG).setOrigin(0, 0.5).setStrokeStyle(1, THEME.BORDER);
-            const modeFill = this.add.rectangle(65, baseY + 14, 0, 4, 0xffffff).setOrigin(0, 0.5);
+            const modeBarBg = this.add.rectangle(83, baseY + 14, 360, 4, THEME.BG).setOrigin(0, 0.5).setStrokeStyle(1, THEME.BORDER);
+            const modeFill = this.add.rectangle(83, baseY + 14, 0, 4, 0xffffff).setOrigin(0, 0.5);
 
             if (!enemy.isBoss) {
                 hpEnrage.setVisible(false);
@@ -474,8 +474,8 @@ export default class BattleScene extends Phaser.Scene {
             const caSegmentsBg = [];
             const caSegments = [];
             for (let i = 0; i < enemy.caMax; i++) {
-                const bg = this.add.rectangle(65 + i * 14, baseY + 26, 10, 10, THEME.BG).setOrigin(0, 0.5).setStrokeStyle(1, THEME.BORDER);
-                const f = this.add.rectangle(65 + i * 14, baseY + 26, 8, 8, THEME.GOLD).setOrigin(0, 0.5).setAlpha(0);
+                const bg = this.add.rectangle(83 + i * 14, baseY + 26, 10, 10, THEME.BG).setOrigin(0, 0.5).setStrokeStyle(1, THEME.BORDER);
+                const f = this.add.rectangle(83 + i * 14, baseY + 26, 8, 8, THEME.GOLD).setOrigin(0, 0.5).setAlpha(0);
                 caSegmentsBg.push(bg);
                 caSegments.push(f);
             }

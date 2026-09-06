@@ -96,9 +96,14 @@ export default class Player extends Phaser.GameObjects.Container {
         
         if (this._portraitPath && scene.textures.exists(portTex)) {
             this._portrait = scene.add.image(0, 0, portTex);
-            // Scale based on width to maintain aspect ratio (no ugly stretching)
+            // Scale based on width, then align to the bottom of the card
             const imgW = this._portrait.width || 1;
-            this._portrait.setScale(this._W / imgW);
+            const imgH = this._portrait.height || 1;
+            const scale = this._W / imgW;
+            this._portrait.setScale(scale);
+            
+            const scaledH = imgH * scale;
+            this._portrait.y = (this._H - scaledH) / 2;
             
             const maskShape = scene.make.graphics();
             maskShape.fillStyle(0xffffff);
@@ -109,39 +114,26 @@ export default class Player extends Phaser.GameObjects.Container {
             this._portrait = scene.add.text(0, 0, "?", { fontSize: "32px", color: "#94a3b8" }).setOrigin(0.5);
         }
 
-        // Use a generated canvas texture for reliable gradient in WebGL
-        if (!scene.textures.exists('gradient_black')) {
-            const canvas = document.createElement('canvas');
-            canvas.width = 1;
-            canvas.height = 100;
-            const context = canvas.getContext('2d');
-            const grd = context.createLinearGradient(0, 0, 0, 100);
-            grd.addColorStop(0, "rgba(0,0,0,0)");
-            grd.addColorStop(1, "rgba(0,0,0,1)");
-            context.fillStyle = grd;
-            context.fillRect(0, 0, 1, 100);
-            scene.textures.addCanvas('gradient_black', canvas);
-        }
-        
-        this._gradientFade = scene.add.image(0, 31.25, 'gradient_black');
-        this._gradientFade.setDisplaySize(this._W, (this._H / 2) + 10);
+        this._gradientFade = scene.add.graphics();
+        this._gradientFade.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0, 0, 1.0, 1.0);
+        this._gradientFade.fillRect(-(this._W / 2), -10, this._W, (this._H / 2) + 10);
 
         this._accent = scene.add.rectangle(0, -(this._H / 2) + 5, this._W, 10, this._elemColor);
 
         // HP Bar
-        this._hpBarBg = scene.add.rectangle(0, 42, 60, 10, 0x222222);
-        this._hpFill = scene.add.rectangle(-30, 42, 60, 10, 0x27ae60).setOrigin(0, 0.5);
-        this._hpText = scene.add.text(0, 42, `${this.hp}`, {
-            fontSize: '11px', color: '#ffffff', fontStyle: 'bold',
+        this._hpBarBg = scene.add.rectangle(-36, 44, 72, 6, 0x222222).setOrigin(0, 0.5);
+        this._hpFill = scene.add.rectangle(-36, 44, 72, 6, 0x27ae60).setOrigin(0, 0.5);
+        this._hpText = scene.add.text(36, 41, `${this.hp}`, {
+            fontSize: '15px', color: '#ffffff', fontStyle: 'bold',
             stroke: '#000000', strokeThickness: 3
-        }).setOrigin(0.5, 0.5);
+        }).setOrigin(1, 0.5);
 
         // SA Bar
-        this._saBarBg = scene.add.rectangle(0, 56, 60, 6, 0x111111);
-        this._saFill = scene.add.rectangle(-30, 56, (this.specialBar / this.specialMax) * 60, 6, 0xf1c40f).setOrigin(0, 0.5);
-        this._saPctText = scene.add.text(32, 56, `${Math.floor((this.specialBar / this.specialMax) * 100)}%`, {
-            fontSize: '8px', color: '#f1c40f', fontStyle: 'bold'
-        }).setOrigin(0, 0.5);
+        this._saBarBg = scene.add.rectangle(-36, 58, 48, 4, 0x111111).setOrigin(0, 0.5);
+        this._saFill = scene.add.rectangle(-36, 58, (this.specialBar / this.specialMax) * 48, 4, 0xf1c40f).setOrigin(0, 0.5);
+        this._saPctText = scene.add.text(36, 58, `${Math.floor((this.specialBar / this.specialMax) * 100)}%`, {
+            fontSize: '9px', color: '#f1c40f', fontStyle: 'bold'
+        }).setOrigin(1, 0.5);
 
         // SA Ready indicator
         this._saReadyGem = scene.add.circle(28, -(this._H / 2) + 6, 5, 0xf39c12);
@@ -154,7 +146,7 @@ export default class Player extends Phaser.GameObjects.Container {
         }).setOrigin(0.5).setAlpha(0);
 
         // Container untuk indikator status efek aktif (di-rebuild tiap refreshVisual)
-        this._effectIndicators = scene.add.container(0, 16);
+        this._effectIndicators = scene.add.container(0, 23);
 
         // ── Action Badge ──────────────────────────────────────────────────────
         this._actionBadgeBg = scene.add.circle(28, -(this._H / 2) + 20, 12, 0x1e293b).setStrokeStyle(1, 0x94a3b8).setAlpha(0);
@@ -335,13 +327,13 @@ export default class Player extends Phaser.GameObjects.Container {
     refreshVisual() {
         // ── HP ──
         const hpRatio = Math.max(0, this.hp / this.maxHp);
-        this._hpFill.setSize(60 * hpRatio, 10);
+        this._hpFill.setSize(72 * hpRatio, 6);
         this._hpText.setText(`${Math.max(0, Math.floor(this.hp))}`);
         this._hpFill.setFillStyle(hpRatio > 0.5 ? 0x27ae60 : hpRatio > 0.25 ? 0xe67e22 : 0xe74c3c);
 
         // ── SA Bar ──
         const saRatio = Math.min(1, this.specialBar / this.specialMax);
-        this._saFill.setSize(42 * saRatio, 4);
+        this._saFill.setSize(48 * saRatio, 4);
         this._saFill.setFillStyle(saRatio >= 1 ? 0xf39c12 : 0xf1c40f);
         this._saPctText.setText(`${Math.floor(saRatio * 100)}%`);
 
