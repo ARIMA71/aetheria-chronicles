@@ -14,6 +14,29 @@ import CharacterDetailScene from './scenes/characterDetailScene.js';
 import WeaponDetailScene from './scenes/weaponDetailScene.js';
 import GachaScene from './scenes/gachaScene.js';
 
+class GlobalClickSoundPlugin extends Phaser.Plugins.ScenePlugin {
+    boot() {
+        this.systems.events.on('create', this.onCreate, this);
+    }
+    onCreate() {
+        this.scene.input.on('gameobjectdown', (pointer, gameObject) => {
+            // Abaikan jika gameObject adalah background overlay atau drag zone yang besar
+            if (gameObject.width >= 400 || gameObject.height >= 400) return;
+            
+            const isSfxOn = localStorage.getItem('sfx_on') !== 'false';
+            if (!isSfxOn) return;
+
+            // Coba mainkan SFX
+            let sfx = this.scene.sound.get('sfx_select');
+            if (!sfx && this.scene.cache.audio.exists('sfx_select')) {
+                sfx = this.scene.sound.add('sfx_select');
+                sfx.addMarker({ name: 'click', start: 0, duration: 1.0 });
+            }
+            if (sfx) sfx.play('click');
+        });
+    }
+}
+
 // =========================================================
 // Aetherial Cyber-Dark Theme — Centralized Color Config
 // Semua scene merujuk ke objek ini agar mudah di-tweak.
@@ -69,7 +92,32 @@ const config = {
         width: 480,
         height: 830
     },
+    plugins: {
+        scene: [
+            { key: 'GlobalClickSoundPlugin', plugin: GlobalClickSoundPlugin, mapping: 'clickSoundPlugin' }
+        ]
+    },
     scene: [AuthScene, MainMenuScene, QuestScene, PartyScene, BattleScene, VictoryScene, DefeatScene, FallbackScene, LoadingScene, ReadyScene, InventoryScene, CharacterDetailScene, WeaponDetailScene, GachaScene]
 };
 
-new Phaser.Game(config);
+const game = new Phaser.Game(config);
+
+// Global DOM Click Listener untuk menangkap klik pada HTML Modals (seperti form Login/Register)
+document.addEventListener('click', (e) => {
+    // Jika targetnya adalah <button> HTML atau child dari <button>
+    if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+        const isSfxOn = localStorage.getItem('sfx_on') !== 'false';
+        if (!isSfxOn) return;
+
+        const activeScenes = game.scene.getScenes(true);
+        if (activeScenes.length > 0) {
+            const scene = activeScenes[0];
+            let sfx = scene.sound.get('sfx_select');
+            if (!sfx && scene.cache.audio.exists('sfx_select')) {
+                sfx = scene.sound.add('sfx_select');
+                sfx.addMarker({ name: 'click', start: 0, duration: 1.0 });
+            }
+            if (sfx) sfx.play('click');
+        }
+    }
+});

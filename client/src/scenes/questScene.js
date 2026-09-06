@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { THEME } from '../main.js';
+import { playGlobalBGM } from '../utils/audioManager.js';
 import { checkSession, saveCurrentScene, clearSession } from '../utils/auth.js';
 import BattleApi from '../services/BattleApi.js';
 import { CameraScrollManager } from '../utils/cameraScroll.js';
@@ -26,6 +27,7 @@ export default class QuestScene extends Phaser.Scene {
     create() {
         if (!checkSession(this)) return;
         saveCurrentScene(this.scene.key);
+        playGlobalBGM(this, 'bgm_quest_selection');
         const raw = localStorage.getItem('aetheria_player');
         this.playerData = raw ? JSON.parse(raw) : { player_id: 1 };
         this.playerId = this.playerData.player_id || 1;
@@ -679,14 +681,14 @@ export default class QuestScene extends Phaser.Scene {
         this.musicOn = !this.musicOn;
         localStorage.setItem('music_on', this.musicOn);
         this.updateAudioButtonVisuals();
-        this.sound.mute = !this.musicOn && !this.sfxOn;
+        if (window.AetheriaAudioManager) window.AetheriaAudioManager.updateMuteState(this);
     }
 
     toggleSfx() {
         this.sfxOn = !this.sfxOn;
         localStorage.setItem('sfx_on', this.sfxOn);
         this.updateAudioButtonVisuals();
-        this.sound.mute = !this.musicOn && !this.sfxOn;
+        if (window.AetheriaAudioManager) window.AetheriaAudioManager.updateMuteState(this);
     }
 
     updateAudioButtonVisuals() {

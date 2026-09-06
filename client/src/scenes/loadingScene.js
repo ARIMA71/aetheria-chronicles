@@ -73,9 +73,83 @@ export default class LoadingScene extends Phaser.Scene {
             }
         });
 
-        // Delay sebelum pindah ke scene berikutnya
+        // Loading sequence
+        let loaded = false;
+        let delayPassed = false;
+        
+        const finish = () => {
+            if (loaded && delayPassed) {
+                this.scene.start(this.targetScene, this.targetData);
+            }
+        };
+
         this.time.delayedCall(this.minLoadTimeMs, () => {
-            this.scene.start(this.targetScene, this.targetData);
+            delayPassed = true;
+            finish();
         });
+
+        this._loadDynamicAudio(() => {
+            loaded = true;
+            finish();
+        });
+    }
+
+    _loadDynamicAudio(onComplete) {
+        // Aturan 2: Manajemen Cache (Bersihkan BGM yang tak terpakai)
+        const keysToKeep = ['bgm_mainmenu_1', 'bgm_mainmenu_2', 'sfx_select'];
+        const requiredAudio = [];
+        
+        if (['MainMenuScene', 'PartyScene', 'InventoryScene', 'CharacterDetailScene', 'WeaponDetailScene'].includes(this.targetScene)) {
+            requiredAudio.push({ key: 'bgm_mainmenu_1', url: 'assets/bgm/bgm_mainmenu_1.mp3' });
+            requiredAudio.push({ key: 'bgm_mainmenu_2', url: 'assets/bgm/bgm_mainmenu_2.mp3' });
+        } else if (this.targetScene === 'GachaScene') {
+            requiredAudio.push({ key: 'bgm_gacha', url: 'assets/bgm/bgm_gacha.mp3' });
+            keysToKeep.push('bgm_gacha');
+        } else if (this.targetScene === 'QuestScene') {
+            requiredAudio.push({ key: 'bgm_quest_selection', url: 'assets/bgm/bgm_quest_selection.mp3' });
+            keysToKeep.push('bgm_quest_selection');
+        } else if (this.targetScene === 'BattleScene' || this.targetScene === 'ReadyScene') {
+            const questId = this.targetData ? (this.targetData.questId || 0) : 0;
+            const initData = this.targetData ? (this.targetData.initData || {}) : {};
+            
+            let bgmKey = 'bgm_normalbattle';
+            if (questId == 9) bgmKey = 'bgm_mqid_9';
+            else if (questId == 10) bgmKey = 'bgm_mqid_10';
+            else if (questId == 11) bgmKey = 'bgm_mqid_11';
+            else if (initData.isBoss || initData.type === 'boss' || (this.targetData && this.targetData.isBoss)) {
+                bgmKey = 'bgm_bossbattle';
+            }
+
+            if (this.targetData) this.targetData.bgmKey = bgmKey;
+
+            requiredAudio.push({ key: bgmKey, url: `assets/bgm/${bgmKey}.mp3` });
+            keysToKeep.push(bgmKey);
+        }
+
+        // Bersihkan memori audio yang tidak lagi diperlukan
+        const currentKeys = this.cache.audio.getKeys();
+        currentKeys.forEach(k => {
+            if (!keysToKeep.includes(k) && k.startsWith('bgm_')) {
+                this.cache.audio.remove(k);
+            }
+        });
+
+        // Muat yang belum ada di cache
+        let needsLoad = false;
+        requiredAudio.forEach(aud => {
+            if (!this.cache.audio.exists(aud.key)) {
+                this.load.audio(aud.key, aud.url);
+                needsLoad = true;
+            }
+        });
+
+        if (needsLoad) {
+            this.load.once('complete', () => {
+                onComplete();
+            });
+            this.load.start();
+        } else {
+            onComplete();
+        }
     }
 }

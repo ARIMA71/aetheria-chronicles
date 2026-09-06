@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { THEME } from '../main.js';
 import { checkSession } from '../utils/auth.js';
+import { playGlobalBGM } from '../utils/audioManager.js';
 
 const W = 480, H = 800, CX = 240;
 
@@ -9,8 +10,18 @@ export default class AuthScene extends Phaser.Scene {
         super('AuthScene');
     }
 
+    preload() {
+        this.load.audio('sfx_select', 'assets/sfx/select.mp3');
+        this.load.audio('bgm_authscene', 'assets/bgm/bgm_authscene.mp3');
+    }
+
     create() {
         if (checkSession(this)) return;
+
+        // Anti-Autoplay Policy: Putar BGM setelah ada interaksi (klik pertama di kanvas)
+        this.input.once('pointerdown', () => {
+            playGlobalBGM(this, 'bgm_authscene');
+        });
 
         // ── Background ──
         this.add.rectangle(CX, H / 2, W, H, THEME.BG);
@@ -81,8 +92,8 @@ export default class AuthScene extends Phaser.Scene {
         this.add.rectangle(CX, 430, 200, 1, THEME.BORDER);
 
         // ── Buttons ──
-        this._createButton(CX, 490, 220, 48, 'START GAME', true, () => this._showForm('register'));
-        this._createButton(CX, 555, 180, 42, 'LOGIN', false, () => this._showForm('login'));
+        this._createButton(CX, 490, 220, 48, 'NEW GAME', true, () => this._showForm('register'));
+        this._createButton(CX, 555, 180, 42, 'CONTINUE', false, () => this._showForm('login'));
 
         // ── Footer ──
         this.add.text(CX, H - 30, '© 2026 Aetheria Chronicles', {

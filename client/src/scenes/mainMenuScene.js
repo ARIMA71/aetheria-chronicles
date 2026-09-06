@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { THEME } from '../main.js';
+import { playGlobalBGM } from '../utils/audioManager.js';
 import { checkSession, clearSession, saveCurrentScene } from '../utils/auth.js';
 import BattleApi from '../services/BattleApi.js';
 
@@ -13,6 +14,7 @@ export default class MainMenuScene extends Phaser.Scene {
     create() {
         if (!checkSession(this)) return;
         saveCurrentScene(this.scene.key);
+        playGlobalBGM(this, 'main_menu');
 
         // Clean up timer on scene shutdown to prevent memory leaks
         this.events.on('shutdown', () => {
@@ -571,14 +573,14 @@ export default class MainMenuScene extends Phaser.Scene {
         this.musicOn = !this.musicOn;
         localStorage.setItem('music_on', this.musicOn);
         this.updateAudioButtonVisuals();
-        this.sound.mute = !this.musicOn && !this.sfxOn;
+        if (window.AetheriaAudioManager) window.AetheriaAudioManager.updateMuteState(this);
     }
 
     toggleSfx() {
         this.sfxOn = !this.sfxOn;
         localStorage.setItem('sfx_on', this.sfxOn);
         this.updateAudioButtonVisuals();
-        this.sound.mute = !this.musicOn && !this.sfxOn;
+        if (window.AetheriaAudioManager) window.AetheriaAudioManager.updateMuteState(this);
     }
 
     updateAudioButtonVisuals() {

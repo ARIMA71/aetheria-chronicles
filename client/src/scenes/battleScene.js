@@ -4,6 +4,7 @@ import { THEME } from "../main.js";
 import { checkSession, saveCurrentScene, getPlayerUsername } from "../utils/auth.js";
 import BattleApi from "../services/BattleApi.js";
 import BattleMenu from "../ui/BattleMenu.js";
+import { playGlobalBGM } from "../utils/audioManager.js";
 // Element icons are loaded as PNGs in preload
 
 const W = 480, H = 880, CX = 240;
@@ -41,6 +42,11 @@ export default class BattleScene extends Phaser.Scene {
     }
     create() {
         if (!checkSession(this)) return;
+
+        // BGM Logic: Read mapped bgmKey from LoadingScene
+        const bgmKey = this._sceneData.bgmKey || 'bgm_normalbattle';
+        playGlobalBGM(this, bgmKey);
+
         this.setTurn("player"); this.currentTurn = 1;
         this.players = []; this.activePlayer = null;
         this.aetherGauge = 0; this.aetherGaugeMax = 100;

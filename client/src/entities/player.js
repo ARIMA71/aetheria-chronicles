@@ -109,9 +109,22 @@ export default class Player extends Phaser.GameObjects.Container {
             this._portrait = scene.add.text(0, 0, "?", { fontSize: "32px", color: "#94a3b8" }).setOrigin(0.5);
         }
 
-        this._gradientFade = scene.add.graphics();
-        this._gradientFade.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0, 0, 1.0, 1.0);
-        this._gradientFade.fillRect(-(this._W / 2), -10, this._W, (this._H / 2) + 10);
+        // Use a generated canvas texture for reliable gradient in WebGL
+        if (!scene.textures.exists('gradient_black')) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1;
+            canvas.height = 100;
+            const context = canvas.getContext('2d');
+            const grd = context.createLinearGradient(0, 0, 0, 100);
+            grd.addColorStop(0, "rgba(0,0,0,0)");
+            grd.addColorStop(1, "rgba(0,0,0,1)");
+            context.fillStyle = grd;
+            context.fillRect(0, 0, 1, 100);
+            scene.textures.addCanvas('gradient_black', canvas);
+        }
+        
+        this._gradientFade = scene.add.image(0, 31.25, 'gradient_black');
+        this._gradientFade.setDisplaySize(this._W, (this._H / 2) + 10);
 
         this._accent = scene.add.rectangle(0, -(this._H / 2) + 5, this._W, 10, this._elemColor);
 

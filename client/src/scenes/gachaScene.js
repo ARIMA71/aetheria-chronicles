@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { THEME } from '../main.js';
+import { playGlobalBGM } from '../utils/audioManager.js';
 import { checkSession, saveCurrentScene, clearSession } from '../utils/auth.js';
 
 // Element icons are loaded as PNGs in preload
@@ -20,6 +21,7 @@ export default class GachaScene extends Phaser.Scene {
     create() {
         if (!checkSession(this)) return;
         saveCurrentScene(this.scene.key);
+        playGlobalBGM(this, 'bgm_gacha');
 
         const raw = localStorage.getItem('aetheria_player');
         this.playerData = raw ? JSON.parse(raw) : null;
@@ -728,14 +730,14 @@ export default class GachaScene extends Phaser.Scene {
         this.musicOn = !this.musicOn;
         localStorage.setItem('music_on', this.musicOn);
         this.updateAudioButtonVisuals();
-        this.sound.mute = !this.musicOn && !this.sfxOn;
+        if (window.AetheriaAudioManager) window.AetheriaAudioManager.updateMuteState(this);
     }
 
     toggleSfx() {
         this.sfxOn = !this.sfxOn;
         localStorage.setItem('sfx_on', this.sfxOn);
         this.updateAudioButtonVisuals();
-        this.sound.mute = !this.musicOn && !this.sfxOn;
+        if (window.AetheriaAudioManager) window.AetheriaAudioManager.updateMuteState(this);
     }
 
     updateAudioButtonVisuals() {

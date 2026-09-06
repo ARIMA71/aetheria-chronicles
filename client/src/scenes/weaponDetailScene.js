@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { THEME } from '../main.js';
+import { playGlobalBGM } from '../utils/audioManager.js';
 import { checkSession, saveCurrentScene, clearSession, getPlayerId } from '../utils/auth.js';
 import PartyApi from '../services/PartyApi.js';
 
@@ -27,6 +28,8 @@ export default class WeaponDetailScene extends Phaser.Scene {
     }
 
     create() {
+        if (!checkSession(this)) return;
+        playGlobalBGM(this, 'main_menu');
         this.add.rectangle(0, 0, W, H, THEME.BG).setOrigin(0);
 
         this.scrollGroup = this.add.group();
@@ -91,24 +94,24 @@ export default class WeaponDetailScene extends Phaser.Scene {
         let cy = 0;
 
         // Header Fixed
-        const headerBg = this.add.rectangle(0, 0, W, 60, 0x0a0f1d).setOrigin(0).setScrollFactor(0).setDepth(50);
+        const headerBg = this.add.rectangle(0, 0, W, 60, 0x0a0f1d, 1).setOrigin(0).setScrollFactor(0).setDepth(1000);
         headerBg.setStrokeStyle(1, THEME.BORDER);
-        this.add.text(CX, 30, 'WEAPON DETAIL', { fontSize: '16px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY, letterSpacing: 1 }).setOrigin(0.5).setScrollFactor(0).setDepth(50);
+        this.add.text(CX, 30, 'WEAPON DETAIL', { fontSize: '16px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY, letterSpacing: 1 }).setOrigin(0.5).setScrollFactor(0).setDepth(1000);
 
-        const backBtn = this.add.circle(40, 30, 18, THEME.PANEL, THEME.PANEL_ALPHA).setScrollFactor(0).setDepth(50);
+        const backBtn = this.add.circle(40, 30, 18, THEME.PANEL, 1).setScrollFactor(0).setDepth(1000);
         backBtn.setStrokeStyle(1, THEME.BORDER);
         backBtn.setInteractive({ useHandCursor: true });
-        const homeTxt = this.add.text(40, 30, 'HOME', { fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5).setScrollFactor(0).setDepth(50);
+        const homeTxt = this.add.text(40, 30, 'HOME', { fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5).setScrollFactor(0).setDepth(1000);
         
         backBtn.on('pointerover', () => { backBtn.setFillStyle(0x334155); homeTxt.setColor('#ffffff'); });
         backBtn.on('pointerout', () => { backBtn.setFillStyle(THEME.PANEL); homeTxt.setColor(THEME.TEXT_PRIMARY); });
         backBtn.on('pointerdown', () => this.scene.start('LoadingScene', { targetScene: 'MainMenuScene' }));
 
         // MENU Button
-        const menuBtn = this.add.circle(W - 40, 30, 18, THEME.PANEL, THEME.PANEL_ALPHA).setScrollFactor(0).setDepth(50);
+        const menuBtn = this.add.circle(W - 40, 30, 18, THEME.PANEL, 1).setScrollFactor(0).setDepth(1000);
         menuBtn.setStrokeStyle(1, THEME.BORDER);
         menuBtn.setInteractive({ useHandCursor: true });
-        const menuText = this.add.text(W - 40, 30, 'MENU', { fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5).setScrollFactor(0).setDepth(50);
+        const menuText = this.add.text(W - 40, 30, 'MENU', { fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5).setScrollFactor(0).setDepth(1000);
 
         menuBtn.on('pointerover', () => { menuBtn.setFillStyle(0x334155); menuText.setColor('#ffffff'); });
         menuBtn.on('pointerout', () => { menuBtn.setFillStyle(THEME.PANEL); menuText.setColor(THEME.TEXT_PRIMARY); });
@@ -265,6 +268,26 @@ export default class WeaponDetailScene extends Phaser.Scene {
             this.scrollGroup.add(this.add.text(CX, cy + 30, 'Tidak ada skill senjata.', { fontSize: '12px', color: THEME.TEXT_MUTED }).setOrigin(0.5));
             cy += 60;
         }
+
+        cy += 20;
+        
+        // BACK BUTTON AT BOTTOM
+        const backBg = this.add.rectangle(0, cy, W/2, 45, 0x0f172a).setOrigin(0, 0).setStrokeStyle(1, 0x475569);
+        const backTxt = this.add.text(W/2 - 20, cy + 22.5, '◀ BACK', { fontSize: '14px', fontFamily: 'Outfit', color: '#a8a29e', fontStyle: 'bold' }).setOrigin(1, 0.5);
+        const backZone = this.add.zone(0, cy, W/2, 45).setOrigin(0, 0).setInteractive({ useHandCursor: true });
+
+        backZone.on('pointerover', () => { backBg.setFillStyle(0x334155); backTxt.setColor('#ffffff'); });
+        backZone.on('pointerout', () => { backBg.setFillStyle(0x0f172a); backTxt.setColor('#a8a29e'); });
+        backZone.on('pointerdown', () => {
+            if (this.targetData.fromParty) {
+                this.scene.start('LoadingScene', { targetScene: 'PartyScene', targetData: { partyState: this.targetData.partyState } });
+            } else {
+                this.scene.start('LoadingScene', { targetScene: 'InventoryScene' });
+            }
+        });
+
+        this.scrollGroup.addMultiple([backBg, backTxt, backZone]);
+        cy += 65;
 
         this.cameras.main.setBounds(0, 0, W, Math.max(H, cy + 50));
     }
@@ -607,14 +630,14 @@ export default class WeaponDetailScene extends Phaser.Scene {
         this.musicOn = !this.musicOn;
         localStorage.setItem('music_on', this.musicOn);
         this.updateAudioButtonVisuals();
-        this.sound.mute = !this.musicOn && !this.sfxOn;
+        if (window.AetheriaAudioManager) window.AetheriaAudioManager.updateMuteState(this);
     }
 
     toggleSfx() {
         this.sfxOn = !this.sfxOn;
         localStorage.setItem('sfx_on', this.sfxOn);
         this.updateAudioButtonVisuals();
-        this.sound.mute = !this.musicOn && !this.sfxOn;
+        if (window.AetheriaAudioManager) window.AetheriaAudioManager.updateMuteState(this);
     }
 
     updateAudioButtonVisuals() {

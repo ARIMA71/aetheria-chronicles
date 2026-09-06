@@ -296,7 +296,7 @@ export default class BattleMenu extends Phaser.GameObjects.Container {
         this._musicBtn.setFillStyle(this.musicOn ? 0x0d2a1a : 0x2a0d0d);
         this._musicBtn.setStrokeStyle(1.5, this.musicOn ? 0x2ecc71 : 0xe74c3c);
         this._musicText.setText("MUSIC: " + (this.musicOn ? "ON" : "OFF")).setColor(this.musicOn ? "#a8e6cf" : "#ff8a80");
-        this.scene.sound.mute = !this.musicOn && !this.sfxOn;
+        if (window.AetheriaAudioManager) window.AetheriaAudioManager.updateMuteState(this.scene);
     }
 
     toggleSfxSetting() {
@@ -305,7 +305,7 @@ export default class BattleMenu extends Phaser.GameObjects.Container {
         this._sfxBtn.setFillStyle(this.sfxOn ? 0x0d2a1a : 0x2a0d0d);
         this._sfxBtn.setStrokeStyle(1.5, this.sfxOn ? 0x2ecc71 : 0xe74c3c);
         this._sfxText.setText("SFX: " + (this.sfxOn ? "ON" : "OFF")).setColor(this.sfxOn ? "#a8e6cf" : "#ff8a80");
-        this.scene.sound.mute = !this.musicOn && !this.sfxOn;
+        if (window.AetheriaAudioManager) window.AetheriaAudioManager.updateMuteState(this.scene);
     }
 
     showRetreatConfirmation() {

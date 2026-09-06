@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { THEME } from '../main.js';
 import { checkSession, getPlayerId, saveCurrentScene, clearSession } from '../utils/auth.js';
+import { playGlobalBGM } from '../utils/audioManager.js';
 import PartyApi from '../services/PartyApi.js';
 import { CameraScrollManager } from '../utils/cameraScroll.js';
 
@@ -15,6 +16,7 @@ export default class PartyScene extends Phaser.Scene {
     }
 
     async create() {
+        playGlobalBGM(this, 'main_menu');
         if (!checkSession(this)) return;
         saveCurrentScene(this.scene.key);
         this.playerId = getPlayerId();
@@ -833,7 +835,7 @@ export default class PartyScene extends Phaser.Scene {
 
             const cardBg = this.add.graphics();
             cardBg.fillStyle(THEME.PANEL, 1);
-            cardBg.lineStyle(2, color);
+            cardBg.lineStyle(2, THEME.BORDER);
             cardBg.fillRoundedRect(ix - boxW/2, iy - boxH/2, boxW, boxH, 8);
             cardBg.strokeRoundedRect(ix - boxW/2, iy - boxH/2, boxW, boxH, 8);
             this.modalGroup.add(cardBg);
@@ -851,7 +853,11 @@ export default class PartyScene extends Phaser.Scene {
 
             // Art Placeholder (Top 45%)
             const artH = boxH * 0.45;
-            const artBg = this.add.graphics().fillStyle(THEME.BG, 1).fillRoundedRect(ix - boxW/2 + 4, iy - boxH/2 + 4, boxW - 8, artH, 6);
+            const artBg = this.add.graphics();
+            artBg.fillStyle(THEME.BG, 1);
+            artBg.lineStyle(1, color);
+            artBg.fillRoundedRect(ix - boxW/2 + 4, iy - boxH/2 + 4, boxW - 8, artH, 6);
+            artBg.strokeRoundedRect(ix - boxW/2 + 4, iy - boxH/2 + 4, boxW - 8, artH, 6);
             this.modalGroup.add(artBg);
             
             const itemName = isWeapon ? item.mw_name : item.mc_name;
@@ -878,6 +884,17 @@ export default class PartyScene extends Phaser.Scene {
                 this.modalGroup.addMultiple([elCircle, elTxt]);
             }
             
+            // RARITY Indicator at bottom left of art
+            let rColor = '#ffffff';
+            if (rarity === 'SSR') rColor = '#ffd700'; // Gold
+            else if (rarity === 'SR') rColor = '#c0c0c0'; // Silver
+            else if (rarity === 'R') rColor = '#cd7f32'; // Bronze
+
+            if (rarity) {
+                const rTxt = this.add.text(ix - boxW/2 + 6, iy - boxH/2 + artH + 5, rarity, { fontSize: '11px', color: rColor, fontStyle: 'bold', stroke: '#000000', strokeThickness: 2, fontFamily: 'Outfit' }).setOrigin(0, 1);
+                this.modalGroup.add(rTxt);
+            }
+
             // Display Info below art box
             if (effMode === 'Level/LB') {
                 this.modalGroup.add(this.add.text(ix, iy + 12, `Lv: ${item.item_level}`, { fontSize: '10px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5));
@@ -1188,14 +1205,14 @@ export default class PartyScene extends Phaser.Scene {
         this.musicOn = !this.musicOn;
         localStorage.setItem('music_on', this.musicOn);
         this.updateAudioButtonVisuals();
-        this.sound.mute = !this.musicOn && !this.sfxOn;
+        if (window.AetheriaAudioManager) window.AetheriaAudioManager.updateMuteState(this);
     }
 
     toggleSfx() {
         this.sfxOn = !this.sfxOn;
         localStorage.setItem('sfx_on', this.sfxOn);
         this.updateAudioButtonVisuals();
-        this.sound.mute = !this.musicOn && !this.sfxOn;
+        if (window.AetheriaAudioManager) window.AetheriaAudioManager.updateMuteState(this);
     }
 
     updateAudioButtonVisuals() {

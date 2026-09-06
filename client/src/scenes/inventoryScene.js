@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { THEME } from '../main.js';
+import { playGlobalBGM } from '../utils/audioManager.js';
 import { checkSession, saveCurrentScene, clearSession, getPlayerId } from '../utils/auth.js';
 import PartyApi from '../services/PartyApi.js';
 import { CameraScrollManager } from '../utils/cameraScroll.js';
@@ -24,11 +25,15 @@ export default class InventoryScene extends Phaser.Scene {
     }
 
     create() {
+        if (!checkSession(this)) return;
+        saveCurrentScene(this.scene.key);
+        playGlobalBGM(this, 'main_menu');
+
         this.playerId = getPlayerId();
         this.currentTab = 'Characters'; // Characters, Weapons, Materials
         this.sortBy = localStorage.getItem('inventory_sort') || 'Level'; // Level, ATK, HP, Rarity
         this.displayMode = localStorage.getItem('inventory_view') || 'ATK/HP'; // ATK/HP, Level/LB, Skills
-        
+
         this.characters = [];
         this.weapons = [];
         this.materials = [];
@@ -37,25 +42,25 @@ export default class InventoryScene extends Phaser.Scene {
         this.add.rectangle(0, 0, W, H, THEME.BG).setOrigin(0);
 
         // Header Fixed
-        const headerBg = this.add.rectangle(0, 0, W, 60, THEME.PANEL, THEME.PANEL_ALPHA).setOrigin(0).setScrollFactor(0).setDepth(50);
+        const headerBg = this.add.rectangle(0, 0, W, 60, 0x0a0f1d, 1).setOrigin(0).setScrollFactor(0).setDepth(1000);
         headerBg.setStrokeStyle(1, THEME.BORDER);
-        this.add.text(CX, 30, 'INVENTORY', { fontSize: '16px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY, letterSpacing: 1 }).setOrigin(0.5).setScrollFactor(0).setDepth(50);
-        
-        const backBtn = this.add.circle(40, 30, 18, THEME.PANEL, THEME.PANEL_ALPHA).setScrollFactor(0).setDepth(50);
+        this.add.text(CX, 30, 'INVENTORY', { fontSize: '16px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY, letterSpacing: 1 }).setOrigin(0.5).setScrollFactor(0).setDepth(1000);
+
+        const backBtn = this.add.circle(40, 30, 18, THEME.PANEL, 1).setScrollFactor(0).setDepth(1000);
         backBtn.setStrokeStyle(1, THEME.BORDER);
         backBtn.setInteractive({ useHandCursor: true });
-        const homeTxt = this.add.text(40, 30, 'HOME', { fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5).setScrollFactor(0).setDepth(50);
+        const homeTxt = this.add.text(40, 30, 'HOME', { fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5).setScrollFactor(0).setDepth(1000);
         backBtn.on('pointerover', () => { backBtn.setFillStyle(0x334155); homeTxt.setColor('#ffffff'); });
-        backBtn.on('pointerout', () => { backBtn.setFillStyle(THEME.PANEL, THEME.PANEL_ALPHA); homeTxt.setColor(THEME.TEXT_PRIMARY); });
+        backBtn.on('pointerout', () => { backBtn.setFillStyle(THEME.PANEL); homeTxt.setColor(THEME.TEXT_PRIMARY); });
         backBtn.on('pointerdown', () => {
             this.scene.start('LoadingScene', { targetScene: 'MainMenuScene' });
         });
 
         // MENU Button
-        const menuBtn = this.add.circle(W - 40, 30, 18, THEME.PANEL, THEME.PANEL_ALPHA).setScrollFactor(0).setDepth(50);
+        const menuBtn = this.add.circle(W - 40, 30, 18, THEME.PANEL, 1).setScrollFactor(0).setDepth(1000);
         menuBtn.setStrokeStyle(1, THEME.BORDER);
         menuBtn.setInteractive({ useHandCursor: true });
-        const menuText = this.add.text(W - 40, 30, 'MENU', { fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5).setScrollFactor(0).setDepth(50);
+        const menuText = this.add.text(W - 40, 30, 'MENU', { fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5).setScrollFactor(0).setDepth(1000);
 
         menuBtn.on('pointerover', () => { menuBtn.setFillStyle(0x334155); menuText.setColor('#ffffff'); });
         menuBtn.on('pointerout', () => { menuBtn.setFillStyle(THEME.PANEL); menuText.setColor(THEME.TEXT_PRIMARY); });
@@ -68,11 +73,11 @@ export default class InventoryScene extends Phaser.Scene {
         this._buildMenuModal();
         this.uiGroup = this.add.group();
         this.scrollGroup = this.add.group();
-        
+
         this.loadingText = this.add.text(CX, H / 2, 'Loading Inventory...', { fontSize: '14px', color: THEME.TEXT_MUTED, fontFamily: 'Outfit' }).setOrigin(0.5);
 
         this.currentPage = 1;
-        this.itemsPerPage = 200; // Ditingkatkan agar bisa di-scroll tanpa pagination
+        this.itemsPerPage = 20; // 4x5 grid with pagination
 
         this.loadData();
     }
@@ -80,12 +85,12 @@ export default class InventoryScene extends Phaser.Scene {
     async loadData() {
         const res = await PartyApi.getInventory(this.playerId);
         const presetsRes = await PartyApi.getPresets(this.playerId);
-        
+
         if (res.status === 'success') {
             this.characters = res.data.characters || [];
             this.weapons = res.data.weapons || [];
             this.materials = res.data.materials || [];
-            
+
             this.equippedItemIds = new Set();
             if (presetsRes.status === 'success' && presetsRes.data) {
                 const activePreset = presetsRes.data.find(p => p.is_active) || presetsRes.data[0];
@@ -147,44 +152,44 @@ export default class InventoryScene extends Phaser.Scene {
         // --- Tabs (Section 1) ---
         const tabs = ['Characters', 'Weapons', 'Materials'];
         const tabW = 140; // Wider tabs to fit the screen
-        
+
         tabs.forEach((tab, i) => {
             const isSel = this.currentTab === tab;
             const tx = (CX - 144) + i * 144;
             const ty = 90; // Moved up to give more space
-            
+
             const g = this.add.graphics();
             g.fillStyle(isSel ? 0x1e293b : THEME.BG, 1);
-            
+
             // Draw custom tab shape (rounded top only), symmetrically centered around ty
             g.lineStyle(1, isSel ? 0x334155 : THEME.BORDER, 1);
             g.beginPath();
-            g.moveTo(tx - tabW/2, ty + 15); // Bottom left
-            g.lineTo(tx - tabW/2, ty - 15); // Top left
-            g.lineTo(tx + tabW/2, ty - 15); // Top right
-            g.lineTo(tx + tabW/2, ty + 15); // Bottom right
-            
+            g.moveTo(tx - tabW / 2, ty + 15); // Bottom left
+            g.lineTo(tx - tabW / 2, ty - 15); // Top left
+            g.lineTo(tx + tabW / 2, ty - 15); // Top right
+            g.lineTo(tx + tabW / 2, ty + 15); // Bottom right
+
             // If selected, we don't draw the bottom border so it blends seamlessly
             if (!isSel) {
-                g.lineTo(tx - tabW/2, ty + 15);
+                g.lineTo(tx - tabW / 2, ty + 15);
             }
             g.fillPath();
             g.strokePath();
-            
+
             g.setScrollFactor(0);
             this.uiGroup.add(g);
 
-            const z = this.add.zone(tx, ty, tabW, 30).setInteractive({useHandCursor:true}).setScrollFactor(0);
-            z.on('pointerdown', () => { 
-                this.currentTab = tab; 
+            const z = this.add.zone(tx, ty, tabW, 30).setInteractive({ useHandCursor: true }).setScrollFactor(0);
+            z.on('pointerdown', () => {
+                this.currentTab = tab;
                 this.currentPage = 1;
                 this.cameras.main.scrollY = 0;
-                this.renderUI(); 
+                this.renderUI();
             });
             this.uiGroup.add(z);
 
-            this.uiGroup.add(this.add.text(tx, ty, tab, { 
-                fontSize: '12px', color: isSel ? '#ffffff' : THEME.TEXT_MUTED, fontStyle: 'bold' 
+            this.uiGroup.add(this.add.text(tx, ty, tab, {
+                fontSize: '12px', color: isSel ? '#ffffff' : THEME.TEXT_MUTED, fontStyle: 'bold'
             }).setOrigin(0.5).setScrollFactor(0));
         });
 
@@ -193,9 +198,9 @@ export default class InventoryScene extends Phaser.Scene {
             // Sort Button
             const sortBtnBg = this.add.rectangle(120, 150, 140, 26, THEME.PANEL, 1).setScrollFactor(0);
             sortBtnBg.setStrokeStyle(1, THEME.BORDER);
-            const sortZone = this.add.zone(120, 150, 140, 26).setInteractive({useHandCursor:true}).setScrollFactor(0);
+            const sortZone = this.add.zone(120, 150, 140, 26).setInteractive({ useHandCursor: true }).setScrollFactor(0);
             const sortTxt = this.add.text(120, 150, `SORT: ${this.sortBy}`, { fontSize: '11px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0);
-            
+
             sortZone.on('pointerover', () => sortBtnBg.setFillStyle(0x334155));
             sortZone.on('pointerout', () => sortBtnBg.setFillStyle(THEME.PANEL));
             sortZone.on('pointerdown', () => {
@@ -209,10 +214,10 @@ export default class InventoryScene extends Phaser.Scene {
             // Display Toggle Button
             const dispBtnBg = this.add.rectangle(W - 120, 150, 140, 26, THEME.PANEL, 1).setScrollFactor(0);
             dispBtnBg.setStrokeStyle(1, THEME.BORDER);
-            const dispZone = this.add.zone(W - 120, 150, 140, 26).setInteractive({useHandCursor:true}).setScrollFactor(0);
+            const dispZone = this.add.zone(W - 120, 150, 140, 26).setInteractive({ useHandCursor: true }).setScrollFactor(0);
             const effMode = (this.currentTab === 'Characters' && this.displayMode === 'Skills') ? 'ATK/HP' : (this.displayMode || 'ATK/HP');
             const dispTxt = this.add.text(W - 120, 150, `VIEW: ${effMode}`, { fontSize: '11px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0);
-            
+
             dispZone.on('pointerover', () => dispBtnBg.setFillStyle(0x334155));
             dispZone.on('pointerout', () => dispBtnBg.setFillStyle(THEME.PANEL));
             dispZone.on('pointerdown', () => {
@@ -287,7 +292,7 @@ export default class InventoryScene extends Phaser.Scene {
         pagedItems.forEach((item, index) => {
             const col = index % cols;
             const row = Math.floor(index / cols);
-            
+
             const ix = startX + col * (boxW + paddingX);
             const iy = startYGrid + row * (boxH + paddingY) + (boxH / 2);
             bottomY = Math.max(bottomY, iy + boxH / 2);
@@ -302,13 +307,13 @@ export default class InventoryScene extends Phaser.Scene {
 
             const cardBg = this.add.graphics();
             cardBg.fillStyle(THEME.PANEL, 1);
-            cardBg.lineStyle(2, color);
-            cardBg.fillRoundedRect(ix - boxW/2, iy - boxH/2, boxW, boxH, 8);
-            cardBg.strokeRoundedRect(ix - boxW/2, iy - boxH/2, boxW, boxH, 8);
+            cardBg.lineStyle(2, THEME.BORDER);
+            cardBg.fillRoundedRect(ix - boxW / 2, iy - boxH / 2, boxW, boxH, 8);
+            cardBg.strokeRoundedRect(ix - boxW / 2, iy - boxH / 2, boxW, boxH, 8);
             this.scrollGroup.add(cardBg);
 
             // Click Zone
-            const zone = this.add.zone(ix, iy, boxW, boxH).setInteractive({useHandCursor:true});
+            const zone = this.add.zone(ix, iy, boxW, boxH).setInteractive({ useHandCursor: true });
             zone.on('pointerdown', (p, x, y, e) => {
                 e.stopPropagation();
                 this.tweens.add({ targets: cardBg, scale: 0.95, yoyo: true, duration: 80 });
@@ -328,11 +333,15 @@ export default class InventoryScene extends Phaser.Scene {
                 // Character / Weapon Custom Layout
                 // Art Placeholder (Top 45%)
                 const artH = boxH * 0.45;
-                const artBg = this.add.graphics().fillStyle(THEME.BG, 1).fillRoundedRect(ix - boxW/2 + 4, iy - boxH/2 + 4, boxW - 8, artH, 6);
+                const artBg = this.add.graphics();
+                artBg.fillStyle(THEME.BG, 1);
+                artBg.lineStyle(1, color);
+                artBg.fillRoundedRect(ix - boxW / 2 + 4, iy - boxH / 2 + 4, boxW - 8, artH, 6);
+                artBg.strokeRoundedRect(ix - boxW / 2 + 4, iy - boxH / 2 + 4, boxW - 8, artH, 6);
                 this.scrollGroup.add(artBg);
-                
+
                 const itemName = isWeapon ? item.mw_name : item.mc_name;
-                this.scrollGroup.add(this.add.text(ix, iy - boxH/2 + 4 + artH/2, itemName.split(' ')[0], { fontSize: '10px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold' }).setOrigin(0.5));
+                this.scrollGroup.add(this.add.text(ix, iy - boxH / 2 + 4 + artH / 2, itemName.split(' ')[0], { fontSize: '10px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold' }).setOrigin(0.5));
 
                 const element = isWeapon ? item.mw_element : item.mc_element;
                 const elColor = this.getElementColor(element);
@@ -340,28 +349,40 @@ export default class InventoryScene extends Phaser.Scene {
 
                 // ELEMENT Indicator at top right
                 if (this.textures.exists(elKey)) {
-                    const iconImg = this.add.image(ix + boxW/2 - 10, iy - boxH/2 + 10, elKey).setDisplaySize(14, 14);
+                    const iconImg = this.add.image(ix + boxW / 2 - 10, iy - boxH / 2 + 10, elKey).setDisplaySize(14, 14);
                     const shape = this.make.graphics();
-                    shape.fillCircle(ix + boxW/2 - 10, iy - boxH/2 + 10, 7);
+                    shape.fillCircle(ix + boxW / 2 - 10, iy - boxH / 2 + 10, 7);
                     iconImg.setMask(shape.createGeometryMask());
-                    
+
                     // Stroke overlay
-                    const strokeCircle = this.add.circle(ix + boxW/2 - 10, iy - boxH/2 + 10, 7).setStrokeStyle(1, THEME.PANEL);
+                    const strokeCircle = this.add.circle(ix + boxW / 2 - 10, iy - boxH / 2 + 10, 7).setStrokeStyle(1, THEME.PANEL);
                     this.scrollGroup.addMultiple([iconImg, strokeCircle]);
                 } else {
-                    const elCircle = this.add.circle(ix + boxW/2 - 10, iy - boxH/2 + 10, 7, elColor).setStrokeStyle(1, THEME.PANEL);
+                    const elCircle = this.add.circle(ix + boxW / 2 - 10, iy - boxH / 2 + 10, 7, elColor).setStrokeStyle(1, THEME.PANEL);
                     const elLetter = element ? element.charAt(0).toUpperCase() : '?';
-                    const elTxt = this.add.text(ix + boxW/2 - 10, iy - boxH/2 + 10, elLetter, { fontSize: '9px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5);
+                    const elTxt = this.add.text(ix + boxW / 2 - 10, iy - boxH / 2 + 10, elLetter, { fontSize: '9px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5);
                     this.scrollGroup.addMultiple([elCircle, elTxt]);
                 }
 
                 // EQUIPPED Indicator at top left
                 if (this.equippedItemIds && this.equippedItemIds.has(item.inv_id)) {
-                    const eBg = this.add.circle(ix - boxW/2 + 10, iy - boxH/2 + 10, 7, 0x3b82f6).setStrokeStyle(1, THEME.PANEL);
-                    const eTxt = this.add.text(ix - boxW/2 + 10, iy - boxH/2 + 10, 'E', { fontSize: '9px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5);
+                    const eBg = this.add.circle(ix - boxW / 2 + 10, iy - boxH / 2 + 10, 7, 0x3b82f6).setStrokeStyle(1, THEME.PANEL);
+                    const eTxt = this.add.text(ix - boxW / 2 + 10, iy - boxH / 2 + 10, 'E', { fontSize: '9px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5);
                     this.scrollGroup.addMultiple([eBg, eTxt]);
                 }
-                
+
+                // RARITY Indicator at bottom left of art
+                const itemRarity = isWeapon ? item.mw_rarity : item.mc_rarity;
+                let rColor = '#ffffff';
+                if (itemRarity === 'SSR') rColor = '#ffd700'; // Gold
+                else if (itemRarity === 'SR') rColor = '#c0c0c0'; // Silver
+                else if (itemRarity === 'R') rColor = '#cd7f32'; // Bronze
+
+                if (itemRarity) {
+                    const rTxt = this.add.text(ix - boxW / 2 + 6, iy - boxH / 2 + artH + 5, itemRarity, { fontSize: '9px', color: rColor, fontStyle: 'bold', stroke: '#000000', strokeThickness: 2, fontFamily: 'Outfit' }).setOrigin(0, 1);
+                    this.scrollGroup.add(rTxt);
+                }
+
                 // Display Info below art box
                 const effMode = (this.currentTab === 'Characters' && this.displayMode === 'Skills') ? 'ATK/HP' : this.displayMode;
 
@@ -371,17 +392,17 @@ export default class InventoryScene extends Phaser.Scene {
                 } else if (effMode === 'Skills') {
                     const skills = (item.skills || []).filter(s => s.ms_category === 'Passive');
                     skills.slice(0, 2).forEach((skill, i) => {
-                        const sx = ix + (i===0 && skills.length>1 ? -15 : (i===1 ? 15 : 0));
+                        const sx = ix + (i === 0 && skills.length > 1 ? -15 : (i === 1 ? 15 : 0));
                         const sy = iy + 20;
-                        
+
                         const isLocked = (item.item_level < skill.unlock_level) || (item.limit_break_level < skill.unlock_limit_break);
-                        const sBox = this.add.graphics().fillStyle(isLocked ? 0x555555 : 0x458B74, 1).fillRoundedRect(sx-10, sy-10, 20, 20, 4);
-                        const sZone = this.add.zone(sx, sy, 20, 20).setInteractive({useHandCursor:true});
-                        sZone.on('pointerdown', (ptr, lx, ly, ev) => { 
+                        const sBox = this.add.graphics().fillStyle(isLocked ? 0x555555 : 0x458B74, 1).fillRoundedRect(sx - 10, sy - 10, 20, 20, 4);
+                        const sZone = this.add.zone(sx, sy, 20, 20).setInteractive({ useHandCursor: true });
+                        sZone.on('pointerdown', (ptr, lx, ly, ev) => {
                             ev.stopPropagation();
-                            this.showSkillReadOnlyModal(skill, isLocked); 
+                            this.showSkillReadOnlyModal(skill, isLocked);
                         });
-                        
+
                         this.scrollGroup.addMultiple([sBox, sZone]);
                         this.scrollGroup.add(this.add.text(sx, sy, 'P', { fontSize: '10px', color: isLocked ? '#999' : '#fff' }).setOrigin(0.5));
                     });
@@ -399,7 +420,7 @@ export default class InventoryScene extends Phaser.Scene {
 
         // --- Pagination Controls ---
         const pageY = 765; // perfectly centered vertically in the bottom padding space
-        
+
         // Prev Button
         const prevActive = this.currentPage > 1;
         const prevBtn = this.add.rectangle(CX - 80, pageY, 60, 25, prevActive ? 0x1e293b : 0x0f172a).setStrokeStyle(1, THEME.BORDER);
@@ -413,9 +434,10 @@ export default class InventoryScene extends Phaser.Scene {
             prevBtn.on('pointerover', () => prevBtn.setFillStyle(0x334155));
             prevBtn.on('pointerout', () => prevBtn.setFillStyle(0x1e293b));
         }
-        
+
         // Page Info
-        this.add.text(CX, pageY, `${this.currentPage} / ${totalPages}`, { fontSize: '12px', fontStyle: 'bold', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
+        const pageTxt = this.add.text(CX, pageY, `${this.currentPage} / ${totalPages}`, { fontSize: '14px', fontFamily: 'Outfit', fontStyle: 'bold', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
+        this.scrollGroup.add(pageTxt);
 
         // Next Button
         const nextActive = this.currentPage < totalPages;
@@ -456,7 +478,7 @@ export default class InventoryScene extends Phaser.Scene {
         const divider = this.add.rectangle(CX, 60, W, 1, THEME.BORDER);
 
         const s1Label = this.add.text(CX, 85, 'QUICK NAVIGATION', { fontSize: '9px', fontFamily: 'Outfit', color: THEME.TEXT_SECONDARY, letterSpacing: 1 }).setOrigin(0.5);
-        
+
         const btnParty = this._createModalRoundBtn(CX - 100, 125, 'PARTY', () => {
             this.toggleMenuModal(false);
             this.scene.start('LoadingScene', { targetScene: 'PartyScene' });
@@ -475,7 +497,7 @@ export default class InventoryScene extends Phaser.Scene {
             this.toggleMenuModal(false);
             this.scene.start('LoadingScene', { targetScene: 'InventoryScene' });
         });
-        const btnShop = this._createModalRectBtn(CX + 90, 215, 160, 30, 'SHOP', () => {});
+        const btnShop = this._createModalRectBtn(CX + 90, 215, 160, 30, 'SHOP', () => { });
 
         const s3Label = this.add.text(CX, 270, 'AUDIO SETTINGS', { fontSize: '9px', fontFamily: 'Outfit', color: THEME.TEXT_SECONDARY, letterSpacing: 1 }).setOrigin(0.5);
 
@@ -546,13 +568,13 @@ export default class InventoryScene extends Phaser.Scene {
 
     showSkillReadOnlyModal(skill, isLocked) {
         const container = this.add.container(0, 0).setDepth(200);
-        
-        const bg = this.add.rectangle(CX, H/2, W, H, 0x000000, 0.8).setInteractive();
+
+        const bg = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.8).setInteractive();
         container.add(bg);
         bg.on('pointerdown', () => container.destroy());
 
         const CY = H / 2;
-        const mBox = this.add.graphics().fillStyle(THEME.PANEL, 1).lineStyle(1, 0x475569).fillRoundedRect(20, CY - 60, W-40, 100, 4).strokeRoundedRect(20, CY - 60, W-40, 100, 4);
+        const mBox = this.add.graphics().fillStyle(THEME.PANEL, 1).lineStyle(1, 0x475569).fillRoundedRect(20, CY - 60, W - 40, 100, 4).strokeRoundedRect(20, CY - 60, W - 40, 100, 4);
         container.add(mBox);
 
         // Icon
@@ -571,7 +593,7 @@ export default class InventoryScene extends Phaser.Scene {
 
         const titleColor = isLocked ? THEME.TEXT_MUTED : (skill.ms_category === 'Special' ? THEME.GOLD : '#60a5fa');
         container.add(this.add.text(95, CY - 45, skill.ms_name, { fontSize: '14px', color: titleColor, fontStyle: 'bold' }));
-        
+
         // Cooldown (Hide for Passive skills)
         if (skill.ms_category !== 'Passive') {
             container.add(this.add.text(W - 35, CY - 45, `CD: ${skill.ms_cooldown}T`, { fontSize: '10px', color: THEME.TEXT_MUTED }).setOrigin(1, 0));
@@ -581,7 +603,7 @@ export default class InventoryScene extends Phaser.Scene {
         container.add(this.add.text(95, CY - 20, skill.ms_desc, { fontSize: '11px', color: '#ffffff', wordWrap: { width: W - 140 }, lineSpacing: 4 }));
 
         if (isLocked) {
-            const warningBox = this.add.graphics().fillStyle(0x000000, 0.8).lineStyle(1, THEME.DANGER).fillRoundedRect(20, CY + 50, W-40, 40, 4).strokeRoundedRect(20, CY + 50, W-40, 40, 4);
+            const warningBox = this.add.graphics().fillStyle(0x000000, 0.8).lineStyle(1, THEME.DANGER).fillRoundedRect(20, CY + 50, W - 40, 40, 4).strokeRoundedRect(20, CY + 50, W - 40, 40, 4);
             const warningTxt = this.add.text(CX, CY + 70, `🔒 Syarat Level: ${skill.unlock_level}  |  Syarat LB: ${skill.unlock_limit_break}`, { fontSize: '12px', color: THEME.GOLD, fontStyle: 'bold' }).setOrigin(0.5);
             container.add([warningBox, warningTxt]);
         }
@@ -596,14 +618,14 @@ export default class InventoryScene extends Phaser.Scene {
         this.musicOn = !this.musicOn;
         localStorage.setItem('music_on', this.musicOn);
         this.updateAudioButtonVisuals();
-        this.sound.mute = !this.musicOn && !this.sfxOn;
+        if (window.AetheriaAudioManager) window.AetheriaAudioManager.updateMuteState(this);
     }
 
     toggleSfx() {
         this.sfxOn = !this.sfxOn;
         localStorage.setItem('sfx_on', this.sfxOn);
         this.updateAudioButtonVisuals();
-        this.sound.mute = !this.musicOn && !this.sfxOn;
+        if (window.AetheriaAudioManager) window.AetheriaAudioManager.updateMuteState(this);
     }
 
     updateAudioButtonVisuals() {
