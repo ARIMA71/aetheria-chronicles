@@ -4,7 +4,7 @@ import { THEME } from "../main.js";
 import { checkSession, saveCurrentScene, getPlayerUsername } from "../utils/auth.js";
 import BattleApi from "../services/BattleApi.js";
 import BattleMenu from "../ui/BattleMenu.js";
-import { playGlobalBGM } from "../utils/audioManager.js";
+import { playGlobalBGM, stopGlobalBGM } from "../utils/audioManager.js";
 // Element icons are loaded as PNGs in preload
 
 const W = 480, H = 880, CX = 240;
@@ -21,14 +21,14 @@ export default class BattleScene extends Phaser.Scene {
         this.load.image('element_earth', 'assets/icons/elements/rock.png');
 
         // Load Character Sprites
-        this.load.image('char_mc_Male', 'assets/sprite/char/1-mc-male.png');
-        this.load.image('char_mc_Female', 'assets/sprite/char/1-mc-female.png');
+        this.load.image('char_mc_Male', 'assets/sprites/char/1-mc-male.png');
+        this.load.image('char_mc_Female', 'assets/sprites/char/1-mc-female.png');
         // Load Monster Sprites
-        this.load.image('mons_12', 'assets/sprite/mons/12-slime.png');
+        this.load.image('mons_12', 'assets/sprites/mons/12-slime.png');
 
         // Load Character Portraits
-        this.load.image('port_mc_Male', 'assets/portrait/char/1-mc-male.png');
-        this.load.image('port_mc_Female', 'assets/portrait/char/1-mc-female.png');
+        this.load.image('port_mc_Male', 'assets/portraits/char/1-mc-male.png');
+        this.load.image('port_mc_Female', 'assets/portraits/char/1-mc-female.png');
     }
     setTurn(newTurn) {
 
@@ -43,9 +43,8 @@ export default class BattleScene extends Phaser.Scene {
     create() {
         if (!checkSession(this)) return;
 
-        // BGM Logic: Read mapped bgmKey from LoadingScene
-        const bgmKey = this._sceneData.bgmKey || 'bgm_normalbattle';
-        playGlobalBGM(this, bgmKey);
+        // bgmKey will be read and played in _playStartAnimation
+        this.bgmKey = this._sceneData.bgmKey || 'bgm_normalbattle';
 
         this.setTurn("player"); this.currentTurn = 1;
         this.players = []; this.activePlayer = null;
@@ -1288,6 +1287,9 @@ export default class BattleScene extends Phaser.Scene {
             alpha: 1,
             duration: 300,
             ease: 'Back.out',
+            onStart: () => {
+                if (this.bgmKey) playGlobalBGM(this, this.bgmKey);
+            },
             onComplete: () => {
                 this.time.delayedCall(800, () => {
                     this.tweens.add({
@@ -1618,6 +1620,18 @@ export default class BattleScene extends Phaser.Scene {
                                 if (this.enemies.includes(target) && target && ev.skillName !== 'STUNNED') target.playHitAnim();
                                 else if (!this.enemies.includes(target)) this.playSpriteHitAnim(target);
 
+                                const isEnemy = String(ev.sourceId).startsWith('enemy');
+                                const isSA = ev.skillCategory === 'special';
+                                const isSkill = ev.skillCategory && ev.skillCategory !== 'basic';
+                                
+                                if (isEnemy) {
+                                    const monsSfx = isSkill ? 'sfx_monsChargeAttack' : 'sfx_monsBasicAtk';
+                                    if (this.sound.get(monsSfx) || this.cache.audio.exists(monsSfx)) this.sound.play(monsSfx, { volume: 0.7 });
+                                } else {
+                                    const atkSfx = isSA ? 'sfx_charSpecialAttack' : (isSkill ? 'sfx_charSkillAtk' : 'sfx_charBasicAtk');
+                                    if (this.sound.get(atkSfx) || this.cache.audio.exists(atkSfx)) this.sound.play(atkSfx, { volume: 0.7 });
+                                }
+
                                 this.showFloatingDamage(target, ev.value, ev.isCrit, ev.elementMultiplier, ev.sourceElement);
 
                                 // Return Animation (AWAIT)
@@ -1635,6 +1649,7 @@ export default class BattleScene extends Phaser.Scene {
                         else target.refreshVisual();
                         this.showFloatingHeal(target, ev.value);
                         this.showLog(`[Heal] ${target.charName} restored HP!`, 'popup');
+                        if (this.sound.get('sfx_heal') || this.cache.audio.exists('sfx_heal')) this.sound.play('sfx_heal', { volume: 0.8 });
                         delay = 600;
                     }
                 } else if (ev.type === 'revive') {
@@ -1643,6 +1658,7 @@ export default class BattleScene extends Phaser.Scene {
                         if (target === this.enemy) this._refreshEnemyHUD();
                         else target.refreshVisual();
                         this.showLog(`✨ ${target.charName} revived!`, 'popup');
+                        if (this.sound.get('sfx_revive') || this.cache.audio.exists('sfx_revive')) this.sound.play('sfx_revive', { volume: 0.8 });
                         delay = 600;
                     }
                 } else if (ev.type === 'cleanse') {
@@ -1650,12 +1666,15 @@ export default class BattleScene extends Phaser.Scene {
                         target.activeEffects = target.activeEffects.filter(e => (e.effect_type || '').toLowerCase() !== 'debuff');
                         target.refreshVisual();
                         this.showLog(`✨ ${target.charName} debuffs cleansed!`, 'popup');
+                        if (this.sound.get('sfx_heal') || this.cache.audio.exists('sfx_heal')) this.sound.play('sfx_heal', { volume: 0.8 });
                         delay = 500;
                     }
                 } else if (ev.type === 'effect_applied') {
                     if (target) {
                         this.showFloatingEffect(target, ev.effectName, ev.effectType);
                         this.showLog(`${target.charName} got ${ev.effectName}!`, 'popup');
+                        const sfx = (ev.effectType === 'buff') ? 'sfx_buff' : 'sfx_debuff';
+                        if (this.sound.get(sfx) || this.cache.audio.exists(sfx)) this.sound.play(sfx, { volume: 0.8 });
                         delay = 500;
                     }
                 } else if (ev.type === 'enrage') {
@@ -2253,6 +2272,7 @@ export default class BattleScene extends Phaser.Scene {
     checkVictory() {
         if (this.enemies.every(e => e.hp <= 0)) {
             this.turn = "none";
+            stopGlobalBGM();
             this._showCenterAnim("VICTORY!", "#ffeb3b");
             this.time.delayedCall(1500, () => {
                 this.scene.stop();

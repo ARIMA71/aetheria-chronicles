@@ -11,6 +11,7 @@ export default class DefeatScene extends Phaser.Scene {
     }
 
     init(data) {
+
         this.questId = data.questId || 5;
         this.playerId = data.playerId || 1;
         this.isRetreat = data.isRetreat || false;
@@ -19,6 +20,15 @@ export default class DefeatScene extends Phaser.Scene {
 
     create() {
         if (!checkSession(this)) return;
+
+        this.cameras.main.setBounds(0, 0, W, H);
+        this.cameras.main.setScroll(0, 0);
+
+        this.sound.stopAll();
+
+        if (this.sound.get('sfx_defeat') || this.cache.audio.exists('sfx_defeat')) {
+            this.sound.play('sfx_defeat', { volume: 0.8 });
+        }
 
         // Clear the active session in DB
         if (this.bsId) {
@@ -135,6 +145,7 @@ export default class DefeatScene extends Phaser.Scene {
         btnLeft.on('pointerdown', () => {
             this.scene.stop('BattleScene');
             this.scene.stop('DefeatScene');
+            this.sound.stopAll();
             this.scene.start('LoadingScene', { targetScene: 'QuestScene' });
         });
 
@@ -155,6 +166,7 @@ export default class DefeatScene extends Phaser.Scene {
         btnRight.on('pointerdown', () => {
             this.scene.stop('BattleScene');
             this.scene.stop('DefeatScene');
+            this.sound.stopAll();
             this.scene.start('LoadingScene', { targetScene: 'MainMenuScene' });
         });
     }

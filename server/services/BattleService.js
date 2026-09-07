@@ -816,6 +816,7 @@ class BattleService {
                             isCrit: calcResult.isCrit,
                             mitigation: calcResult.mitigationPercent,
                             skillName: skillObj.name,
+                            skillCategory: (skillObj.category || (action_type === 'special_attack' ? 'special' : (action_type === 'skill' ? 'skill' : 'basic'))).toLowerCase(),
                             elementMultiplier: calcResult.elementMultiplier,
                             sourceElement: skillObj.element || character.element || 'Neutral',
                             modeBar: targetEntity.mode_bar,
@@ -997,7 +998,7 @@ class BattleService {
                             enemy.current_ca = 0; // Reset CA
                         }
                     } else {
-                        enemySkill = { name: enemy.name ? `${enemy.name} Strike` : 'Monster Attack', type: 'Damage', target_type: 'Single_Enemy', modifier: 1.0, element: enemy.element || 'Neutral' };
+                        enemySkill = { name: 'Basic Attack', category: 'Basic', type: 'Damage', target_type: 'Single_Enemy', modifier: 1.0, element: enemy.element || 'Neutral' };
                         const currentCa = enemy.current_ca !== undefined ? enemy.current_ca : 0;
                         const caMax = enemy.caMax !== undefined ? enemy.caMax : (enemy.final_stats && enemy.final_stats.caMax) !== undefined ? enemy.final_stats.caMax : 5;
                         const isExhausted = (enemy.mode_state || enemy.modeState) === 'exhausted';
@@ -1042,6 +1043,7 @@ class BattleService {
                                 isCrit: calcResult.isCrit,
                                 mitigation: calcResult.mitigationPercent,
                                 skillName: enemySkill.name,
+                                skillCategory: (enemySkill.category || 'basic').toLowerCase(),
                                 elementMultiplier: calcResult.elementMultiplier,
                                 sourceElement: enemySkill.element || enemy.element || 'Neutral'
                             });
@@ -1602,7 +1604,7 @@ class BattleService {
                 if (triggerHealPct > 0 && target.current_hp > 0) {
                     const healAmt = Math.floor(target.final_stats.hp * triggerHealPct);
                     target.current_hp = Math.min((target.current_hp || target.final_stats.hp) + healAmt, target.final_stats.hp);
-                    events.push({ type: 'heal', targetId: targetIds[targets.indexOf(target)], value: healAmt, skillName: skill.name });
+                    events.push({ type: 'heal', targetId: targetIds[targets.indexOf(target)], value: healAmt, skillName: skill.name, skillCategory: (skill.category || 'basic').toLowerCase() });
                 }
 
                 if (sType === 'damage' || actionType === 'attack') {
@@ -1658,13 +1660,15 @@ class BattleService {
                         sourceId: sourceId,
                         targetId: targetIds[targets.indexOf(target)],
                         value: calcResult.damage,
-                        isCrit: calcResult.isCrit,
-                        mitigation: calcResult.mitigationPercent,
                         skillName: skill.name,
+                        skillCategory: (skill.category || 'basic').toLowerCase(),
+                        isCrit: calcResult.isCrit,
+                        isDoT: false,
+                        mitigation: calcResult.mitigationPercent,
                         elementMultiplier: calcResult.elementMultiplier,
                         sourceElement: skill.element || (attacker ? attacker.element || 'Neutral' : 'Neutral'),
                         modeBar: target.mode_bar,
-                        modeState: target.mode_state
+                        modeState: modeTransitionedTo || target.mode_state
                     });
                     
                     // Push mode transition events if triggered immediately (not pending)

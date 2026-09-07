@@ -440,6 +440,10 @@ export default class GachaScene extends Phaser.Scene {
     }
 
     showResultModal(items) {
+        if (this.sound.get('sfx_gacha') || this.cache.audio.exists('sfx_gacha')) {
+            this.sound.play('sfx_gacha', { volume: 0.8 });
+        }
+
         // Clear previous grid items
         this.resultItemsGroup.clear(true, true);
 
@@ -565,6 +569,9 @@ export default class GachaScene extends Phaser.Scene {
         const nextChar = this.newCharactersQueue.shift();
 
         // Tampilkan modal karakter baru
+        if (this.sound.get('sfx_newCharacterUnlocked') || this.cache.audio.exists('sfx_newCharacterUnlocked')) {
+            this.sound.play('sfx_newCharacterUnlocked', { volume: 0.8 });
+        }
         this.newCharName.setText(nextChar.name);
         this.newCharContainer.setVisible(true);
     }

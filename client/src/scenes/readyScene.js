@@ -19,6 +19,10 @@ export default class ReadyScene extends Phaser.Scene {
         // Background
         this.add.rectangle(0, 0, W, H, THEME.BG).setOrigin(0);
 
+        if (this.sound.get('sfx_battleReady') || this.cache.audio.exists('sfx_battleReady')) {
+            this.sound.play('sfx_battleReady', { volume: 0.8 });
+        }
+
         // Decorative Lines
         const topBg = this.add.rectangle(CX, CY, W, 80, THEME.PANEL).setAlpha(0);
         this.tweens.add({

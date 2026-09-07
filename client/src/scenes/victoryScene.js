@@ -25,6 +25,12 @@ export default class VictoryScene extends Phaser.Scene {
         this.cameras.main.setBounds(0, 0, W, H);
         this.cameras.main.setScroll(0, 0);
 
+        this.sound.stopAll();
+
+        if (this.sound.get('sfx_victory') || this.cache.audio.exists('sfx_victory')) {
+            this.sound.play('sfx_victory', { volume: 0.8 });
+        }
+
         // Solid background since we transition completely from BattleScene
         const sysW = this.scale.width;
         const sysH = this.scale.height;
@@ -281,6 +287,7 @@ export default class VictoryScene extends Phaser.Scene {
             event.stopPropagation(); // Prevent drag from firing
             this.scene.stop('BattleScene');
             this.scene.stop('VictoryScene');
+            this.sound.stopAll();
             this.scene.start('LoadingScene', { targetScene: 'QuestScene' });
         });
 
@@ -437,6 +444,9 @@ export default class VictoryScene extends Phaser.Scene {
                     // Flash Level Up text
                     textObj.setText("LEVEL UP!");
                     textObj.setColor("#D4A017"); // Gold
+                    if (this.sound.get('sfx_levelUp') || this.cache.audio.exists('sfx_levelUp')) {
+                        this.sound.play('sfx_levelUp', { volume: 0.8 });
+                    }
                     
                     this.tweens.add({
                         targets: textObj,
@@ -520,6 +530,7 @@ export default class VictoryScene extends Phaser.Scene {
         btn.on('pointerdown', () => {
             this.scene.stop('BattleScene');
             this.scene.stop('VictoryScene');
+            this.sound.stopAll();
             this.scene.start('LoadingScene', { targetScene: 'QuestScene' });
         });
     }

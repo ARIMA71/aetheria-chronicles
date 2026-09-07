@@ -11,8 +11,28 @@ export default class AuthScene extends Phaser.Scene {
     }
 
     preload() {
-        this.load.audio('sfx_select', 'assets/sfx/select.mp3');
-        this.load.audio('bgm_authscene', 'assets/bgm/bgm_authscene.mp3');
+        this.load.audio('sfx_select', 'assets/audio/sfx/select.mp3');
+        this.load.audio('bgm_authscene', 'assets/audio/bgm/bgm_authscene.mp3');
+        
+        // Preload all Global SFX
+        this.load.audio('sfx_buff', 'assets/audio/sfx/buff.mp3');
+        this.load.audio('sfx_battleReady', 'assets/audio/sfx/battleReady.mp3');
+        this.load.audio('sfx_battleStart', 'assets/audio/sfx/battleStart.mp3');
+        this.load.audio('sfx_charBasicAtk', 'assets/audio/sfx/charBasicAtk.mp3');
+        this.load.audio('sfx_charSkillAtk', 'assets/audio/sfx/charSkillAtk.wav');
+        this.load.audio('sfx_charSpecialAttack', 'assets/audio/sfx/charSpecialAttack.mp3');
+        this.load.audio('sfx_debuff', 'assets/audio/sfx/debuff.mp3');
+        this.load.audio('sfx_defeat', 'assets/audio/sfx/defeat.mp3');
+        this.load.audio('sfx_gacha', 'assets/audio/sfx/gacha.mp3');
+        this.load.audio('sfx_heal', 'assets/audio/sfx/heal.mp3');
+        this.load.audio('sfx_levelUp', 'assets/audio/sfx/levelUp.mp3');
+        this.load.audio('sfx_monsBasicAtk', 'assets/audio/sfx/monsBasicAtk.mp3');
+        this.load.audio('sfx_monsChargeAttack', 'assets/audio/sfx/monsChargeAttack.mp3');
+        this.load.audio('sfx_monsEnraged', 'assets/audio/sfx/monsEnraged.wav');
+        this.load.audio('sfx_monsExhausted', 'assets/audio/sfx/monsExhausted.wav');
+        this.load.audio('sfx_newCharacterUnlocked', 'assets/audio/sfx/newCharacterUnlocked.mp3');
+        this.load.audio('sfx_revive', 'assets/audio/sfx/revive.mp3');
+        this.load.audio('sfx_victory', 'assets/audio/sfx/victory.mp3');
     }
 
     create() {

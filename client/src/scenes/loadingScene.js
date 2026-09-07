@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { THEME } from '../main.js';
+import { stopGlobalBGM } from '../utils/audioManager.js';
 
 export default class LoadingScene extends Phaser.Scene {
     constructor() {
@@ -20,6 +21,7 @@ export default class LoadingScene extends Phaser.Scene {
 
         // Background
         this.add.rectangle(0, 0, W, H, THEME.BG).setOrigin(0);
+        stopGlobalBGM();
 
         // Center Title/Logo
         this.add.text(CX, CY - 20, 'AETHERIA', {
@@ -37,13 +39,13 @@ export default class LoadingScene extends Phaser.Scene {
             letterSpacing: 4
         }).setOrigin(0.5);
 
-        // Bottom right loading text
-        const loadingText = this.add.text(W - 20, H - 20, 'Loading', {
+        // Center loading text below logo
+        const loadingText = this.add.text(CX, CY + 50, 'Loading', {
             fontSize: '14px',
             fontStyle: 'italic',
             fontFamily: 'Outfit',
             color: THEME.TEXT_MUTED
-        }).setOrigin(1, 1);
+        }).setOrigin(0.5, 0.5);
 
         // Dot animation
         this.time.addEvent({
@@ -57,21 +59,6 @@ export default class LoadingScene extends Phaser.Scene {
             }
         });
 
-        // Kunci posisi teks loading di pojok kanan bawah viewport yang terlihat (mobile height lock)
-        this.events.on('update', () => {
-            const gameContent = document.getElementById('game-content');
-            if (gameContent) {
-                const rect = gameContent.getBoundingClientRect();
-                if (rect.bottom > window.innerHeight) {
-                    const hiddenPx = rect.bottom - window.innerHeight;
-                    const scaleY = H / rect.height;
-                    const adjustedY = H - (hiddenPx * scaleY);
-                    loadingText.setY(adjustedY - 20);
-                } else {
-                    loadingText.setY(H - 20);
-                }
-            }
-        });
 
         // Loading sequence
         let loaded = false;
@@ -100,13 +87,13 @@ export default class LoadingScene extends Phaser.Scene {
         const requiredAudio = [];
         
         if (['MainMenuScene', 'PartyScene', 'InventoryScene', 'CharacterDetailScene', 'WeaponDetailScene'].includes(this.targetScene)) {
-            requiredAudio.push({ key: 'bgm_mainmenu_1', url: 'assets/bgm/bgm_mainmenu_1.mp3' });
-            requiredAudio.push({ key: 'bgm_mainmenu_2', url: 'assets/bgm/bgm_mainmenu_2.mp3' });
+            requiredAudio.push({ key: 'bgm_mainmenu_1', url: 'assets/audio/bgm/bgm_mainmenu_1.mp3' });
+            requiredAudio.push({ key: 'bgm_mainmenu_2', url: 'assets/audio/bgm/bgm_mainmenu_2.mp3' });
         } else if (this.targetScene === 'GachaScene') {
-            requiredAudio.push({ key: 'bgm_gacha', url: 'assets/bgm/bgm_gacha.mp3' });
+            requiredAudio.push({ key: 'bgm_gacha', url: 'assets/audio/bgm/bgm_gacha.mp3' });
             keysToKeep.push('bgm_gacha');
         } else if (this.targetScene === 'QuestScene') {
-            requiredAudio.push({ key: 'bgm_quest_selection', url: 'assets/bgm/bgm_quest_selection.mp3' });
+            requiredAudio.push({ key: 'bgm_quest_selection', url: 'assets/audio/bgm/bgm_quest_selection.mp3' });
             keysToKeep.push('bgm_quest_selection');
         } else if (this.targetScene === 'BattleScene' || this.targetScene === 'ReadyScene') {
             const questId = this.targetData ? (this.targetData.questId || 0) : 0;
@@ -122,7 +109,7 @@ export default class LoadingScene extends Phaser.Scene {
 
             if (this.targetData) this.targetData.bgmKey = bgmKey;
 
-            requiredAudio.push({ key: bgmKey, url: `assets/bgm/${bgmKey}.mp3` });
+            requiredAudio.push({ key: bgmKey, url: `assets/audio/bgm/${bgmKey}.mp3` });
             keysToKeep.push(bgmKey);
         }
 
