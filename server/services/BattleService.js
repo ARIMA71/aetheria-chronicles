@@ -818,7 +818,7 @@ class BattleService {
                             skillName: skillObj.name,
                             skillCategory: (skillObj.category || (action_type === 'special_attack' ? 'special' : (action_type === 'skill' ? 'skill' : 'basic'))).toLowerCase(),
                             elementMultiplier: calcResult.elementMultiplier,
-                            sourceElement: skillObj.element || character.element || 'Neutral',
+                            sourceElement: (!skillObj.element || skillObj.element === 'Any' || skillObj.element === 'Neutral') ? (character.element || 'Neutral') : skillObj.element,
                             modeBar: targetEntity.mode_bar,
                             modeState: targetEntity.mode_state
                         });
@@ -917,6 +917,55 @@ class BattleService {
                     break;
                 }
             }
+
+            // --- SA Chain Burst Trigger ---
+            if (!waveCleared && (state.current_turn_sa_count || 0) >= 2) {
+                let chainMult = 1.2;
+                if (state.current_turn_sa_count === 3) chainMult = 1.5;
+                if (state.current_turn_sa_count >= 4) chainMult = 2.0;
+
+                const attacker = this._findEntity(state, state.first_sa_attacker_id);
+                const target = state.enemies && state.enemies.find(e => (e.current_hp !== undefined ? e.current_hp : e.hp) > 0);
+                
+                if (attacker && target && target.current_hp > 0) {
+                    const chainSkill = {
+                        name: `SA Chain Burst`,
+                        type: 'Damage',
+                        modifier: chainMult,
+                        element: state.first_sa_element || 'Neutral'
+                    };
+                    
+                    const calcResult = DamageCalculatorService.calculateDamage(attacker, target, chainSkill);
+                    target.current_hp = Math.max(0, (target.current_hp || target.final_stats.hp) - calcResult.damage);
+                    
+                    events.push({
+                        type: 'damage',
+                        sourceId: attacker.slot || attacker.id,
+                        targetId: `enemy_${state.enemies.indexOf(target)}`,
+                        value: calcResult.damage,
+                        isCrit: calcResult.isCrit,
+                        mitigation: calcResult.mitigationPercent,
+                        skillName: `💥 SA Chain Burst (${state.current_turn_sa_count}x)`,
+                        skillCategory: 'chain_burst',
+                        elementMultiplier: calcResult.elementMultiplier,
+                        sourceElement: chainSkill.element
+                    });
+
+                    // Check if chain burst cleared the wave
+                    const prevWaveIndexCB = state.current_wave_index;
+                    this._checkWaveClear(state, events);
+                    const aliveEnemiesCB = (state.enemies || []).filter(e => (e.current_hp !== undefined ? e.current_hp : e.hp) > 0);
+                    if (state.current_wave_index > prevWaveIndexCB || aliveEnemiesCB.length === 0) {
+                        waveCleared = true;
+                    }
+                }
+            }
+            
+            // Reset SA tracking at end of player phase
+            state.current_turn_sa_count = 0;
+            state.first_sa_element = null;
+            state.first_sa_attacker_id = null;
+            // ------------------------------
 
             // ==========================================
             // PHASE 2: ENEMY PHASE
@@ -1045,7 +1094,7 @@ class BattleService {
                                 skillName: enemySkill.name,
                                 skillCategory: (enemySkill.category || 'basic').toLowerCase(),
                                 elementMultiplier: calcResult.elementMultiplier,
-                                sourceElement: enemySkill.element || enemy.element || 'Neutral'
+                                sourceElement: (!enemySkill.element || enemySkill.element === 'Any' || enemySkill.element === 'Neutral') ? (enemy.element || 'Neutral') : enemySkill.element
                             });
                         } 
                         else if (sType === 'heal' || sType === 'support' || sType === 'cleanse') {
@@ -1464,6 +1513,7 @@ class BattleService {
                     isCrit: calcResult.isCrit,
                     mitigation: calcResult.mitigationPercent,
                     skillName: '✦ Aether Burst',
+                    skillCategory: 'aether_burst',
                     elementMultiplier: calcResult.elementMultiplier,
                     sourceElement: aetherSkill.element
                 });
@@ -1666,7 +1716,7 @@ class BattleService {
                         isDoT: false,
                         mitigation: calcResult.mitigationPercent,
                         elementMultiplier: calcResult.elementMultiplier,
-                        sourceElement: skill.element || (attacker ? attacker.element || 'Neutral' : 'Neutral'),
+                        sourceElement: (!skill.element || skill.element === 'Any' || skill.element === 'Neutral') ? (attacker ? attacker.element || 'Neutral' : 'Neutral') : skill.element,
                         modeBar: target.mode_bar,
                         modeState: modeTransitionedTo || target.mode_state
                     });
@@ -1891,45 +1941,6 @@ class BattleService {
         if (state.player_party && state.player_party.characters) {
             state.player_party.characters.forEach((char) => processDoT(char, char.slot, false));
         }
-        // --- SA Chain Burst Trigger ---
-        if ((state.current_turn_sa_count || 0) >= 2) {
-            let chainMult = 1.2;
-            if (state.current_turn_sa_count === 3) chainMult = 1.5;
-            if (state.current_turn_sa_count >= 4) chainMult = 2.0;
-
-            const attacker = this._findEntity(state, state.first_sa_attacker_id);
-            const target = state.enemies && state.enemies[0];
-            
-            if (attacker && target && target.current_hp > 0) {
-                const chainSkill = {
-                    name: `SA Chain Burst`,
-                    type: 'Damage',
-                    modifier: chainMult,
-                    element: state.first_sa_element || 'Neutral'
-                };
-                
-                const calcResult = DamageCalculatorService.calculateDamage(attacker, target, chainSkill);
-                target.current_hp = Math.max(0, (target.current_hp || target.final_stats.hp) - calcResult.damage);
-                
-                events.push({
-                    type: 'damage',
-                    sourceId: attacker.slot || attacker.id,
-                    targetId: 'enemy_0',
-                    value: calcResult.damage,
-                    isCrit: calcResult.isCrit,
-                    mitigation: calcResult.mitigationPercent,
-                    skillName: `💥 SA Chain Burst (${state.current_turn_sa_count}x)`,
-                    elementMultiplier: calcResult.elementMultiplier,
-                    sourceElement: chainSkill.element
-                });
-            }
-        }
-        
-        // Reset SA tracking at end of turn
-        state.current_turn_sa_count = 0;
-        state.first_sa_element = null;
-        state.first_sa_attacker_id = null;
-        // ------------------------------
 
         if (state.enemies) {
             for (const enemy of state.enemies) {

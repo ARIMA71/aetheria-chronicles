@@ -100,7 +100,8 @@ class DamageCalculatorService {
         const rawSkillDamage = currentAtk * modifier;
 
         // Phase 4: Elemental Advantage
-        const elemMultiplier = this.getElementMultiplier(skill.element || attacker.element, target.element);
+        const effectiveElement = (!skill.element || skill.element === 'Any' || skill.element === 'Neutral') ? attacker.element : skill.element;
+        const elemMultiplier = this.getElementMultiplier(effectiveElement, target.element);
         const elementalDamage = rawSkillDamage * elemMultiplier;
 
         // Phase 5: Linear Mitigation (max 80%)

@@ -200,8 +200,9 @@ export default class VictoryScene extends Phaser.Scene {
             const cNext = char.next_level_exp;
             const cOld = Math.max(0, cTotal - pGained);
             const isCharMax = char.current_level >= char.max_level;
+            const wasAlreadyMax = char.old_level >= char.max_level;
 
-            this.animateProgressBar(barFill, lvlTxt, barW, cOld, cTotal, cBase, cNext, char.current_level, 'Lv', isCharMax);
+            this.animateProgressBar(barFill, lvlTxt, barW, cOld, cTotal, cBase, cNext, char.current_level, 'Lv', isCharMax, wasAlreadyMax);
         });
 
         cursorY += 100;
@@ -425,7 +426,15 @@ export default class VictoryScene extends Phaser.Scene {
         });
     }
 
-    animateProgressBar(fillRect, textObj, fullWidth, oldExp, newExp, baseExp, nextExp, finalLevel, labelPrefix, isMax = false) {
+    animateProgressBar(fillRect, textObj, fullWidth, oldExp, newExp, baseExp, nextExp, finalLevel, labelPrefix, isMax = false, wasAlreadyMax = false) {
+        if (wasAlreadyMax) {
+            textObj.setText(`MAX`);
+            textObj.setColor("#D4A017");
+            fillRect.setFillStyle(0xD4A017);
+            fillRect.width = fullWidth;
+            return;
+        }
+
         // If they leveled up (oldExp < baseExp), we do a two-stage animation
         if (oldExp < baseExp) {
             // Level Up scenario!

@@ -21,7 +21,6 @@ export default class LoadingScene extends Phaser.Scene {
 
         // Background
         this.add.rectangle(0, 0, W, H, THEME.BG).setOrigin(0);
-        stopGlobalBGM();
 
         // Center Title/Logo
         this.add.text(CX, CY - 20, 'AETHERIA', {
@@ -63,7 +62,7 @@ export default class LoadingScene extends Phaser.Scene {
         // Loading sequence
         let loaded = false;
         let delayPassed = false;
-        
+
         const finish = () => {
             if (loaded && delayPassed) {
                 this.scene.start(this.targetScene, this.targetData);
@@ -85,7 +84,7 @@ export default class LoadingScene extends Phaser.Scene {
         // Aturan 2: Manajemen Cache (Bersihkan BGM yang tak terpakai)
         const keysToKeep = ['bgm_mainmenu_1', 'bgm_mainmenu_2', 'sfx_select'];
         const requiredAudio = [];
-        
+
         if (['MainMenuScene', 'PartyScene', 'InventoryScene', 'CharacterDetailScene', 'WeaponDetailScene'].includes(this.targetScene)) {
             requiredAudio.push({ key: 'bgm_mainmenu_1', url: 'assets/audio/bgm/bgm_mainmenu_1.mp3' });
             requiredAudio.push({ key: 'bgm_mainmenu_2', url: 'assets/audio/bgm/bgm_mainmenu_2.mp3' });
@@ -98,7 +97,7 @@ export default class LoadingScene extends Phaser.Scene {
         } else if (this.targetScene === 'BattleScene' || this.targetScene === 'ReadyScene') {
             const questId = this.targetData ? (this.targetData.questId || 0) : 0;
             const initData = this.targetData ? (this.targetData.initData || {}) : {};
-            
+
             let bgmKey = 'bgm_normalbattle';
             if (questId == 9) bgmKey = 'bgm_mqid_9';
             else if (questId == 10) bgmKey = 'bgm_mqid_10';

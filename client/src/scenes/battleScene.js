@@ -5,6 +5,7 @@ import { checkSession, saveCurrentScene, getPlayerUsername } from "../utils/auth
 import BattleApi from "../services/BattleApi.js";
 import BattleMenu from "../ui/BattleMenu.js";
 import { playGlobalBGM, stopGlobalBGM } from "../utils/audioManager.js";
+import vfxManifest from "../data/vfxManifest.json";
 // Element icons are loaded as PNGs in preload
 
 const W = 480, H = 880, CX = 240;
@@ -20,15 +21,25 @@ export default class BattleScene extends Phaser.Scene {
         this.load.image('element_wind', 'assets/icons/elements/wind.png');
         this.load.image('element_earth', 'assets/icons/elements/rock.png');
 
-        // Load Character Sprites
-        this.load.image('char_mc_Male', 'assets/sprites/char/1-mc-male.png');
-        this.load.image('char_mc_Female', 'assets/sprites/char/1-mc-female.png');
-        // Load Monster Sprites
-        this.load.image('mons_12', 'assets/sprites/mons/12-slime.png');
+        // --- VFX Spritesheet Preload (from vfxManifest.json) ---
+        // Exact VFX (single-file)
+        for (const [key, data] of Object.entries(vfxManifest.exact)) {
+            this.load.spritesheet(key, data.path, {
+                frameWidth: data.frameWidth,
+                frameHeight: data.frameHeight
+            });
+        }
+        // Rolling VFX (element skill folders)
+        for (const [category, items] of Object.entries(vfxManifest.rolling)) {
+            items.forEach(item => {
+                this.load.spritesheet(item.key, item.path, {
+                    frameWidth: item.frameWidth,
+                    frameHeight: item.frameHeight
+                });
+            });
+        }
 
-        // Load Character Portraits
-        this.load.image('port_mc_Male', 'assets/portraits/char/1-mc-male.png');
-        this.load.image('port_mc_Female', 'assets/portraits/char/1-mc-female.png');
+        // Note: Character and Monster Sprites are handled dynamically or use placeholders
     }
     setTurn(newTurn) {
 
@@ -66,7 +77,10 @@ export default class BattleScene extends Phaser.Scene {
 
         this.add.rectangle(CX, H / 2, W, H, THEME.BG);
         this.add.rectangle(CX, 26, W, 52, THEME.PANEL, THEME.PANEL_ALPHA);
-        // Removed unnecessary borders
+        
+        // Immediately add the black overlay so there is no blue flash from the background
+        // Using 0.95 transparency so the player can faintly see the arena, as requested
+        this._blackOverlay = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.95).setDepth(190);
 
         // === RESUME PATH: data resume dari MainMenu Pop-up ===
         if (this._sceneData.resumeData) {
@@ -76,7 +90,6 @@ export default class BattleScene extends Phaser.Scene {
         else if (this._sceneData.initData && this._sceneData.initData.status === 'success') {
             this._processBattleData(this._sceneData.initData);
         } else {
-            this.loadingText = this.add.text(CX, H / 2, "Loading...", { fontSize: "20px", color: "#ccc" }).setOrigin(0.5);
             this.fetchBattleData();
         }
     }
@@ -122,10 +135,12 @@ export default class BattleScene extends Phaser.Scene {
             if (e.sprite_path) { this.load.image(`mons_${e.id || e.monster_id}`, e.sprite_path); assetsToLoad++; }
         });
 
+        if (!this._blackOverlay) {
+            this._blackOverlay = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.95).setDepth(190);
+        }
+
         if (assetsToLoad > 0) {
-            const loadingText = this.add.text(CX, H / 2, "Loading Assets...", { fontSize: "20px", color: "#ffffff" }).setOrigin(0.5);
             this.load.once('complete', () => {
-                loadingText.destroy();
                 this._renderProcessBattleData(j, chars);
             });
             this.load.start();
@@ -135,6 +150,9 @@ export default class BattleScene extends Phaser.Scene {
     }
 
     _renderProcessBattleData(j, chars) {
+        // Initialize VFX Animations from manifest
+        this._initVfxAnims();
+
         // Draw battlefield floor line
         this.add.rectangle(CX, 535, W, 1, THEME.BORDER);
 
@@ -238,10 +256,12 @@ export default class BattleScene extends Phaser.Scene {
             if (e.sprite_path) { this.load.image(`mons_${e.id || e.monster_id}`, e.sprite_path); assetsToLoad++; }
         });
 
+        if (!this._blackOverlay) {
+            this._blackOverlay = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.95).setDepth(190);
+        }
+
         if (assetsToLoad > 0) {
-            const loadingText = this.add.text(CX, H / 2, "Loading Assets...", { fontSize: "20px", color: "#ffffff" }).setOrigin(0.5);
             this.load.once('complete', () => {
-                loadingText.destroy();
                 this._renderResumeBattle(state, chars);
             });
             this.load.start();
@@ -357,7 +377,7 @@ export default class BattleScene extends Phaser.Scene {
         this._setActive(p);
     }
     _setupUI() {
-        this._buildLayer1(); this._buildEnemyHUD(); this._buildArenaButtons();
+        this._buildLayer1(); this._buildEnemyHUD(true); this._buildArenaButtons();
         this._buildLayer4(); this._buildActionWindow(); this._buildBattleLog();
         this._startTimer(); this._refreshEnemyHUD();
         this._playStartAnimation();
@@ -432,7 +452,7 @@ export default class BattleScene extends Phaser.Scene {
             this.showMainMenu();
         });
     }
-    _buildEnemyHUD() {
+    _buildEnemyHUD(isHidden = false) {
         if (this.enemyHUDs) {
             this.enemyHUDs.forEach(hud => {
                 Object.values(hud).forEach(item => {
@@ -443,6 +463,7 @@ export default class BattleScene extends Phaser.Scene {
         }
         this.enemyHUDs = [];
         this.enemies.forEach((enemy, index) => {
+            const container = this.add.container(0, 0);
             const baseY = 88 + (index * 45);
             const ec = this._elemColor(enemy.element);
 
@@ -482,8 +503,17 @@ export default class BattleScene extends Phaser.Scene {
             const nameY = enemy.y + (enemy.battleSprite ? (enemy.battleSprite.displayHeight / 2) + 10 : 65);
             const nameText = this.add.text(enemy.x, nameY, enemy.charName + " \nLv." + enemy.level, { fontSize: "11px", color: "#ffffff", fontStyle: "bold", align: "center" }).setOrigin(0.5, 0);
 
+            container.add([icon, elemText, hpPct, hpBarBg, hpFill, hpEnrage, effectIndicators, hitArea, modeBarBg, modeFill, nameText]);
+            caSegmentsBg.forEach(s => container.add(s));
+            caSegments.forEach(s => container.add(s));
+
+            if (isHidden) {
+                container.setAlpha(0);
+                enemy.setAlpha(0);
+            }
+
             this.enemyHUDs.push({
-                icon, elemText, hpPct, hpBarBg, hpFill, hpEnrage, modeBarBg, modeFill, caSegmentsBg, caSegments, nameText, effectIndicators, hitArea
+                container, icon, elemText, hpPct, hpBarBg, hpFill, hpEnrage, modeBarBg, modeFill, caSegmentsBg, caSegments, nameText, effectIndicators, hitArea
             });
         });
     }
@@ -1267,12 +1297,21 @@ export default class BattleScene extends Phaser.Scene {
         // Fallback: Check if party is already wiped out upon resuming battle
         const allDead = this.players.every(p => p.hp <= 0);
         if (allDead) {
+            if (this._blackOverlay) {
+                this._blackOverlay.destroy();
+                this._blackOverlay = null;
+            }
             this.triggerDefeat(false);
             return;
         }
 
         const cx = this.cameras.main.width / 2;
         const cy = this.cameras.main.height / 2;
+        
+        if (!this._blackOverlay) {
+            this._blackOverlay = this.add.rectangle(cx, cy, W, H, 0x000000, 0.95).setDepth(190);
+        }
+
         const startText = this.add.text(cx, cy, "START!", {
             fontSize: "48px",
             fontStyle: "bold",
@@ -1289,15 +1328,50 @@ export default class BattleScene extends Phaser.Scene {
             ease: 'Back.out',
             onStart: () => {
                 if (this.bgmKey) playGlobalBGM(this, this.bgmKey);
+                if (this.sound.get('sfx_battleStart') || this.cache.audio.exists('sfx_battleStart')) {
+                    this.sound.play('sfx_battleStart', { volume: 0.9 });
+                }
             },
             onComplete: () => {
                 this.time.delayedCall(800, () => {
                     this.tweens.add({
                         targets: startText,
-                        alpha: 0,
                         scale: 1.5,
+                        alpha: 0,
                         duration: 300,
-                        onComplete: () => startText.destroy()
+                        onComplete: () => { 
+                            startText.destroy(); 
+                            if (this._blackOverlay) {
+                                this.tweens.add({
+                                    targets: this._blackOverlay,
+                                    alpha: 0,
+                                    duration: 400,
+                                    ease: 'Power2',
+                                    onComplete: () => {
+                                        this._blackOverlay.destroy();
+                                        this._blackOverlay = null;
+
+                                        // FADE IN ENEMIES (Sprite + HUD)
+                                        const fadeTargets = [];
+                                        this.enemies.forEach((enemy, idx) => {
+                                            fadeTargets.push(enemy);
+                                            if (this.enemyHUDs[idx] && this.enemyHUDs[idx].container) {
+                                                fadeTargets.push(this.enemyHUDs[idx].container);
+                                            }
+                                        });
+
+                                        if (fadeTargets.length > 0) {
+                                            this.tweens.add({
+                                                targets: fadeTargets,
+                                                alpha: 1,
+                                                duration: 1000,
+                                                ease: 'Sine.easeInOut'
+                                            });
+                                        }
+                                    }
+                                });
+                            }
+                        }
                     });
                 });
             }
@@ -1561,239 +1635,383 @@ export default class BattleScene extends Phaser.Scene {
             this._renderHistoryLogs();
         }
 
+        const actionGroups = [];
+        let currentGroup = null;
+
         for (const ev of events) {
+            if ((ev.type === 'damage' || ev.type === 'heal' || ev.type === 'effect_applied' || ev.type === 'cleanse' || ev.type === 'revive' || ev.type === 'stun_skip') && ev.sourceId) {
+                // Relax grouping: check only sourceId for consecutive actions, picking up skillName if present
+                if (currentGroup && currentGroup.sourceId === ev.sourceId) {
+                    currentGroup.events.push(ev);
+                    if (ev.skillName && (!currentGroup.skillName || currentGroup.skillName === 'Unknown Skill')) {
+                        currentGroup.skillName = ev.skillName;
+                    }
+                } else {
+                    currentGroup = { isGroup: true, sourceId: ev.sourceId, skillName: ev.skillName, events: [ev] };
+                    actionGroups.push(currentGroup);
+                }
+            } else {
+                currentGroup = null;
+                actionGroups.push({ isGroup: false, event: ev });
+            }
+        }
+
+        for (const group of actionGroups) {
             await new Promise(async resolve => {
                 let delay = 500;
 
-                let target = null;
-                if (ev.targetId !== undefined && ev.targetId !== null) {
-                    target = this.players.find(p => p.slot === ev.targetId);
-                    if (!target) {
-                        const tIdStr = String(ev.targetId);
-                        if (this.enemies.some(e => String(e.monsterId) == tIdStr) || tIdStr.startsWith('enemy_') || tIdStr === 'enemy') {
-                            const eIdx = tIdStr.startsWith('enemy_') ? parseInt(tIdStr.split('_')[1], 10) : 0;
-                            target = this.enemies[eIdx] || this.enemies[0];
+                if (group.isGroup) {
+                    let source = null;
+                    if (String(group.sourceId).startsWith('enemy_') || String(group.sourceId) === 'enemy') {
+                        const eIdx = String(group.sourceId).startsWith('enemy_') ? parseInt(String(group.sourceId).split('_')[1], 10) : 0;
+                        source = this.enemies[eIdx] || this.enemies[0];
+                    } else {
+                        source = this.players.find(p => (p.slot || p.id) === group.sourceId);
+                    }
+                    const sourceName = source ? (source.charName || source.name || 'Unknown') : 'Entity';
+                    
+                    const isStunnedAction = group.skillName === 'STUNNED' || group.events.some(e => e.type === 'stun_skip');
+                    if (isStunnedAction) {
+                        this.showLog(`💫 ${sourceName} is STUNNED and cannot move!`, 'popup');
+                        // VFX: Stun on stunned source
+                        if (source) {
+                            const stunSrcPos = this._getVfxTargetPos(source);
+                            this.playExactVFX('stun', stunSrcPos.x, stunSrcPos.y, { scale: 1.5 });
+                            this.playStunVibrateAnim(source);
+                        }
+                        delay = 1000;
+                        this.time.delayedCall(delay, resolve);
+                        return;
+                    }
+
+                    // Extract the primary damage/heal event to figure out the skill info
+                    const primaryEv = group.events.find(e => e.type === 'damage' && !e.isDoT) || group.events.find(e => e.type === 'heal' || e.type === 'effect_applied' || e.type === 'cleanse' || e.type === 'revive');
+                    
+                    let isSkill = false;
+                    let isSA = false;
+                    
+                    if (primaryEv) {
+                        const skillDisplay = group.skillName || 'Basic Attack';
+                        this.showLog(`[${skillDisplay}] ${sourceName} attacks!`, 'popup');
+                        isSA = primaryEv.skillCategory === 'special' || primaryEv.skillCategory === 'chain_burst' || primaryEv.skillCategory === 'aether_burst';
+                        isSkill = primaryEv.skillCategory && primaryEv.skillCategory !== 'basic';
+                        
+                        const isEnemy = String(group.sourceId).startsWith('enemy');
+                        if (isEnemy) {
+                            const monsSfx = isSkill ? 'sfx_monsChargeAttack' : 'sfx_monsBasicAtk';
+                            if (this.sound.get(monsSfx) || this.cache.audio.exists(monsSfx)) this.sound.play(monsSfx, { volume: 0.7 });
+                        } else {
+                            const hasHealOrBuff = group.events.some(e => e.type === 'heal' || e.type === 'cleanse' || e.type === 'revive' || (e.type === 'effect_applied' && e.effectType === 'buff'));
+                            const atkSfx = hasHealOrBuff ? 'sfx_heal' : (isSA ? 'sfx_charSpecialAttack' : (isSkill ? 'sfx_charSkillAtk' : 'sfx_charBasicAtk'));
+                            if (this.sound.get(atkSfx) || this.cache.audio.exists(atkSfx)) this.sound.play(atkSfx, { volume: 0.7 });
                         }
                     }
-                }
 
-                if (ev.type === 'damage') {
-                    if (target) {
-                        target.hp = Math.max(0, target.hp - ev.value);
-                        if (this.enemies.includes(target)) {
-                            if (ev.modeBar !== undefined && target) target.modeBar = ev.modeBar;
-                            if (ev.modeState !== undefined && target) target.modeState = ev.modeState;
-                            this._refreshEnemyHUD();
-                        } else {
-                            target.refreshVisual();
+                    if (source && source.battleSprite) {
+                        await this.playCharacterLungeAnim(source);
+                    }
+
+                    // First pass: Process damage, heal, revive, cleanse, stun_skip
+                    group.events.forEach(ev => {
+                        if (ev.type === 'effect_applied') return; // Process later
+
+                        let target = null;
+                        if (ev.targetId !== undefined && ev.targetId !== null) {
+                            target = this.players.find(p => p.slot === ev.targetId);
+                            if (!target) {
+                                const tIdStr = String(ev.targetId);
+                                if (this.enemies.some(e => String(e.monsterId) == tIdStr) || tIdStr.startsWith('enemy_') || tIdStr === 'enemy') {
+                                    const eIdx = tIdStr.startsWith('enemy_') ? parseInt(tIdStr.split('_')[1], 10) : 0;
+                                    target = this.enemies[eIdx] || this.enemies[0];
+                                }
+                            }
                         }
 
-                        if (ev.isDoT) {
-                            if (this.enemies.includes(target) && target && ev.skillName !== 'STUNNED') target.playHitAnim();
-                            else if (!this.enemies.includes(target)) this.playSpriteHitAnim(target);
+                        if (!target) return;
 
-                            const colorStr = ev.effectName === 'Burn' ? "#e67e22" : "#9b59b6";
-                            const emoji = ev.effectName === 'Burn' ? "🔥" : "💀";
-                            const logSource = String(target.slot || target.monsterId).startsWith('enemy') ? 'enemy' : 'player';
-                            this.showLog(`${emoji} ${ev.effectName} deals ${ev.value} damage to ${target.charName}!`, logSource);
-                            this.showFloatingDoT(target, ev.effectName, ev.value, colorStr);
-                            delay = 600;
-                        } else {
-                            const eIdxAct = ev.sourceId && String(ev.sourceId).startsWith('enemy_') ? parseInt(String(ev.sourceId).split('_')[1], 10) : 0;
-                            const source = this.players.find(p => p.slot === ev.sourceId) || (String(ev.sourceId).startsWith('enemy') ? this.enemies[eIdxAct] : null);
-                            const sourceName = source ? source.charName : ev.sourceId;
-                            let logText;
-                            if (ev.skillName === 'STUNNED') {
-                                logText = `💫 ${sourceName} is STUNNED and cannot move!`;
-                                this.showLog(logText, 'popup');
-                                if (source) this.playStunVibrateAnim(source);
+                        if (ev.type === 'damage') {
+                            target.hp = Math.max(0, target.hp - ev.value);
+                            if (this.enemies.includes(target)) {
+                                if (ev.modeBar !== undefined && target) target.modeBar = ev.modeBar;
+                                if (ev.modeState !== undefined && target) target.modeState = ev.modeState;
+                                this._refreshEnemyHUD();
                             } else {
-                                const skillDisplay = ev.skillName || 'Basic Attack';
-                                logText = `[${skillDisplay}] ${sourceName} attacks!`;
-                                this.showLog(`${sourceName} used ${skillDisplay}!`, 'popup');
+                                target.refreshVisual();
+                            }
 
-                                // Lunge Animation for attacking player character (AWAIT)
-                                if (source && source.battleSprite) {
-                                    await this.playCharacterLungeAnim(source);
-                                }
-
+                            if (ev.isDoT) {
                                 if (this.enemies.includes(target) && target && ev.skillName !== 'STUNNED') target.playHitAnim();
                                 else if (!this.enemies.includes(target)) this.playSpriteHitAnim(target);
 
-                                const isEnemy = String(ev.sourceId).startsWith('enemy');
-                                const isSA = ev.skillCategory === 'special';
-                                const isSkill = ev.skillCategory && ev.skillCategory !== 'basic';
+                                // VFX: DoT effect (Burn/Poison)
+                                const dotPos = this._getVfxTargetPos(target);
+                                const dotKey = (ev.effectName || '').toLowerCase() === 'burn' ? 'burn' : 'poison';
+                                this.playExactVFX(dotKey, dotPos.x, dotPos.y, { scale: 1.5, useAddBlend: true });
+
+                                const colorStr = ev.effectName === 'Burn' ? "#e67e22" : "#9b59b6";
+                                const emoji = ev.effectName === 'Burn' ? "🔥" : "💀";
+                                const logSource = String(target.slot || target.monsterId).startsWith('enemy') ? 'enemy' : 'player';
+                                this.showLog(`${emoji} ${ev.effectName} deals ${ev.value} damage to ${target.charName}!`, logSource);
+                                this.showFloatingDoT(target, ev.effectName, ev.value, colorStr);
+                                delay = Math.max(delay, 600);
+                            } else {
+                                if (this.enemies.includes(target) && target && ev.skillName !== 'STUNNED') target.playHitAnim();
+                                else if (!this.enemies.includes(target)) this.playSpriteHitAnim(target);
                                 
-                                if (isEnemy) {
-                                    const monsSfx = isSkill ? 'sfx_monsChargeAttack' : 'sfx_monsBasicAtk';
-                                    if (this.sound.get(monsSfx) || this.cache.audio.exists(monsSfx)) this.sound.play(monsSfx, { volume: 0.7 });
+                                // VFX: Damage (Skill/Special/Charge = Rolling, Basic = Exact)
+                                const dmgPos = this._getVfxTargetPos(target);
+                                const cat = ev.skillCategory || 'basic';
+                                if (cat === 'skill' || cat === 'special' || cat === 'charge') {
+                                    this.playRollingVFX(ev.sourceElement, dmgPos.x, dmgPos.y, 1.5);
+                                } else if (cat === 'aether_burst') {
+                                    this.playExactVFX('aetherBurst', dmgPos.x, dmgPos.y, { scale: 1.5, useAddBlend: true });
+                                } else if (cat === 'chain_burst') {
+                                    this.playExactVFX('chainBurst', dmgPos.x, dmgPos.y, { scale: 1.5, useAddBlend: true });
                                 } else {
-                                    const atkSfx = isSA ? 'sfx_charSpecialAttack' : (isSkill ? 'sfx_charSkillAtk' : 'sfx_charBasicAtk');
-                                    if (this.sound.get(atkSfx) || this.cache.audio.exists(atkSfx)) this.sound.play(atkSfx, { volume: 0.7 });
+                                    // Basic Attack: charBasicAtk (player) or monsBasicAtk (enemy)
+                                    const isEnemySource = String(group.sourceId).startsWith('enemy');
+                                    const atkKey = isEnemySource ? 'monsBasicAtk' : 'charBasicAtk';
+                                    this.playExactVFX(atkKey, dmgPos.x, dmgPos.y, { scale: 0.5, useAddBlend: true });
                                 }
 
                                 this.showFloatingDamage(target, ev.value, ev.isCrit, ev.elementMultiplier, ev.sourceElement);
+                                delay = Math.max(delay, 250);
+                            }
+                        } else if (ev.type === 'heal') {
+                            target.hp = Math.min(target.maxHp, target.hp + ev.value);
+                            if (target === this.enemy) this._refreshEnemyHUD();
+                            else target.refreshVisual();
 
-                                // Return Animation (AWAIT)
-                                if (source && source.battleSprite) {
-                                    await this.playCharacterReturnAnim(source);
+                            // VFX: Heal
+                            const healPos = this._getVfxTargetPos(target);
+                            this.playExactVFX('heal', healPos.x, healPos.y, { scale: 1.5 });
+
+                            this.showFloatingHeal(target, ev.value);
+                            this.showLog(`[Heal] ${target.charName} restored HP!`, 'popup');
+                            delay = Math.max(delay, 600);
+                        } else if (ev.type === 'revive') {
+                            target.hp = ev.value;
+                            if (target === this.enemy) this._refreshEnemyHUD();
+                            else target.refreshVisual();
+
+                            // VFX: Revive
+                            const revPos = this._getVfxTargetPos(target);
+                            this.playExactVFX('revive', revPos.x, revPos.y, { scale: 1.5 });
+
+                            this.showLog(`✨ ${target.charName} revived!`, 'popup');
+                            delay = Math.max(delay, 600);
+                        } else if (ev.type === 'cleanse') {
+                            target.activeEffects = target.activeEffects.filter(e => (e.effect_type || '').toLowerCase() !== 'debuff');
+                            target.refreshVisual();
+                            this.showLog(`✨ ${target.charName} debuffs cleansed!`, 'popup');
+                            delay = Math.max(delay, 500);
+                        } else if (ev.type === 'stun_skip') {
+                            // VFX: Stun
+                            const stunPos = this._getVfxTargetPos(target);
+                            this.playExactVFX('stun', stunPos.x, stunPos.y, { scale: 1.5 });
+
+                            const tgtName = target.charName || (target.monsterId ? 'ENEMY' : 'Character');
+                            this.showLog(`💫 ${tgtName} is STUNNED and cannot move!`, 'popup');
+                            this.playStunVibrateAnim(target);
+                            delay = Math.max(delay, 400);
+                        }
+                    });
+
+                    // Return character to original base position
+                    if (source && source.battleSprite) {
+                        await this.playCharacterReturnAnim(source);
+                    }
+
+                    // Second pass: Process effect_applied AFTER character returned to base position
+                    const effectEvents = group.events.filter(ev => ev.type === 'effect_applied');
+                    if (effectEvents.length > 0) {
+                        await new Promise(r => this.time.delayedCall(150, r)); // small visual pause
+                        
+                        effectEvents.forEach(ev => {
+                            let target = null;
+                            if (ev.targetId !== undefined && ev.targetId !== null) {
+                                target = this.players.find(p => p.slot === ev.targetId);
+                                if (!target) {
+                                    const tIdStr = String(ev.targetId);
+                                    if (this.enemies.some(e => String(e.monsterId) == tIdStr) || tIdStr.startsWith('enemy_') || tIdStr === 'enemy') {
+                                        const eIdx = tIdStr.startsWith('enemy_') ? parseInt(tIdStr.split('_')[1], 10) : 0;
+                                        target = this.enemies[eIdx] || this.enemies[0];
+                                    }
                                 }
                             }
-                            delay = ev.skillName === 'STUNNED' ? 400 : 250;
-                        }
-                    }
-                } else if (ev.type === 'heal') {
-                    if (target) {
-                        target.hp = Math.min(target.maxHp, target.hp + ev.value);
-                        if (target === this.enemy) this._refreshEnemyHUD();
-                        else target.refreshVisual();
-                        this.showFloatingHeal(target, ev.value);
-                        this.showLog(`[Heal] ${target.charName} restored HP!`, 'popup');
-                        if (this.sound.get('sfx_heal') || this.cache.audio.exists('sfx_heal')) this.sound.play('sfx_heal', { volume: 0.8 });
-                        delay = 600;
-                    }
-                } else if (ev.type === 'revive') {
-                    if (target) {
-                        target.hp = ev.value;
-                        if (target === this.enemy) this._refreshEnemyHUD();
-                        else target.refreshVisual();
-                        this.showLog(`✨ ${target.charName} revived!`, 'popup');
-                        if (this.sound.get('sfx_revive') || this.cache.audio.exists('sfx_revive')) this.sound.play('sfx_revive', { volume: 0.8 });
-                        delay = 600;
-                    }
-                } else if (ev.type === 'cleanse') {
-                    if (target) {
-                        target.activeEffects = target.activeEffects.filter(e => (e.effect_type || '').toLowerCase() !== 'debuff');
-                        target.refreshVisual();
-                        this.showLog(`✨ ${target.charName} debuffs cleansed!`, 'popup');
-                        if (this.sound.get('sfx_heal') || this.cache.audio.exists('sfx_heal')) this.sound.play('sfx_heal', { volume: 0.8 });
-                        delay = 500;
-                    }
-                } else if (ev.type === 'effect_applied') {
-                    if (target) {
-                        this.showFloatingEffect(target, ev.effectName, ev.effectType);
-                        this.showLog(`${target.charName} got ${ev.effectName}!`, 'popup');
-                        const sfx = (ev.effectType === 'buff') ? 'sfx_buff' : 'sfx_debuff';
-                        if (this.sound.get(sfx) || this.cache.audio.exists(sfx)) this.sound.play(sfx, { volume: 0.8 });
-                        delay = 500;
-                    }
-                } else if (ev.type === 'enrage') {
-                    if (target) {
-                        target.modeState = 'enraged';
-                        this._enragedTurns = 3;
-                        this.showLog("ENEMY ENRAGED! (3 Turns)", 'system');
-                        this._refreshEnemyHUD();
-                        delay = 800;
-                    }
-                } else if (ev.type === 'break') {
-                    if (target) {
-                        target.modeState = 'exhausted';
-                        this._exhaustedTurns = 2;
-                        this._enragedTurns = 0;
-                        this.showLog("ENEMY BREAK! (Exhausted)", 'system');
-                        this._refreshEnemyHUD();
-                        delay = 800;
-                    }
-                } else if (ev.type === 'stun_skip') {
-                    if (target) {
-                        const sourceName = target.charName || (target.monsterId ? 'ENEMY' : 'Character');
-                        this.showLog(`💫 ${sourceName} is STUNNED and cannot move!`, 'popup');
-                        this.playStunVibrateAnim(target);
-                        delay = 400;
-                    }
-                } else if (ev.type === 'effect_removed') {
-                    // [Fix Minor #1] Real-time remove expired buff/debuff dari entity
-                    if (target) {
-                        const effName = ev.effectName || '';
-                        if (this.enemies.includes(target)) {
-                            target.activeEffects = (target.activeEffects || []).filter(
-                                e => (e.effect_name || e.target_stat || '') !== effName
-                            );
-                            this._refreshEnemyHUD();
-                        } else {
-                            target.activeEffects = (target.activeEffects || []).filter(
-                                e => (e.effect_name || e.target_stat || '') !== effName
-                            );
-                            target.refreshVisual();
-                        }
-                        delay = 100; // Minimal delay, tidak perlu animasi
-                    }
-                } else if (ev.type === 'log') {
-                    this.showLog(ev.message, 'system');
-                    delay = 600;
-                } else if (ev.type === 'delay') {
-                    delay = ev.delayMs || 500;
-                } else if (ev.type === 'wave_change') {
-                    waveChanged = true;
-                    this._isWaveChanging = true;
+                            if (!target) return;
 
-                    delay = -1; // Flag for manual resolve
-
-                    // 1. Fade out the dying enemy
-                    if (this.enemies.length > 0) {
-                        const targetAlphas = [];
-                        this.enemies.forEach((enemy, idx) => {
-                            targetAlphas.push(enemy);
-                            const hud = this.enemyHUDs[idx];
-                            if (hud) {
-                                targetAlphas.push(hud.icon, hud.hpBarBg, hud.hpFill, hud.hpPct, hud.nameText);
-                                if (hud.caSegmentsBg) targetAlphas.push(...hud.caSegmentsBg);
-                                if (hud.caSegments) targetAlphas.push(...hud.caSegments);
-                                if (hud.modeFill) targetAlphas.push(hud.modeFill);
-                                if (hud.modeBarBg) targetAlphas.push(hud.modeBarBg);
+                            // VFX: Buff or Debuff
+                            const effPos = this._getVfxTargetPos(target);
+                            if ((ev.effectType || '').toLowerCase() === 'buff') {
+                                this.playExactVFX('buff', effPos.x, effPos.y, { scale: 1.5 });
+                            } else {
+                                this.playExactVFX('debuff', effPos.x, effPos.y, { scale: 1.5 });
                             }
+
+                            this.showFloatingEffect(target, ev.effectName, ev.effectType);
+                            this.showLog(`${target.charName} got ${ev.effectName}!`, 'popup');
                         });
-
-                        this.tweens.add({
-                            targets: targetAlphas,
-                            alpha: 0,
-                            duration: 1000,
-                            onComplete: () => {
-                                resolve();
-
-                                const waveTxt = this.add.text(CX, H / 2, `WAVE ${ev.waveNum}`, {
-                                    fontSize: '48px', color: THEME.GOLD, fontStyle: 'bold', fontFamily: 'Outfit'
-                                }).setOrigin(0.5).setAlpha(0).setDepth(201);
-
-                                this.tweens.add({
-                                    targets: waveTxt,
-                                    alpha: 1,
-                                    duration: 600,
-                                    yoyo: true,
-                                    hold: 800,
-                                    onComplete: () => {
-                                        waveTxt.destroy();
-
-                                        const newTargetAlphas = [];
-                                        this.enemies.forEach((enemy, idx) => {
-                                            newTargetAlphas.push(enemy);
-                                            const hud = this.enemyHUDs[idx];
-                                            if (hud) {
-                                                newTargetAlphas.push(hud.icon, hud.hpBarBg, hud.hpFill, hud.hpPct, hud.nameText);
-                                                if (hud.caSegmentsBg) newTargetAlphas.push(...hud.caSegmentsBg);
-                                                if (hud.modeFill && enemy.isBoss) newTargetAlphas.push(hud.modeFill);
-                                                if (hud.modeBarBg && enemy.isBoss) newTargetAlphas.push(hud.modeBarBg);
-                                            }
-                                        });
-
-                                        this.tweens.add({
-                                            targets: newTargetAlphas,
-                                            alpha: 1,
-                                            duration: 800,
-                                            onComplete: () => {
-                                                this._isWaveChanging = false;
-                                                this._refreshEnemyHUD();
-                                            }
-                                        });
-                                    }
-                                });
-                            }
-                        });
-                    } else {
-                        resolve();
+                        
+                        // Extra delay to let player see the buff applying
+                        delay = Math.max(delay, 500);
+                        await new Promise(r => this.time.delayedCall(350, r)); 
                     }
                 } else {
-                    delay = 100;
+                    const ev = group.event;
+                    let target = null;
+                    if (ev.targetId !== undefined && ev.targetId !== null) {
+                        target = this.players.find(p => p.slot === ev.targetId);
+                        if (!target) {
+                            const tIdStr = String(ev.targetId);
+                            if (this.enemies.some(e => String(e.monsterId) == tIdStr) || tIdStr.startsWith('enemy_') || tIdStr === 'enemy') {
+                                const eIdx = tIdStr.startsWith('enemy_') ? parseInt(tIdStr.split('_')[1], 10) : 0;
+                                target = this.enemies[eIdx] || this.enemies[0];
+                            }
+                        }
+                    }
+
+                    if (ev.type === 'enrage') {
+                        if (target) {
+                            if (this.sound.get('sfx_monsEnraged') || this.cache.audio.exists('sfx_monsEnraged')) {
+                                this.sound.play('sfx_monsEnraged', { volume: 0.8 });
+                            }
+                            target.modeState = 'enraged';
+                            this._enragedTurns = 3;
+                            this.showLog("ENEMY ENRAGED! (3 Turns)", 'system');
+                            this._refreshEnemyHUD();
+                            delay = 800;
+                        }
+                    } else if (ev.type === 'break') {
+                        if (target) {
+                            if (this.sound.get('sfx_monsExhausted') || this.cache.audio.exists('sfx_monsExhausted')) {
+                                this.sound.play('sfx_monsExhausted', { volume: 0.8 });
+                            }
+                            target.modeState = 'exhausted';
+                            this._exhaustedTurns = 2;
+                            this._enragedTurns = 0;
+                            this.showLog("ENEMY BREAK! (Exhausted)", 'system');
+                            this._refreshEnemyHUD();
+                            delay = 800;
+                        }
+                    } else if (ev.type === 'effect_removed') {
+                        if (target) {
+                            const effName = ev.effectName || '';
+                            target.activeEffects = (target.activeEffects || []).filter(
+                                e => (e.effect_name || e.target_stat || '') !== effName
+                            );
+                            if (this.enemies.includes(target)) {
+                                this._refreshEnemyHUD();
+                            } else {
+                                target.refreshVisual();
+                            }
+                            delay = 100;
+                        }
+                    } else if (ev.type === 'log') {
+                        this.showLog(ev.message, 'system');
+                        delay = 600;
+                    } else if (ev.type === 'delay') {
+                        delay = ev.delayMs || 500;
+                    } else if (ev.type === 'wave_change') {
+                        waveChanged = true;
+                        this._isWaveChanging = true;
+    
+                        delay = -1; // Flag for manual resolve
+    
+                        // 1. Fade out the dying enemy
+                        if (this.enemies.length > 0) {
+                            const targetAlphas = [];
+                            this.enemies.forEach((enemy, idx) => {
+                                targetAlphas.push(enemy);
+                                if (this.enemyHUDs[idx] && this.enemyHUDs[idx].container) {
+                                    targetAlphas.push(this.enemyHUDs[idx].container);
+                                }
+                            });
+    
+                            this.tweens.add({
+                                targets: targetAlphas,
+                                alpha: 0,
+                                duration: 1000,
+                                onComplete: () => {
+                                    resolve(); // Allow _syncState to rebuild new enemies in background
+    
+                                    // 2. Karakter berlari ke kiri (maju)
+                                    this.tweens.add({
+                                        targets: this.players,
+                                        x: "-=600",
+                                        duration: 800,
+                                        ease: 'Power2',
+                                        onComplete: () => {
+                                            // 3. Buka tirai hitam pekat (transparency 100%)
+                                            if (!this._blackOverlay) {
+                                                this._blackOverlay = this.add.rectangle(CX, H / 2, W, H, 0x000000, 1).setDepth(190).setAlpha(0);
+                                            }
+                                            
+                                            this.tweens.add({
+                                                targets: this._blackOverlay,
+                                                alpha: 1,
+                                                duration: 400,
+                                                onComplete: () => {
+                                                    // Kembalikan posisi karakter ke posisi semula secara instan di balik tirai
+                                                    this.players.forEach(p => { p.x = p._baseX; });
+
+                                                    const waveTxt = this.add.text(CX, H / 2, `WAVE ${ev.waveNum}`, {
+                                                        fontSize: '48px', color: '#ffd700', fontStyle: 'bold', fontFamily: 'Outfit'
+                                                    }).setOrigin(0.5).setAlpha(0).setDepth(200);
+
+                                                    this.tweens.add({
+                                                        targets: waveTxt,
+                                                        alpha: 1,
+                                                        duration: 600,
+                                                        yoyo: true,
+                                                        hold: 800,
+                                                        onComplete: () => {
+                                                            waveTxt.destroy();
+
+                                                            if (this._blackOverlay) {
+                                                                this.tweens.add({
+                                                                    targets: this._blackOverlay,
+                                                                    alpha: 0,
+                                                                    duration: 400,
+                                                                    ease: 'Power2',
+                                                                    onComplete: () => {
+                                                                        this._blackOverlay.destroy();
+                                                                        this._blackOverlay = null;
+
+                                                                        const newTargetAlphas = [];
+                                                                        this.enemies.forEach((enemy, idx) => {
+                                                                            newTargetAlphas.push(enemy);
+                                                                            if (this.enemyHUDs[idx] && this.enemyHUDs[idx].container) {
+                                                                                newTargetAlphas.push(this.enemyHUDs[idx].container);
+                                                                            }
+                                                                        });
+                                
+                                                                        this.tweens.add({
+                                                                            targets: newTargetAlphas,
+                                                                            alpha: 1,
+                                                                            duration: 1000,
+                                                                            onComplete: () => {
+                                                                                this._isWaveChanging = false;
+                                                                                this._refreshEnemyHUD();
+                                                                            }
+                                                                        });
+                                                                    }
+                                                                });
+                                                            }
+                                                        }
+                                                    });
+                                                }
+                                            });
+                                        }
+                                    });
+                                }
+                            });
+                        } else {
+                            resolve();
+                        }
+                    } else {
+                        delay = 100;
+                    }
                 }
 
                 if (delay >= 0) {
@@ -2084,16 +2302,7 @@ export default class BattleScene extends Phaser.Scene {
                     this.enemies.push(enemy);
                 });
 
-                this._buildEnemyHUD();
-
-                if (this._isWaveChanging && this.enemyHUDs) {
-                    this.enemyHUDs.forEach(hud => {
-                        Object.values(hud).forEach(item => {
-                            if (item && item.setAlpha && !Array.isArray(item)) item.setAlpha(0);
-                            else if (Array.isArray(item)) item.forEach(i => i && i.setAlpha && i.setAlpha(0));
-                        });
-                    });
-                }
+                this._buildEnemyHUD(this._isWaveChanging);
                 this.selectedTargetIndex = -1;
                 this._updateTargetIndicator();
             }
@@ -2270,26 +2479,54 @@ export default class BattleScene extends Phaser.Scene {
     }
 
     checkVictory() {
+        if (this._isVictoryConfirmed) return true;
+
         if (this.enemies.every(e => e.hp <= 0)) {
+            this._isVictoryConfirmed = true;
             this.turn = "none";
             stopGlobalBGM();
-            this._showCenterAnim("VICTORY!", "#ffeb3b");
-            this.time.delayedCall(1500, () => {
-                this.scene.stop();
-                this.scene.start('LoadingScene', {
-                    targetScene: 'VictoryScene',
-                    targetData: {
-                        questId: this.questId,
-                        playerId: this.playerId,
-                        potionsUsed: this.potionsUsed,
-                        fullPotionsUsed: this.fullPotionsUsed,
-                        bsId: this.bsId
-                    }
-                });
+
+            // FADE OUT ENEMIES FIRST
+            const fadeTargets = [];
+            this.enemies.forEach((enemy, idx) => {
+                fadeTargets.push(enemy);
+                if (this.enemyHUDs[idx] && this.enemyHUDs[idx].container) {
+                    fadeTargets.push(this.enemyHUDs[idx].container);
+                }
             });
+
+            if (fadeTargets.length > 0) {
+                this.tweens.add({
+                    targets: fadeTargets,
+                    alpha: 0,
+                    duration: 1000,
+                    ease: 'Sine.easeInOut',
+                    onComplete: () => this._triggerVictoryTransition()
+                });
+            } else {
+                this._triggerVictoryTransition();
+            }
+
             return true;
         }
         return false;
+    }
+
+    _triggerVictoryTransition() {
+        this._showCenterAnim("VICTORY!", "#ffeb3b");
+        this.time.delayedCall(1500, () => {
+            this.scene.stop();
+            this.scene.start('LoadingScene', {
+                targetScene: 'VictoryScene',
+                targetData: {
+                    questId: this.questId,
+                    playerId: this.playerId,
+                    potionsUsed: this.potionsUsed,
+                    fullPotionsUsed: this.fullPotionsUsed,
+                    bsId: this.bsId
+                }
+            });
+        });
     }
 
     triggerDefeat(isRetreat = false) {
@@ -2458,5 +2695,113 @@ export default class BattleScene extends Phaser.Scene {
         closeBtn.on("pointerover", () => closeBtn.setFillStyle(0x401515));
         closeBtn.on("pointerout", () => closeBtn.setFillStyle(0x2a0d0d));
         closeBtn.on("pointerdown", () => modalContainer.destroy());
+    }
+
+    // ===== VFX SYSTEM =====
+
+    /** Initialize all VFX animations from the manifest (called once in create phase) */
+    _initVfxAnims() {
+        // Exact VFX animations
+        for (const [key, data] of Object.entries(vfxManifest.exact)) {
+            if (this.anims.exists(`anim_${key}`)) continue;
+            this.anims.create({
+                key: `anim_${key}`,
+                frames: this.anims.generateFrameNumbers(key, { start: 0, end: data.totalFrames - 1 }),
+                frameRate: 24,
+                repeat: 0
+            });
+        }
+        // Rolling VFX animations
+        for (const [category, items] of Object.entries(vfxManifest.rolling)) {
+            items.forEach(item => {
+                if (this.anims.exists(`anim_${item.key}`)) return;
+                this.anims.create({
+                    key: `anim_${item.key}`,
+                    frames: this.anims.generateFrameNumbers(item.key, { start: 0, end: item.totalFrames - 1 }),
+                    frameRate: 24,
+                    repeat: 0
+                });
+            });
+        }
+    }
+
+    /**
+     * Get the target position for VFX placement.
+     * Returns { x, y } centered on the target's battle sprite.
+     */
+    _getVfxTargetPos(target) {
+        let tx = target.x || CX;
+        let ty = target.y || H / 2;
+        if (target.battleSprite) {
+            tx = target.battleSprite.x;
+            ty = target.battleSprite.y;
+        } else if (target._spriteBaseX !== undefined && target._spriteBaseY !== undefined) {
+            tx = target._spriteBaseX;
+            ty = target._spriteBaseY;
+        } else if (target.spriteObj) {
+            tx = target.spriteObj.x;
+            ty = target.spriteObj.y;
+        }
+        return { x: tx, y: ty };
+    }
+
+    /**
+     * Play a Rolling VFX (random selection from element skill pool).
+     * Used for: Skill, Special Attack (player), Charge Attack (monster).
+     * @param {string} element - 'Fire', 'Wind', or 'Earth'
+     * @param {number} targetX
+     * @param {number} targetY
+     * @param {number} [scale=1.5] - Scale multiplier for the VFX sprite
+     */
+    playRollingVFX(element, targetX, targetY, scale = 1.5) {
+        const el = (element || '').toLowerCase();
+        let categoryKey = 'skillFire';
+        if (el === 'wind') categoryKey = 'skillWind';
+        else if (el === 'earth') categoryKey = 'skillEarth';
+
+        const pool = vfxManifest.rolling[categoryKey];
+        if (!pool || pool.length === 0) return;
+
+        // Random selection from pool
+        const chosen = pool[Math.floor(Math.random() * pool.length)];
+        const animKey = `anim_${chosen.key}`;
+
+        if (!this.anims.exists(animKey)) return;
+
+        const vfx = this.add.sprite(targetX, targetY, chosen.key);
+        vfx.setDepth(50);
+        vfx.setScale(scale);
+        vfx.setBlendMode(Phaser.BlendModes.ADD);
+        vfx.play(animKey);
+        vfx.on('animationcomplete', () => { vfx.destroy(); });
+    }
+
+    /**
+     * Play an Exact VFX (specific single-file spritesheet).
+     * Used for: Basic Attack, Heal, Buff, Debuff, DoT, Stun, etc.
+     * @param {string} key - Manifest key (e.g., 'charBasicAtk', 'buff', 'heal', 'poison')
+     * @param {number} targetX
+     * @param {number} targetY
+     * @param {object} [opts={}] - Optional overrides { scale, useAddBlend, depth }
+     */
+    playExactVFX(key, targetX, targetY, opts = {}) {
+        const data = vfxManifest.exact[key];
+        if (!data) return;
+
+        const animKey = `anim_${key}`;
+        if (!this.anims.exists(animKey)) return;
+
+        const scale = opts.scale !== undefined ? opts.scale : 1.5;
+        const depth = opts.depth !== undefined ? opts.depth : 50;
+        const useAddBlend = opts.useAddBlend !== undefined ? opts.useAddBlend : false;
+
+        const vfx = this.add.sprite(targetX, targetY, key);
+        vfx.setDepth(depth);
+        vfx.setScale(scale);
+        if (useAddBlend) {
+            vfx.setBlendMode(Phaser.BlendModes.ADD);
+        }
+        vfx.play(animKey);
+        vfx.on('animationcomplete', () => { vfx.destroy(); });
     }
 }

@@ -1,0 +1,324 @@
+{
+  "exact": {
+    "aetherBurst": {
+      "path": "assets/vfx/aetherBurst.png",
+      "width": 3102,
+      "height": 1765,
+      "frameWidth": 517,
+      "frameHeight": 353,
+      "totalFrames": 30
+    },
+    "buff": {
+      "path": "assets/vfx/buff.png",
+      "width": 3840,
+      "height": 96,
+      "frameWidth": 96,
+      "frameHeight": 96,
+      "totalFrames": 40
+    },
+    "burn": {
+      "path": "assets/vfx/burn.png",
+      "width": 3840,
+      "height": 96,
+      "frameWidth": 96,
+      "frameHeight": 96,
+      "totalFrames": 40
+    },
+    "chainBurst": {
+      "path": "assets/vfx/chainBurst.png",
+      "width": 2130,
+      "height": 1775,
+      "frameWidth": 355,
+      "frameHeight": 355,
+      "totalFrames": 30
+    },
+    "charBasicAtk": {
+      "path": "assets/vfx/charBasicAtk.png",
+      "width": 1746,
+      "height": 1505,
+      "frameWidth": 291,
+      "frameHeight": 301,
+      "totalFrames": 30
+    },
+    "debuff": {
+      "path": "assets/vfx/debuff.png",
+      "width": 4224,
+      "height": 96,
+      "frameWidth": 96,
+      "frameHeight": 96,
+      "totalFrames": 44
+    },
+    "greenPotionHeal": {
+      "path": "assets/vfx/greenPotionHeal.png",
+      "width": 3840,
+      "height": 96,
+      "frameWidth": 96,
+      "frameHeight": 96,
+      "totalFrames": 40
+    },
+    "heal": {
+      "path": "assets/vfx/heal.png",
+      "width": 3840,
+      "height": 96,
+      "frameWidth": 96,
+      "frameHeight": 96,
+      "totalFrames": 40
+    },
+    "monsBasicAtk": {
+      "path": "assets/vfx/monsBasicAtk.png",
+      "width": 3192,
+      "height": 2640,
+      "frameWidth": 532,
+      "frameHeight": 528,
+      "totalFrames": 30
+    },
+    "poison": {
+      "path": "assets/vfx/poison.png",
+      "width": 3840,
+      "height": 96,
+      "frameWidth": 96,
+      "frameHeight": 96,
+      "totalFrames": 40
+    },
+    "revive": {
+      "path": "assets/vfx/revive.png",
+      "width": 3840,
+      "height": 112,
+      "frameWidth": 120,
+      "frameHeight": 112,
+      "totalFrames": 32
+    },
+    "stun": {
+      "path": "assets/vfx/stun.png",
+      "width": 3840,
+      "height": 96,
+      "frameWidth": 96,
+      "frameHeight": 96,
+      "totalFrames": 40
+    }
+  },
+  "rolling": {
+    "skillEarth": [
+      {
+        "key": "skillEarth_Crystal_Shatter",
+        "path": "assets/vfx/skillEarth/Crystal Shatter.png",
+        "width": 4096,
+        "height": 116,
+        "frameWidth": 116,
+        "frameHeight": 116,
+        "totalFrames": 35
+      },
+      {
+        "key": "skillEarth_Dust_Cloud",
+        "path": "assets/vfx/skillEarth/Dust Cloud.png",
+        "width": 4224,
+        "height": 96,
+        "frameWidth": 96,
+        "frameHeight": 96,
+        "totalFrames": 44
+      },
+      {
+        "key": "skillEarth_Earth_Shield",
+        "path": "assets/vfx/skillEarth/Earth Shield.png",
+        "width": 3840,
+        "height": 96,
+        "frameWidth": 96,
+        "frameHeight": 96,
+        "totalFrames": 40
+      },
+      {
+        "key": "skillEarth_Ground_Slam",
+        "path": "assets/vfx/skillEarth/Ground Slam.png",
+        "width": 3072,
+        "height": 96,
+        "frameWidth": 96,
+        "frameHeight": 96,
+        "totalFrames": 32
+      },
+      {
+        "key": "skillEarth_Meteor_Impact",
+        "path": "assets/vfx/skillEarth/Meteor Impact.png",
+        "width": 9120,
+        "height": 192,
+        "frameWidth": 190,
+        "frameHeight": 192,
+        "totalFrames": 48
+      },
+      {
+        "key": "skillEarth_Quake_Nova",
+        "path": "assets/vfx/skillEarth/Quake Nova.png",
+        "width": 7680,
+        "height": 128,
+        "frameWidth": 128,
+        "frameHeight": 128,
+        "totalFrames": 60
+      },
+      {
+        "key": "skillEarth_Rock_Throw",
+        "path": "assets/vfx/skillEarth/Rock Throw.png",
+        "width": 4032,
+        "height": 96,
+        "frameWidth": 96,
+        "frameHeight": 96,
+        "totalFrames": 42
+      },
+      {
+        "key": "skillEarth_Stone_Spikes",
+        "path": "assets/vfx/skillEarth/Stone Spikes.png",
+        "width": 3840,
+        "height": 104,
+        "frameWidth": 96,
+        "frameHeight": 104,
+        "totalFrames": 40
+      }
+    ],
+    "skillFire": [
+      {
+        "key": "skillFire_Burning_Ground",
+        "path": "assets/vfx/skillFire/Burning Ground.png",
+        "width": 3840,
+        "height": 104,
+        "frameWidth": 96,
+        "frameHeight": 104,
+        "totalFrames": 40
+      },
+      {
+        "key": "skillFire_Explosion",
+        "path": "assets/vfx/skillFire/Explosion.png",
+        "width": 3072,
+        "height": 104,
+        "frameWidth": 96,
+        "frameHeight": 104,
+        "totalFrames": 32
+      },
+      {
+        "key": "skillFire_Fire_Aura",
+        "path": "assets/vfx/skillFire/Fire Aura.png",
+        "width": 3840,
+        "height": 96,
+        "frameWidth": 96,
+        "frameHeight": 96,
+        "totalFrames": 40
+      },
+      {
+        "key": "skillFire_Fire_Beam",
+        "path": "assets/vfx/skillFire/Fire Beam.png",
+        "width": 3456,
+        "height": 96,
+        "frameWidth": 96,
+        "frameHeight": 96,
+        "totalFrames": 36
+      },
+      {
+        "key": "skillFire_Fireball",
+        "path": "assets/vfx/skillFire/Fireball.png",
+        "width": 4032,
+        "height": 96,
+        "frameWidth": 96,
+        "frameHeight": 96,
+        "totalFrames": 42
+      },
+      {
+        "key": "skillFire_Flame_Slash",
+        "path": "assets/vfx/skillFire/Flame Slash.png",
+        "width": 3072,
+        "height": 96,
+        "frameWidth": 96,
+        "frameHeight": 96,
+        "totalFrames": 32
+      },
+      {
+        "key": "skillFire_Meteor_Strike",
+        "path": "assets/vfx/skillFire/Meteor Strike.png",
+        "width": 3072,
+        "height": 96,
+        "frameWidth": 96,
+        "frameHeight": 96,
+        "totalFrames": 32
+      },
+      {
+        "key": "skillFire_Molten_Core",
+        "path": "assets/vfx/skillFire/Molten Core.png",
+        "width": 7104,
+        "height": 156,
+        "frameWidth": 148,
+        "frameHeight": 156,
+        "totalFrames": 48
+      }
+    ],
+    "skillWind": [
+      {
+        "key": "skillWind_Air_Burst",
+        "path": "assets/vfx/skillWind/Air Burst.png",
+        "width": 3072,
+        "height": 96,
+        "frameWidth": 96,
+        "frameHeight": 96,
+        "totalFrames": 32
+      },
+      {
+        "key": "skillWind_Dust_Devil",
+        "path": "assets/vfx/skillWind/Dust Devil.png",
+        "width": 4160,
+        "height": 104,
+        "frameWidth": 104,
+        "frameHeight": 104,
+        "totalFrames": 40
+      },
+      {
+        "key": "skillWind_Feather_Fall",
+        "path": "assets/vfx/skillWind/Feather Fall.png",
+        "width": 6144,
+        "height": 96,
+        "frameWidth": 96,
+        "frameHeight": 96,
+        "totalFrames": 64
+      },
+      {
+        "key": "skillWind_Gust",
+        "path": "assets/vfx/skillWind/Gust.png",
+        "width": 4608,
+        "height": 96,
+        "frameWidth": 96,
+        "frameHeight": 96,
+        "totalFrames": 48
+      },
+      {
+        "key": "skillWind_Sonic_Boom",
+        "path": "assets/vfx/skillWind/Sonic Boom.png",
+        "width": 3072,
+        "height": 96,
+        "frameWidth": 96,
+        "frameHeight": 96,
+        "totalFrames": 32
+      },
+      {
+        "key": "skillWind_Tornado",
+        "path": "assets/vfx/skillWind/Tornado.png",
+        "width": 4000,
+        "height": 96,
+        "frameWidth": 100,
+        "frameHeight": 96,
+        "totalFrames": 40
+      },
+      {
+        "key": "skillWind_Wind_Aura",
+        "path": "assets/vfx/skillWind/Wind Aura.png",
+        "width": 3840,
+        "height": 96,
+        "frameWidth": 96,
+        "frameHeight": 96,
+        "totalFrames": 40
+      },
+      {
+        "key": "skillWind_Wind_Slash",
+        "path": "assets/vfx/skillWind/Wind Slash.png",
+        "width": 3072,
+        "height": 96,
+        "frameWidth": 96,
+        "frameHeight": 96,
+        "totalFrames": 32
+      }
+    ]
+  }
+}

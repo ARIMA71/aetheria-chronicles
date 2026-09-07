@@ -460,7 +460,7 @@ export default class InventoryScene extends Phaser.Scene {
     }
 
     _buildMenuModal() {
-        this.menuContainer = this.add.container(0, 0).setDepth(300).setVisible(false).setScrollFactor(0);
+        this.menuContainer = this.add.container(0, 0).setDepth(2000).setVisible(false).setScrollFactor(0);
 
         const sysW = this.scale.width;
         const sysH = this.scale.height;
@@ -513,7 +513,7 @@ export default class InventoryScene extends Phaser.Scene {
             this.showLogoutConfirmation();
         }, 0x7f1d1d, 0xef4444);
 
-        const closeBtnCircle = this.add.circle(W - 40, 30, 18, THEME.PANEL, THEME.PANEL_ALPHA);
+        const closeBtnCircle = this.add.circle(W - 40, 30, 18, THEME.PANEL, 1);
         closeBtnCircle.setStrokeStyle(1, THEME.BORDER);
         closeBtnCircle.setInteractive({ useHandCursor: true });
         const closeBtnText = this.add.text(W - 40, 30, 'CLOSE', { fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
@@ -530,7 +530,7 @@ export default class InventoryScene extends Phaser.Scene {
             btnLogout.rect, btnLogout.text, closeBtnCircle, closeBtnText
         ]);
 
-        this.confirmContainer = this.add.container(0, 0).setDepth(310).setVisible(false).setScrollFactor(0);
+        this.confirmContainer = this.add.container(0, 0).setDepth(2100).setVisible(false).setScrollFactor(0);
         const cBackdrop = this.add.rectangle(sysW / 2, sysH / 2, sysW, sysH, 0x000000, 0.8).setInteractive();
         cBackdrop.on('pointerdown', (p, x, y, e) => e.stopPropagation());
 

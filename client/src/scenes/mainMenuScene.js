@@ -149,9 +149,9 @@ export default class MainMenuScene extends Phaser.Scene {
             const minutes = Math.floor(this.staminaRefillSeconds / 60);
             const seconds = this.staminaRefillSeconds % 60;
             const timeStr = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-            this.staminaText.setText(`${this.playerData.stamina}/100 (${timeStr})`);
+            this.staminaText.setText(`${this.playerData.stamina}/${maxStam} (${timeStr})`);
         } else {
-            this.staminaText.setText(`${this.playerData.stamina}/100`);
+            this.staminaText.setText(`${this.playerData.stamina}/${maxStam}`);
         }
     }
 

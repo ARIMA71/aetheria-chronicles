@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { THEME } from '../main.js';
+import { playGlobalBGM } from '../utils/audioManager.js';
 
 export default class ReadyScene extends Phaser.Scene {
     constructor() {
@@ -17,20 +18,16 @@ export default class ReadyScene extends Phaser.Scene {
         const CY = H / 2;
 
         // Background
-        this.add.rectangle(0, 0, W, H, THEME.BG).setOrigin(0);
+        this.add.rectangle(0, 0, W, H, 0x000000).setOrigin(0);
 
         if (this.sound.get('sfx_battleReady') || this.cache.audio.exists('sfx_battleReady')) {
             this.sound.play('sfx_battleReady', { volume: 0.8 });
         }
 
-        // Decorative Lines
-        const topBg = this.add.rectangle(CX, CY, W, 80, THEME.PANEL).setAlpha(0);
-        this.tweens.add({
-            targets: topBg,
-            alpha: 1,
-            duration: 300,
-            ease: 'Power2'
-        });
+        const bgmKey = this.battleData ? (this.battleData.bgmKey || 'bgm_normalbattle') : 'bgm_normalbattle';
+        playGlobalBGM(this, bgmKey);
+
+        // decorative lines removed per user request
 
         // "READY" Text
         const readyText = this.add.text(CX, CY, "READY", {
@@ -53,7 +50,7 @@ export default class ReadyScene extends Phaser.Scene {
                 this.time.delayedCall(800, () => {
                     // Fade out
                     this.tweens.add({
-                        targets: [readyText, topBg],
+                        targets: [readyText],
                         alpha: 0,
                         duration: 300,
                         onComplete: () => {
