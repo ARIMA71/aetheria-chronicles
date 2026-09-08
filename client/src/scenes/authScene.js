@@ -13,6 +13,10 @@ export default class AuthScene extends Phaser.Scene {
     preload() {
         this.load.audio('sfx_select', 'assets/audio/sfx/select.mp3');
         this.load.audio('bgm_authscene', 'assets/audio/bgm/bgm_authscene.mp3');
+        this.load.audio('bgm_victory', 'assets/audio/bgm/victory.mp3');
+        this.load.audio('bgm_defeat', 'assets/audio/bgm/defeat.mp3');
+        this.load.image('game_logo', 'assets/logo/Acro Logo 1.png');
+        
         
         // Preload all Global SFX
         this.load.audio('sfx_buff', 'assets/audio/sfx/buff.mp3');
@@ -22,7 +26,6 @@ export default class AuthScene extends Phaser.Scene {
         this.load.audio('sfx_charSkillAtk', 'assets/audio/sfx/charSkillAtk.wav');
         this.load.audio('sfx_charSpecialAttack', 'assets/audio/sfx/charSpecialAttack.mp3');
         this.load.audio('sfx_debuff', 'assets/audio/sfx/debuff.mp3');
-        this.load.audio('sfx_defeat', 'assets/audio/sfx/defeat.mp3');
         this.load.audio('sfx_gacha', 'assets/audio/sfx/gacha.mp3');
         this.load.audio('sfx_heal', 'assets/audio/sfx/heal.mp3');
         this.load.audio('sfx_levelUp', 'assets/audio/sfx/levelUp.mp3');
@@ -32,16 +35,21 @@ export default class AuthScene extends Phaser.Scene {
         this.load.audio('sfx_monsExhausted', 'assets/audio/sfx/monsExhausted.wav');
         this.load.audio('sfx_newCharacterUnlocked', 'assets/audio/sfx/newCharacterUnlocked.mp3');
         this.load.audio('sfx_revive', 'assets/audio/sfx/revive.mp3');
-        this.load.audio('sfx_victory', 'assets/audio/sfx/victory.mp3');
+        this.load.audio('sfx_monsterDefeated', 'assets/audio/sfx/monsterDefeated.mp3');
     }
 
     create() {
         if (checkSession(this)) return;
 
-        // Anti-Autoplay Policy: Putar BGM setelah ada interaksi (klik pertama di kanvas)
-        this.input.once('pointerdown', () => {
+        // Anti-Autoplay Policy: Putar BGM setelah ada interaksi (klik pertama di kanvas),
+        // kecuali audio context sudah aktif (misal: kembali dari scene lain setelah logout).
+        if (this.sound.locked) {
+            this.input.once('pointerdown', () => {
+                playGlobalBGM(this, 'bgm_authscene');
+            });
+        } else {
             playGlobalBGM(this, 'bgm_authscene');
-        });
+        }
 
         // ── Background ──
         this.add.rectangle(CX, H / 2, W, H, THEME.BG);
@@ -84,20 +92,12 @@ export default class AuthScene extends Phaser.Scene {
         devLink.on('pointerdown', () => this._showDevModal());
 
         // ── Title ──
-        this.add.text(CX, 135, 'AETHERIA', {
-            fontSize: '36px',
-            fontFamily: 'Cinzel, serif',
-            fontStyle: 'bold',
-            color: THEME.TEXT_PRIMARY,
-            letterSpacing: 4
-        }).setOrigin(0.5);
-
-        this.add.text(CX, 173, 'CHRONICLES', {
-            fontSize: '13px',
-            fontFamily: 'Outfit, sans-serif',
-            color: THEME.TEXT_SECONDARY,
-            letterSpacing: 8
-        }).setOrigin(0.5);
+        const logo = this.add.image(CX, 145, 'game_logo').setOrigin(0.5);
+        // Scale logo gracefully. Assuming original might still be large, we set a target width.
+        const targetWidth = 350;
+        if (logo.width > targetWidth) {
+            logo.setScale(targetWidth / logo.width);
+        }
 
         // ── Cover Placeholder ──
         const coverBg = this.add.rectangle(CX, 310, 220, 180, THEME.PANEL, 0.5);

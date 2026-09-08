@@ -210,6 +210,14 @@ export default class BattleScene extends Phaser.Scene {
         this._setupUI();
     }
 
+    playSFX(key, config = { volume: 0.8 }) {
+        const isSfxOn = localStorage.getItem('sfx_on') !== 'false';
+        if (!isSfxOn) return;
+        if (this.sound.get(key) || this.cache.audio.exists(key)) {
+            this.sound.play(key, config);
+        }
+    }
+
     /**
      * Resume battle dari data yang tersimpan di server.
      * Inject seluruh state (HP, cooldowns, SA/CA, buffs, turn counter, timer)
@@ -368,9 +376,8 @@ export default class BattleScene extends Phaser.Scene {
     }
     _tapPortrait(p) {
         if (p.activeEffects && p.activeEffects.some(e => (e.target_stat || '').toUpperCase() === 'STUN')) {
-            this.showLog(`💫 ${p.charName} sedang STUN! Tidak bisa membuka opsi skill.`);
+            this.showLog(`💫 ${p.charName} sedang STUN! Aksi dinonaktifkan.`);
             this.playStunVibrateAnim(p);
-            return;
         }
         if (this.activePlayer === p && this._actionWindowOpen) { this.closeActionWindow(); return; }
         if (!this._actionWindowOpen) this.openActionWindow(p); else this._renderActionWindow();
@@ -479,7 +486,7 @@ export default class BattleScene extends Phaser.Scene {
             
             const hitArea = this.add.rectangle(83, baseY + 4, 360, 24, 0x000000, 0).setOrigin(0, 0.5);
             hitArea.setInteractive({ useHandCursor: true });
-            hitArea.on('pointerdown', () => this._showEnemyStatusModal(enemy));
+            hitArea.on('pointerdown', () => this._showStatusModal(enemy));
 
 
             const modeBarBg = this.add.rectangle(83, baseY + 14, 360, 4, THEME.BG).setOrigin(0, 0.5).setStrokeStyle(1, THEME.BORDER);
@@ -772,7 +779,10 @@ export default class BattleScene extends Phaser.Scene {
 
         // IN EFFECT
         const effY = -120; // Top is -137.5
-        this._awEffectsSection = this.add.rectangle(secX, effY, secW, 35, 0x12192b).setStrokeStyle(1, 0x334155);
+        this._awEffectsSection = this.add.rectangle(secX, effY, secW, 35, 0x12192b).setStrokeStyle(1, 0x334155).setInteractive({ useHandCursor: true });
+        this._awEffectsSection.on('pointerdown', () => {
+            if (this.activePlayer) this._showStatusModal(this.activePlayer);
+        });
         this._awLabelEffect = this.add.text(-115, effY - 17.5, " STATUS EFFECT ", { fontSize: "10px", fontStyle: "bold", color: THEME.TEXT_MUTED, backgroundColor: "#111827" }).setOrigin(0, 0.5);
         this._awEffectsContainer = this.add.container(-115, effY); // Icons rendered horizontally here
 
@@ -789,10 +799,12 @@ export default class BattleScene extends Phaser.Scene {
         
         this._awBasicBtn = this.add.rectangle(-35, atkY, 140, 40, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive();
         this._awBasicText = this.add.text(-35, atkY, "BASIC ATTACK ⚔", { fontSize: "12px", fontStyle: "bold", color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
+        this._awBasicOverlay = this.add.rectangle(-35, atkY, 140, 40, 0x000000, 0.5).setVisible(false);
         this._awBasicBtn.on('pointerdown', () => this._selectAction('basic_attack'));
 
         this._awSpecialBtn = this.add.rectangle(135, atkY, 140, 40, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive();
         this._awSpecialText = this.add.text(135, atkY, "SPECIAL ATTACK ✦", { fontSize: "12px", fontStyle: "bold", color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
+        this._awSpecialOverlay = this.add.rectangle(135, atkY, 140, 40, 0x000000, 0.5).setVisible(false);
         this._awSpecialBtn.on('pointerdown', () => {
             if (this.activePlayer && this.activePlayer.specialBar >= this.activePlayer.specialMax) {
                 this._selectAction('special_attack');
@@ -805,8 +817,8 @@ export default class BattleScene extends Phaser.Scene {
             this._awAutoBtn, this._awAutoText,
             this._awEffectsSection, this._awLabelEffect, this._awEffectsContainer,
             this._awSkillsSection, this._awLabelSkill, this._awSkillsContainer, 
-            this._awAtkSection, this._awLabelAction, this._awBasicBtn, this._awBasicText,
-            this._awSpecialBtn, this._awSpecialText
+            this._awAtkSection, this._awLabelAction, this._awBasicBtn, this._awBasicText, this._awBasicOverlay,
+            this._awSpecialBtn, this._awSpecialText, this._awSpecialOverlay
         ]);
     }
 
@@ -830,6 +842,12 @@ export default class BattleScene extends Phaser.Scene {
         if (!this.activePlayer) return;
         const p = this.activePlayer;
         
+        if (p.activeEffects && p.activeEffects.some(e => (e.target_stat || '').toUpperCase() === 'STUN')) {
+            this.showLog(`💫 ${p.charName} sedang STUN! Aksi dinonaktifkan.`);
+            this.playStunVibrateAnim(p);
+            return;
+        }
+        
         if (p.queuedAction.type === type && p.queuedAction.skill_id === skill_id) {
             p.queuedAction = { type: 'none' };
         } else {
@@ -843,6 +861,8 @@ export default class BattleScene extends Phaser.Scene {
     _renderActionWindow() {
         if (!this.activePlayer) return;
         const p = this.activePlayer;
+
+        const isStunned = p.activeEffects && p.activeEffects.some(e => (e.target_stat || '').toUpperCase() === 'STUN');
 
         const keyId = p.mc_id || p.id || p.slot;
         let portTex = `portrait_${keyId}`;
@@ -861,17 +881,19 @@ export default class BattleScene extends Phaser.Scene {
         const isAnyQueued = p.queuedAction.type !== 'none';
 
         const isBasic = p.queuedAction.type === 'basic_attack';
-        const basicAlpha = isBasic ? 1 : (isAnyQueued ? 0.35 : 1);
-        this._awBasicBtn.setAlpha(basicAlpha);
-        this._awBasicText.setAlpha(basicAlpha);
+        const basicDisabled = isStunned || (isAnyQueued && !isBasic);
+        this._awBasicBtn.setAlpha(1);
+        this._awBasicText.setAlpha(1);
+        this._awBasicOverlay.setVisible(basicDisabled);
         this._awBasicBtn.setStrokeStyle(1, isBasic ? THEME.HEALTH : THEME.BORDER);
 
         const saRdy = p.specialBar >= p.specialMax;
         const isSpecial = p.queuedAction.type === 'special_attack';
-        const specialAlpha = saRdy ? (isSpecial ? 1 : (isAnyQueued ? 0.35 : 1)) : 0.35;
-        this._awSpecialBtn.setAlpha(specialAlpha);
-        this._awSpecialText.setAlpha(specialAlpha);
+        const specialDisabled = isStunned || !saRdy || (isAnyQueued && !isSpecial);
+        this._awSpecialBtn.setAlpha(1);
+        this._awSpecialText.setAlpha(1);
         this._awSpecialText.setColor(saRdy ? (isSpecial ? "#fff" : "#f1c40f") : THEME.TEXT_MUTED);
+        this._awSpecialOverlay.setVisible(specialDisabled);
         this._awSpecialBtn.setStrokeStyle(1, isSpecial ? 0xf1c40f : THEME.BORDER);
 
         this._awSkillsContainer.removeAll(true);
@@ -889,7 +911,7 @@ export default class BattleScene extends Phaser.Scene {
             if (isSA) return; 
 
             const cd = p.cooldowns[sk.id] || 0;
-            const canUse = (cd === 0);
+            const canUse = (cd === 0) && !isStunned;
             const isQueued = p.queuedAction.type === 'skill' && p.queuedAction.skill_id === sk.id;
             
             const sx = 55 + (skillIndex * 80);
@@ -897,6 +919,7 @@ export default class BattleScene extends Phaser.Scene {
 
             let strokeColor = THEME.BORDER;
             const sType = (sk.type || '').toLowerCase();
+            
             if (sType.includes('damage')) strokeColor = 0xe74c3c;
             else if (sType.includes('debuff')) strokeColor = 0x3498db;
             else if (sType.includes('buff') || sType.includes('support')) strokeColor = 0xf1c40f;
@@ -905,13 +928,11 @@ export default class BattleScene extends Phaser.Scene {
             if (isQueued) strokeColor = THEME.AETHER;
 
             const bgR = this.add.rectangle(sx, 0, 60, 60, THEME.PANEL).setStrokeStyle(1, strokeColor);
-            
-            const skillAlpha = canUse ? (isQueued ? 1 : (isAnyQueued ? 0.35 : 1)) : 0.35;
-            bgR.setAlpha(skillAlpha);
+            bgR.setAlpha(1);
             
             const displayName = sk.name.length > 10 ? sk.name.substring(0, 8) + "..." : sk.name;
             const nm = this.add.text(sx, -5, displayName, { fontSize: "10px", color: THEME.TEXT_PRIMARY, fontStyle: "bold", wordWrap: {width: 55}, align: 'center' }).setOrigin(0.5);
-            nm.setAlpha(skillAlpha);
+            nm.setAlpha(1);
             
             const elements = [bgR, nm];
 
@@ -921,8 +942,13 @@ export default class BattleScene extends Phaser.Scene {
                 elements.push(cdOverlay, cdText);
             } else {
                 const cdT = this.add.text(sx, 15, "READY", { fontSize: "9px", color: THEME.TEXT_MUTED }).setOrigin(0.5);
-                cdT.setAlpha(skillAlpha);
                 elements.push(cdT);
+                
+                const skillDisabled = isStunned || (isAnyQueued && !isQueued);
+                if (skillDisabled) {
+                    const disabledOverlay = this.add.rectangle(sx, 0, 60, 60, 0x000000, 0.5);
+                    elements.push(disabledOverlay);
+                }
             }
             
             this._awSkillsContainer.add(elements);
@@ -1210,6 +1236,18 @@ export default class BattleScene extends Phaser.Scene {
         this.logScrollContainer.y = 10; // Reset scroll ke atas tiap ada log baru
     }
 
+    _queueFloatingText(target, callback) {
+        if (!target) return;
+        target._floatQueueDelay = target._floatQueueDelay || 0;
+        
+        if (target._floatQueueDelay > 0) {
+            this.time.delayedCall(target._floatQueueDelay, callback);
+        } else {
+            callback();
+        }
+        target._floatQueueDelay += 350; // stagger next text on THIS specific target
+    }
+
     showFloatingEffect(target, effectName, effectType) {
         if (!target) return;
 
@@ -1223,33 +1261,35 @@ export default class BattleScene extends Phaser.Scene {
         }
 
         const ox = Phaser.Math.Between(-20, 20);
-        let tx = target.x;
-        let ty = target.y;
-        let spriteH = 80;
 
-        if (target.battleSprite) {
-            tx = target.battleSprite.x;
-            ty = target.battleSprite.y;
-            spriteH = target.battleSprite.displayHeight || 80;
-        } else if (target._spriteBaseX !== undefined && target._spriteBaseY !== undefined) {
-            tx = target._spriteBaseX;
-            ty = target._spriteBaseY;
-        } else if (target.spriteObj) {
-            tx = target.spriteObj.x;
-            ty = target.spriteObj.y;
-        }
-        const headY = ty - (spriteH / 2) - 15;
+        this._queueFloatingText(target, () => {
+            let tx = target.x;
+            let ty = target.y;
+            let spriteH = 80;
 
-        const floatText = this.add.text(tx + ox, headY, effectName, {
-            fontSize: "16px", color: "#ffffff", fontStyle: "bold",
-            stroke: strokeColor, strokeThickness: 4, fontFamily: 'Arial',
-            align: 'center'
-        }).setOrigin(0.5).setDepth(200);
+            if (target.battleSprite) {
+                tx = target.battleSprite.x;
+                ty = target.battleSprite.y;
+                spriteH = target.battleSprite.displayHeight || 80;
+            } else if (target._spriteBaseX !== undefined && target._spriteBaseY !== undefined) {
+                tx = target._spriteBaseX;
+                ty = target._spriteBaseY;
+            } else if (target.spriteObj) {
+                tx = target.spriteObj.x;
+                ty = target.spriteObj.y;
+            }
+            const headY = ty - (spriteH / 2) - 15;
 
-        this.tweens.add({
-            targets: floatText, y: floatText.y - 40, alpha: 0,
-            duration: Phaser.Math.Between(800, 1000), ease: 'Power1',
-            onComplete: () => { floatText.destroy(); }
+            const floatText = this.add.text(tx + ox, headY, effectName, {
+                fontSize: "14px", color: "#ffffff", fontStyle: "bold",
+                stroke: strokeColor, strokeThickness: 4, fontFamily: 'Arial'
+            }).setOrigin(0.5).setDepth(200);
+
+            this.tweens.add({
+                targets: floatText, y: floatText.y - 40, alpha: 0,
+                duration: Phaser.Math.Between(1000, 1200), ease: 'Power1',
+                onComplete: () => { floatText.destroy(); }
+            });
         });
     }
 
@@ -1258,38 +1298,40 @@ export default class BattleScene extends Phaser.Scene {
 
         const ox = Phaser.Math.Between(-20, 20);
 
-        let tx = target.x;
-        let ty = target.y;
-        let spriteH = 80;
+        this._queueFloatingText(target, () => {
+            let tx = target.x;
+            let ty = target.y;
+            let spriteH = 80;
 
-        if (target.battleSprite) {
-            tx = target.battleSprite.x;
-            ty = target.battleSprite.y;
-            spriteH = target.battleSprite.displayHeight || 80;
-        } else if (target._spriteBaseX !== undefined && target._spriteBaseY !== undefined) {
-            tx = target._spriteBaseX;
-            ty = target._spriteBaseY;
-        } else if (target.spriteObj) {
-            tx = target.spriteObj.x;
-            ty = target.spriteObj.y;
-        }
-        const headY = ty - (spriteH / 2) - 15;
-
-        const floatText = this.add.text(tx + ox, headY, `${effectName}\n${dmg}`, {
-            fontSize: "16px", color: colorStr, fontStyle: "bold",
-            stroke: "#000000", strokeThickness: 3, fontFamily: 'Arial',
-            align: 'center'
-        }).setOrigin(0.5).setDepth(200);
-
-        this.tweens.add({
-            targets: floatText,
-            y: floatText.y - 50,
-            alpha: 0,
-            duration: Phaser.Math.Between(800, 1000),
-            ease: 'Power1',
-            onComplete: () => {
-                floatText.destroy();
+            if (target.battleSprite) {
+                tx = target.battleSprite.x;
+                ty = target.battleSprite.y;
+                spriteH = target.battleSprite.displayHeight || 80;
+            } else if (target._spriteBaseX !== undefined && target._spriteBaseY !== undefined) {
+                tx = target._spriteBaseX;
+                ty = target._spriteBaseY;
+            } else if (target.spriteObj) {
+                tx = target.spriteObj.x;
+                ty = target.spriteObj.y;
             }
+            const headY = ty - (spriteH / 2) - 15;
+
+            const floatText = this.add.text(tx + ox, headY, `${effectName}\n${dmg}`, {
+                fontSize: "16px", color: colorStr, fontStyle: "bold",
+                stroke: "#000000", strokeThickness: 3, fontFamily: 'Arial',
+                align: 'center'
+            }).setOrigin(0.5).setDepth(200);
+
+            this.tweens.add({
+                targets: floatText,
+                y: floatText.y - 50,
+                alpha: 0,
+                duration: Phaser.Math.Between(1000, 1200),
+                ease: 'Power1',
+                onComplete: () => {
+                    floatText.destroy();
+                }
+            });
         });
     }
 
@@ -1328,9 +1370,7 @@ export default class BattleScene extends Phaser.Scene {
             ease: 'Back.out',
             onStart: () => {
                 if (this.bgmKey) playGlobalBGM(this, this.bgmKey);
-                if (this.sound.get('sfx_battleStart') || this.cache.audio.exists('sfx_battleStart')) {
-                    this.sound.play('sfx_battleStart', { volume: 0.9 });
-                }
+                this.playSFX('sfx_battleStart', { volume: 0.9 });
             },
             onComplete: () => {
                 this.time.delayedCall(800, () => {
@@ -1657,6 +1697,9 @@ export default class BattleScene extends Phaser.Scene {
         }
 
         for (const group of actionGroups) {
+            this.players.forEach(p => p._floatQueueDelay = 0);
+            this.enemies.forEach(e => e._floatQueueDelay = 0);
+
             await new Promise(async resolve => {
                 let delay = 500;
 
@@ -1685,12 +1728,13 @@ export default class BattleScene extends Phaser.Scene {
                     }
 
                     // Extract the primary damage/heal event to figure out the skill info
-                    const primaryEv = group.events.find(e => e.type === 'damage' && !e.isDoT) || group.events.find(e => e.type === 'heal' || e.type === 'effect_applied' || e.type === 'cleanse' || e.type === 'revive');
+                    const primaryEv = group.events.find(e => e.type === 'damage' && !e.isDoT) || group.events.find(e => e.type === 'heal' || e.type === 'support' || e.type === 'effect_applied' || e.type === 'cleanse' || e.type === 'revive');
                     
                     let isSkill = false;
                     let isSA = false;
                     
                     if (primaryEv) {
+                        console.log('DEBUG: primaryEv', primaryEv, 'events:', group.events);
                         const skillDisplay = group.skillName || 'Basic Attack';
                         this.showLog(`[${skillDisplay}] ${sourceName} attacks!`, 'popup');
                         isSA = primaryEv.skillCategory === 'special' || primaryEv.skillCategory === 'chain_burst' || primaryEv.skillCategory === 'aether_burst';
@@ -1699,11 +1743,15 @@ export default class BattleScene extends Phaser.Scene {
                         const isEnemy = String(group.sourceId).startsWith('enemy');
                         if (isEnemy) {
                             const monsSfx = isSkill ? 'sfx_monsChargeAttack' : 'sfx_monsBasicAtk';
-                            if (this.sound.get(monsSfx) || this.cache.audio.exists(monsSfx)) this.sound.play(monsSfx, { volume: 0.7 });
+                            this.playSFX(monsSfx, { volume: 0.7 });
                         } else {
-                            const hasHealOrBuff = group.events.some(e => e.type === 'heal' || e.type === 'cleanse' || e.type === 'revive' || (e.type === 'effect_applied' && e.effectType === 'buff'));
-                            const atkSfx = hasHealOrBuff ? 'sfx_heal' : (isSA ? 'sfx_charSpecialAttack' : (isSkill ? 'sfx_charSkillAtk' : 'sfx_charBasicAtk'));
-                            if (this.sound.get(atkSfx) || this.cache.audio.exists(atkSfx)) this.sound.play(atkSfx, { volume: 0.7 });
+                            const hasHealOrBuff = group.events.some(e => e.type === 'heal' || e.type === 'cleanse' || e.type === 'revive' || (e.type === 'effect_applied' && (e.effectType || '').toLowerCase() === 'buff'));
+                            
+                            let atkSfx = 'sfx_charBasicAtk';
+                            if (hasHealOrBuff) atkSfx = 'sfx_heal';
+                            else if (isSA) atkSfx = 'sfx_charSpecialAttack';
+                            else if (isSkill) atkSfx = 'sfx_charSkillAtk';
+                            this.playSFX(atkSfx, { volume: 0.7 });
                         }
                     }
 
@@ -1825,8 +1873,11 @@ export default class BattleScene extends Phaser.Scene {
                     // Second pass: Process effect_applied AFTER character returned to base position
                     const effectEvents = group.events.filter(ev => ev.type === 'effect_applied');
                     if (effectEvents.length > 0) {
-                        await new Promise(r => this.time.delayedCall(150, r)); // small visual pause
+                        await new Promise(r => this.time.delayedCall(400, r)); // wait longer so damage text moves up
                         
+                        let playedBuffSound = false;
+                        let playedDebuffSound = false;
+
                         effectEvents.forEach(ev => {
                             let target = null;
                             if (ev.targetId !== undefined && ev.targetId !== null) {
@@ -1845,8 +1896,16 @@ export default class BattleScene extends Phaser.Scene {
                             const effPos = this._getVfxTargetPos(target);
                             if ((ev.effectType || '').toLowerCase() === 'buff') {
                                 this.playExactVFX('buff', effPos.x, effPos.y, { scale: 1.5 });
+                                if (!playedBuffSound) {
+                                    this.playSFX('sfx_buff', { volume: 0.6 });
+                                    playedBuffSound = true;
+                                }
                             } else {
                                 this.playExactVFX('debuff', effPos.x, effPos.y, { scale: 1.5 });
+                                if (!playedDebuffSound) {
+                                    this.playSFX('sfx_debuff', { volume: 0.6 });
+                                    playedDebuffSound = true;
+                                }
                             }
 
                             this.showFloatingEffect(target, ev.effectName, ev.effectType);
@@ -1873,9 +1932,7 @@ export default class BattleScene extends Phaser.Scene {
 
                     if (ev.type === 'enrage') {
                         if (target) {
-                            if (this.sound.get('sfx_monsEnraged') || this.cache.audio.exists('sfx_monsEnraged')) {
-                                this.sound.play('sfx_monsEnraged', { volume: 0.8 });
-                            }
+                            this.playSFX('sfx_monsEnraged', { volume: 0.8 });
                             target.modeState = 'enraged';
                             this._enragedTurns = 3;
                             this.showLog("ENEMY ENRAGED! (3 Turns)", 'system');
@@ -1884,9 +1941,7 @@ export default class BattleScene extends Phaser.Scene {
                         }
                     } else if (ev.type === 'break') {
                         if (target) {
-                            if (this.sound.get('sfx_monsExhausted') || this.cache.audio.exists('sfx_monsExhausted')) {
-                                this.sound.play('sfx_monsExhausted', { volume: 0.8 });
-                            }
+                            this.playSFX('sfx_monsExhausted', { volume: 0.8 });
                             target.modeState = 'exhausted';
                             this._exhaustedTurns = 2;
                             this._enragedTurns = 0;
@@ -2032,85 +2087,88 @@ export default class BattleScene extends Phaser.Scene {
         else if (el === 'wind') color = '#4caf50';
 
         const ox = Phaser.Math.Between(-20, 20);
-        let tx = target.x;
-        let ty = target.y;
-        let spriteH = 80;
+        
+        this._queueFloatingText(target, () => {
+            let tx = target.x;
+            let ty = target.y;
+            let spriteH = 80;
 
-        if (target.battleSprite) {
-            tx = target.battleSprite.x;
-            ty = target.battleSprite.y;
-            spriteH = target.battleSprite.displayHeight || 80;
-        } else if (target._spriteBaseX !== undefined && target._spriteBaseY !== undefined) {
-            tx = target._spriteBaseX;
-            ty = target._spriteBaseY;
-        } else if (target.spriteObj) {
-            tx = target.spriteObj.x;
-            ty = target.spriteObj.y;
-        }
-        const headY = ty - (spriteH / 2) - 15;
+            if (target.battleSprite) {
+                tx = target.battleSprite.x;
+                ty = target.battleSprite.y;
+                spriteH = target.battleSprite.displayHeight || 80;
+            } else if (target._spriteBaseX !== undefined && target._spriteBaseY !== undefined) {
+                tx = target._spriteBaseX;
+                ty = target._spriteBaseY;
+            } else if (target.spriteObj) {
+                tx = target.spriteObj.x;
+                ty = target.spriteObj.y;
+            }
+            const headY = ty - (spriteH / 2) - 15;
 
-        if (isCrit) {
-            const container = this.add.container(tx + ox, headY).setDepth(200);
+            if (isCrit) {
+                const container = this.add.container(tx + ox, headY).setDepth(200);
 
-            const critLabel = this.add.text(0, -18, "CRITICAL", {
-                fontSize: "14px",
-                fontFamily: "Arial",
-                fontStyle: "bold",
-                color: "#ffeb3b",
-                stroke: "#000000",
-                strokeThickness: 3,
-                align: "left"
-            }).setOrigin(0, 0.5);
+                const critLabel = this.add.text(0, -18, "CRITICAL", {
+                    fontSize: "14px",
+                    fontFamily: "Arial",
+                    fontStyle: "bold",
+                    color: "#ffeb3b",
+                    stroke: "#000000",
+                    strokeThickness: 3,
+                    align: "left"
+                }).setOrigin(0, 0.5);
 
-            const dmgText = this.add.text(0, 6, `${value}`, {
-                fontSize: "28px",
-                fontFamily: "Arial",
-                fontStyle: "bold",
+                const dmgText = this.add.text(0, 6, `${value}`, {
+                    fontSize: "28px",
+                    fontFamily: "Arial",
+                    fontStyle: "bold",
+                    color: color,
+                    stroke: "#000000",
+                    strokeThickness: 4,
+                    align: "left"
+                }).setOrigin(0, 0.5);
+
+                container.add([critLabel, dmgText]);
+
+                this.tweens.add({
+                    targets: container,
+                    y: container.y - 50,
+                    alpha: 0,
+                    duration: Phaser.Math.Between(900, 1100),
+                    ease: 'Power1',
+                    onComplete: () => { container.destroy(); }
+                });
+                return;
+            }
+
+            let fontSize = '24px';
+            let strokeThickness = 3;
+            const mult = elementMultiplier !== undefined ? elementMultiplier : 1;
+            if (mult > 1) {
+                fontSize = '28px';
+            } else if (mult < 1) {
+                fontSize = '16px';
+            }
+
+            const floatText = this.add.text(tx + ox, headY, `${value}`, {
+                fontSize: fontSize,
+                fontFamily: 'Arial',
+                fontStyle: 'bold',
                 color: color,
-                stroke: "#000000",
-                strokeThickness: 4,
-                align: "left"
-            }).setOrigin(0, 0.5);
-
-            container.add([critLabel, dmgText]);
+                stroke: '#000000',
+                strokeThickness: strokeThickness,
+                align: 'center'
+            }).setOrigin(0.5).setDepth(200);
 
             this.tweens.add({
-                targets: container,
-                y: container.y - 50,
+                targets: floatText,
+                y: floatText.y - 50,
                 alpha: 0,
-                duration: Phaser.Math.Between(900, 1100),
+                duration: Phaser.Math.Between(800, 1000),
                 ease: 'Power1',
-                onComplete: () => { container.destroy(); }
+                onComplete: () => { floatText.destroy(); }
             });
-            return;
-        }
-
-        let fontSize = '24px';
-        let strokeThickness = 3;
-        const mult = elementMultiplier !== undefined ? elementMultiplier : 1;
-        if (mult > 1) {
-            fontSize = '28px';
-        } else if (mult < 1) {
-            fontSize = '16px';
-        }
-
-        const floatText = this.add.text(tx + ox, headY, `${value}`, {
-            fontSize: fontSize,
-            fontFamily: 'Arial',
-            fontStyle: 'bold',
-            color: color,
-            stroke: '#000000',
-            strokeThickness: strokeThickness,
-            align: 'center'
-        }).setOrigin(0.5).setDepth(200);
-
-        this.tweens.add({
-            targets: floatText,
-            y: floatText.y - 50,
-            alpha: 0,
-            duration: Phaser.Math.Between(800, 1000),
-            ease: 'Power1',
-            onComplete: () => { floatText.destroy(); }
         });
     }
 
@@ -2118,40 +2176,43 @@ export default class BattleScene extends Phaser.Scene {
         if (!target) return;
 
         const ox = Phaser.Math.Between(-20, 20);
-        let tx = target.x;
-        let ty = target.y;
-        let spriteH = 80;
 
-        if (target.battleSprite) {
-            tx = target.battleSprite.x;
-            ty = target.battleSprite.y;
-            spriteH = target.battleSprite.displayHeight || 80;
-        } else if (target._spriteBaseX !== undefined && target._spriteBaseY !== undefined) {
-            tx = target._spriteBaseX;
-            ty = target._spriteBaseY;
-        } else if (target.spriteObj) {
-            tx = target.spriteObj.x;
-            ty = target.spriteObj.y;
-        }
-        const headY = ty - (spriteH / 2) - 15;
+        this._queueFloatingText(target, () => {
+            let tx = target.x;
+            let ty = target.y;
+            let spriteH = 80;
 
-        const floatText = this.add.text(tx + ox, headY, `+${value}`, {
-            fontSize: '26px',
-            fontFamily: 'Arial',
-            fontStyle: 'bold',
-            color: '#00e676',
-            stroke: '#000000',
-            strokeThickness: 3,
-            align: 'center'
-        }).setOrigin(0.5).setDepth(200);
+            if (target.battleSprite) {
+                tx = target.battleSprite.x;
+                ty = target.battleSprite.y;
+                spriteH = target.battleSprite.displayHeight || 80;
+            } else if (target._spriteBaseX !== undefined && target._spriteBaseY !== undefined) {
+                tx = target._spriteBaseX;
+                ty = target._spriteBaseY;
+            } else if (target.spriteObj) {
+                tx = target.spriteObj.x;
+                ty = target.spriteObj.y;
+            }
+            const headY = ty - (spriteH / 2) - 15;
 
-        this.tweens.add({
-            targets: floatText,
-            y: floatText.y - 50,
-            alpha: 0,
-            duration: Phaser.Math.Between(800, 1000),
-            ease: 'Power1',
-            onComplete: () => { floatText.destroy(); }
+            const floatText = this.add.text(tx + ox, headY, `+${value}`, {
+                fontSize: '26px',
+                fontFamily: 'Arial',
+                fontStyle: 'bold',
+                color: '#00e676',
+                stroke: '#000000',
+                strokeThickness: 3,
+                align: 'center'
+            }).setOrigin(0.5).setDepth(200);
+
+            this.tweens.add({
+                targets: floatText,
+                y: floatText.y - 50,
+                alpha: 0,
+                duration: Phaser.Math.Between(800, 1000),
+                ease: 'Power1',
+                onComplete: () => { floatText.destroy(); }
+            });
         });
     }
 
@@ -2484,7 +2545,9 @@ export default class BattleScene extends Phaser.Scene {
         if (this.enemies.every(e => e.hp <= 0)) {
             this._isVictoryConfirmed = true;
             this.turn = "none";
-            stopGlobalBGM();
+            
+            // Play monster defeated roar while BGM is still playing
+            this.playSFX('sfx_monsterDefeated', { volume: 0.8 });
 
             // FADE OUT ENEMIES FIRST
             const fadeTargets = [];
@@ -2513,18 +2576,21 @@ export default class BattleScene extends Phaser.Scene {
     }
 
     _triggerVictoryTransition() {
+        // Stop Battle BGM only when fade-out finishes and VICTORY appears
+        stopGlobalBGM();
+        
+        // Play victory BGM
+        playGlobalBGM(this, 'bgm_victory');
+        
         this._showCenterAnim("VICTORY!", "#ffeb3b");
         this.time.delayedCall(1500, () => {
-            this.scene.stop();
-            this.scene.start('LoadingScene', {
-                targetScene: 'VictoryScene',
-                targetData: {
-                    questId: this.questId,
-                    playerId: this.playerId,
-                    potionsUsed: this.potionsUsed,
-                    fullPotionsUsed: this.fullPotionsUsed,
-                    bsId: this.bsId
-                }
+            this.scene.pause();
+            this.scene.launch('VictoryScene', {
+                questId: this.questId,
+                playerId: this.playerId,
+                potionsUsed: this.potionsUsed,
+                fullPotionsUsed: this.fullPotionsUsed,
+                bsId: this.bsId
             });
         });
     }
@@ -2634,8 +2700,8 @@ export default class BattleScene extends Phaser.Scene {
         this._menu.on('destroy', () => { this._menu = null; });
     }
     
-    _showEnemyStatusModal(enemy) {
-        if (!enemy || enemy.hp <= 0) return;
+    _showStatusModal(entity) {
+        if (!entity || entity.hp <= 0) return;
         
         const modalContainer = this.add.container(0, 0).setDepth(150);
 
@@ -2649,12 +2715,12 @@ export default class BattleScene extends Phaser.Scene {
         windowBg.setStrokeStyle(2, 0xe74c3c);
         modalContainer.add(windowBg);
 
-        const title = this.add.text(CX, H / 2 - 170, `${enemy.charName} - STATUS`, { fontSize: "16px", color: "#e74c3c", fontStyle: "bold" }).setOrigin(0.5);
+        const title = this.add.text(CX, H / 2 - 170, `${entity.charName} - STATUS`, { fontSize: "16px", color: "#e74c3c", fontStyle: "bold" }).setOrigin(0.5);
         modalContainer.add(title);
 
         let currentY = H / 2 - 130;
         
-        const visibleEffects = enemy.activeEffects || [];
+        const visibleEffects = entity.activeEffects || [];
         if (visibleEffects.length === 0) {
             const noEffectTxt = this.add.text(CX, currentY + 50, "No Active Status Effects", { fontSize: "13px", color: "#aaaaaa", fontStyle: "italic" }).setOrigin(0.5);
             modalContainer.add(noEffectTxt);
@@ -2675,7 +2741,8 @@ export default class BattleScene extends Phaser.Scene {
                 else if (stat === 'AGI') emoji = '💨';
 
                 const effectName = e.effect_name || e.target_stat;
-                const durText = e.duration ? `(${e.duration} Turns)` : "(Permanent)";
+                const dur = e.duration || e.mse_duration || 0;
+                const durText = dur > 0 ? `(${dur} Turns)` : "(Permanent)";
                 const valueText = e.value ? `Value: ${Math.floor(e.value * 100)}%` : "";
                 
                 const box = this.add.rectangle(CX, currentY, 340, 40, 0x111111).setStrokeStyle(1, 0x333333);

@@ -365,7 +365,11 @@ export default class Player extends Phaser.GameObjects.Container {
         const visibleEffects = this.activeEffects || [];
 
         const sups = { 0: '', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹' };
-        visibleEffects.forEach((e, idx) => {
+        
+        // Limit to 8 effects, stack 4 per row
+        const limitedEffects = visibleEffects.slice(0, 8);
+        
+        limitedEffects.forEach((e, idx) => {
             const isBuff = (e.effect_type || '').toLowerCase() === 'buff';
             const color = isBuff ? '#f1c40f' : '#7ec8e3'; // Kuning untuk Buff, Biru Muda untuk Debuff
 
@@ -383,11 +387,19 @@ export default class Player extends Phaser.GameObjects.Container {
             const durSup = sups[e.duration] || e.duration || '';
             const label = `${emoji}${durSup}`;
 
+            const row = Math.floor(idx / 4);
+            const col = idx % 4;
+            
+            // X: Mulai dari tepi kiri (-32) lalu geser ke kanan
+            // Y: 0, -14 (Meninggi ke atas)
+            const xPos = -32 + (col * 18);
+            const yPos = -(row * 14);
+
             const txt = this.scene.add.text(
-                (idx - Math.floor(visibleEffects.length / 2)) * 24,
-                0,
+                xPos,
+                yPos,
                 label,
-                { fontSize: '10px', color, fontStyle: 'bold', stroke: '#000', strokeThickness: 2 }
+                { fontSize: '9px', color, fontStyle: 'bold', stroke: '#000', strokeThickness: 2 }
             ).setOrigin(0.5, 0.5);
 
             this._effectIndicators.add(txt);

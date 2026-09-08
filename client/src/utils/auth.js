@@ -2,8 +2,110 @@
  * Authentication and Session Utility for Aetheria Chronicles
  */
 
+import { stopGlobalBGM } from './audioManager.js';
+
 const API_BASE = 'http://localhost:3000';
 const INACTIVITY_TIMEOUT = 10 * 60 * 1000; // 10 minutes in milliseconds
+const AUTO_REFRESH_TIMEOUT = 5 * 60 * 1000; // 5 minutes in milliseconds
+
+let idleTimer = null;
+let afkRefreshTimer = null;
+
+export function initIdleManager(gameInstance) {
+    function resetTimers() {
+        // If the AFK overlay is already showing, don't reset unless they refresh
+        if (document.getElementById('afk-overlay')) return;
+
+        updateActivity();
+        
+        if (idleTimer) clearTimeout(idleTimer);
+        
+        idleTimer = setTimeout(() => {
+            showAfkOverlay(gameInstance);
+        }, INACTIVITY_TIMEOUT);
+    }
+
+    // Listen for any interaction on the window to reset the timer
+    window.addEventListener('pointerdown', resetTimers);
+    window.addEventListener('keydown', resetTimers);
+    window.addEventListener('touchstart', resetTimers);
+    
+    // Start the timer initially
+    resetTimers();
+}
+
+function showAfkOverlay(gameInstance) {
+    // 1. Suspend the Phaser game loop to save resources
+    if (gameInstance && gameInstance.loop) {
+        gameInstance.loop.sleep();
+        // Also mute all audio
+        if (gameInstance.sound) gameInstance.sound.mute = true;
+    }
+
+    // 2. Clear volatile session data so reload guarantees return to AuthScene
+    localStorage.removeItem('aetheria_token');
+    localStorage.removeItem('aetheria_player');
+    localStorage.removeItem('aetheria_last_activity');
+
+    // 3. Create the Blocking HTML Overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'afk-overlay';
+    Object.assign(overlay.style, {
+        position: 'fixed',
+        top: '0',
+        left: '0',
+        width: '100vw',
+        height: '100vh',
+        backgroundColor: 'rgba(15, 23, 42, 0.95)', // Deep Slate theme color
+        zIndex: '99999',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        color: '#ffffff',
+        fontFamily: "'Outfit', sans-serif"
+    });
+
+    const title = document.createElement('h1');
+    title.innerText = 'SESSION TIMEOUT';
+    title.style.color = '#ef4444';
+    title.style.marginBottom = '10px';
+    title.style.letterSpacing = '2px';
+
+    const desc = document.createElement('p');
+    desc.innerText = 'Anda telah AFK terlalu lama. Aktivitas dihentikan.';
+    desc.style.marginBottom = '30px';
+    desc.style.fontSize = '18px';
+    desc.style.color = '#94a3b8';
+
+    const btn = document.createElement('button');
+    btn.innerText = 'REFRESH BROWSER';
+    Object.assign(btn.style, {
+        padding: '12px 24px',
+        fontSize: '16px',
+        fontWeight: 'bold',
+        backgroundColor: '#3b82f6',
+        color: 'white',
+        border: 'none',
+        borderRadius: '6px',
+        cursor: 'pointer',
+        boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
+        transition: 'background 0.2s'
+    });
+    btn.onmouseover = () => btn.style.backgroundColor = '#2563eb';
+    btn.onmouseout = () => btn.style.backgroundColor = '#3b82f6';
+    btn.onclick = () => window.location.reload();
+
+    overlay.appendChild(title);
+    overlay.appendChild(desc);
+    overlay.appendChild(btn);
+    document.body.appendChild(overlay);
+
+    // 4. Start auto-refresh timer (15 minutes after AFK alert shows)
+    afkRefreshTimer = setTimeout(() => {
+        window.location.reload();
+    }, AUTO_REFRESH_TIMEOUT);
+}
 
 /**
  * Checks the player's active session and updates the inactivity timer.
@@ -84,6 +186,7 @@ export function clearSession(scene) {
     localStorage.removeItem('aetheria_last_activity');
     
     if (scene && scene.scene.key !== 'AuthScene') {
+        stopGlobalBGM(scene);
         // Stop current scene and go back to login/title screen
         scene.scene.start('AuthScene');
     }

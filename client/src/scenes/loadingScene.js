@@ -13,6 +13,12 @@ export default class LoadingScene extends Phaser.Scene {
         this.minLoadTimeMs = data.minLoadTimeMs || 800;
     }
 
+    preload() {
+        if (!this.textures.exists('game_logo')) {
+            this.load.image('game_logo', 'assets/logo/Acro Logo 1.png');
+        }
+    }
+
     create() {
         const W = this.cameras.main.width;
         const H = this.cameras.main.height;
@@ -23,20 +29,11 @@ export default class LoadingScene extends Phaser.Scene {
         this.add.rectangle(0, 0, W, H, THEME.BG).setOrigin(0);
 
         // Center Title/Logo
-        this.add.text(CX, CY - 20, 'AETHERIA', {
-            fontSize: '24px',
-            fontStyle: 'bold',
-            fontFamily: 'Outfit',
-            color: THEME.TEXT_PRIMARY,
-            letterSpacing: 6
-        }).setOrigin(0.5);
-
-        this.add.text(CX, CY + 10, 'CHRONICLES', {
-            fontSize: '14px',
-            fontFamily: 'Outfit',
-            color: THEME.AETHER,
-            letterSpacing: 4
-        }).setOrigin(0.5);
+        const logo = this.add.image(CX, CY - 15, 'game_logo').setOrigin(0.5);
+        const targetWidth = 220; // Slightly smaller than title screen
+        if (logo.width > targetWidth) {
+            logo.setScale(targetWidth / logo.width);
+        }
 
         // Center loading text below logo
         const loadingText = this.add.text(CX, CY + 50, 'Loading', {
@@ -82,7 +79,7 @@ export default class LoadingScene extends Phaser.Scene {
 
     _loadDynamicAudio(onComplete) {
         // Aturan 2: Manajemen Cache (Bersihkan BGM yang tak terpakai)
-        const keysToKeep = ['bgm_mainmenu_1', 'bgm_mainmenu_2', 'sfx_select'];
+        const keysToKeep = ['bgm_mainmenu_1', 'bgm_mainmenu_2', 'sfx_select', 'bgm_victory', 'bgm_defeat', 'bgm_authscene'];
         const requiredAudio = [];
 
         if (['MainMenuScene', 'PartyScene', 'InventoryScene', 'CharacterDetailScene', 'WeaponDetailScene'].includes(this.targetScene)) {

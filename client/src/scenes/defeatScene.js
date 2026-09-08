@@ -24,11 +24,11 @@ export default class DefeatScene extends Phaser.Scene {
         this.cameras.main.setBounds(0, 0, W, H);
         this.cameras.main.setScroll(0, 0);
 
-        this.sound.stopAll();
-
-        if (this.sound.get('sfx_defeat') || this.cache.audio.exists('sfx_defeat')) {
-            this.sound.play('sfx_defeat', { volume: 0.8 });
-        }
+        // Play defeat BGM
+        import('../utils/audioManager.js').then(({ playGlobalBGM, stopGlobalBGM }) => {
+            stopGlobalBGM();
+            playGlobalBGM(this, 'bgm_defeat');
+        });
 
         // Clear the active session in DB
         if (this.bsId) {

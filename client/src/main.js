@@ -13,6 +13,7 @@ import InventoryScene from './scenes/inventoryScene.js';
 import CharacterDetailScene from './scenes/characterDetailScene.js';
 import WeaponDetailScene from './scenes/weaponDetailScene.js';
 import GachaScene from './scenes/gachaScene.js';
+import { initIdleManager } from './utils/auth.js';
 
 class GlobalClickSoundPlugin extends Phaser.Plugins.ScenePlugin {
     boot() {
@@ -101,6 +102,9 @@ const config = {
 };
 
 const game = new Phaser.Game(config);
+
+// Initialize Global AFK Idle Manager
+initIdleManager(game);
 
 // Global DOM Click Listener untuk menangkap klik pada HTML Modals (seperti form Login/Register)
 document.addEventListener('click', (e) => {

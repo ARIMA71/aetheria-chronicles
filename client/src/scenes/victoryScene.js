@@ -25,11 +25,7 @@ export default class VictoryScene extends Phaser.Scene {
         this.cameras.main.setBounds(0, 0, W, H);
         this.cameras.main.setScroll(0, 0);
 
-        this.sound.stopAll();
-
-        if (this.sound.get('sfx_victory') || this.cache.audio.exists('sfx_victory')) {
-            this.sound.play('sfx_victory', { volume: 0.8 });
-        }
+        // Victory BGM is already playing from BattleScene via playGlobalBGM('bgm_victory')
 
         // Solid background since we transition completely from BattleScene
         const sysW = this.scale.width;

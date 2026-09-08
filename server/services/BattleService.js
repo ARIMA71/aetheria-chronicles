@@ -236,6 +236,14 @@ class BattleService {
                 .filter(s => s._inv_id === char.inv_id)
                 .map(({ _inv_id, ...skill }) => {
                     skill.current_cooldown = 0;
+                    
+                    if (skill.type === 'Support' && skill.status_effects && skill.status_effects.length > 0) {
+                        const hasDebuff = skill.status_effects.some(e => (e.effect_type || '').toLowerCase() === 'debuff');
+                        const hasBuff = skill.status_effects.some(e => (e.effect_type || '').toLowerCase() === 'buff');
+                        if (hasDebuff && !hasBuff) skill.type = 'Debuff';
+                        else if (hasBuff && !hasDebuff) skill.type = 'Buff';
+                    }
+                    
                     return skill;
                 });
 
@@ -370,6 +378,16 @@ class BattleService {
                 }
                 const effect = formatStatusEffect(row);
                 if (effect) behaviorMap[row.mb_id].skill.status_effects.push(effect);
+            }
+        });
+        
+        Object.values(behaviorMap).forEach(b => {
+            const skill = b.skill;
+            if (skill.type === 'Support' && skill.status_effects && skill.status_effects.length > 0) {
+                const hasDebuff = skill.status_effects.some(e => (e.effect_type || '').toLowerCase() === 'debuff');
+                const hasBuff = skill.status_effects.some(e => (e.effect_type || '').toLowerCase() === 'buff');
+                if (hasDebuff && !hasBuff) skill.type = 'Debuff';
+                else if (hasBuff && !hasDebuff) skill.type = 'Buff';
             }
         });
         
@@ -1782,7 +1800,8 @@ class BattleService {
                         type: 'support',
                         sourceId: sourceId,
                         targetId: targetIds[targets.indexOf(target)],
-                        skillName: skill.name
+                        skillName: skill.name,
+                        skillCategory: (skill.category || 'basic').toLowerCase()
                     });
                 }
             } // end of targets loop
@@ -1826,6 +1845,7 @@ class BattleService {
                                 targetId: tid,
                                 sourceId: sourceId,
                                 skillName: skill ? skill.name : 'Unknown Skill',
+                                skillCategory: skill ? (skill.category || 'basic').toLowerCase() : 'basic',
                                 effectName: eff.effect_name || eff.target_stat,
                                 effectType: eff.effect_type || 'buff'
                             });
