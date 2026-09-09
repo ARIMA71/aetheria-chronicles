@@ -36,6 +36,7 @@ export default class AuthScene extends Phaser.Scene {
         this.load.audio('sfx_newCharacterUnlocked', 'assets/audio/sfx/newCharacterUnlocked.mp3');
         this.load.audio('sfx_revive', 'assets/audio/sfx/revive.mp3');
         this.load.audio('sfx_monsterDefeated', 'assets/audio/sfx/monsterDefeated.mp3');
+        this.load.audio('sfx_stunned', 'assets/audio/sfx/stunned.mp3');
     }
 
     create() {

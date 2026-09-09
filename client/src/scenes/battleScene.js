@@ -279,6 +279,9 @@ export default class BattleScene extends Phaser.Scene {
     }
 
     _renderResumeBattle(state, chars) {
+        // Initialize VFX Animations from manifest (essential for resume path)
+        this._initVfxAnims();
+
         // Draw battlefield floor line
         this.add.rectangle(CX, 535, W, 1, THEME.BORDER);
 
@@ -1044,6 +1047,7 @@ export default class BattleScene extends Phaser.Scene {
         });
     }
     playStunVibrateAnim(p) {
+        this.playSFX('sfx_stunned', { volume: 0.8 });
         const sprite = p ? (p.battleSprite || p.spriteObj) : null;
         if (!sprite) return;
         const baseX = p._spriteBaseX !== undefined ? p._spriteBaseX : sprite.x;
@@ -1810,7 +1814,8 @@ export default class BattleScene extends Phaser.Scene {
                                 const dmgPos = this._getVfxTargetPos(target);
                                 const cat = ev.skillCategory || 'basic';
                                 if (cat === 'skill' || cat === 'special' || cat === 'charge') {
-                                    this.playRollingVFX(ev.sourceElement, dmgPos.x, dmgPos.y, 1.5);
+                                    const actualElement = ev.sourceElement || (source ? source.element : 'Fire');
+                                    this.playRollingVFX(actualElement, dmgPos.x, dmgPos.y, 1.5);
                                 } else if (cat === 'aether_burst') {
                                     this.playExactVFX('aetherBurst', dmgPos.x, dmgPos.y, { scale: 1.5, useAddBlend: true });
                                 } else if (cat === 'chain_burst') {
@@ -1937,6 +1942,13 @@ export default class BattleScene extends Phaser.Scene {
                             this._enragedTurns = 3;
                             this.showLog("ENEMY ENRAGED! (3 Turns)", 'system');
                             this._refreshEnemyHUD();
+                            
+                            const effPos = this._getVfxTargetPos(target);
+                            const txt = this.add.text(effPos.x, effPos.y - 40, "ENRAGED", {
+                                fontSize: "36px", fontStyle: "bold", color: "#e74c3c", stroke: "#000000", strokeThickness: 5
+                            }).setOrigin(0.5).setDepth(200);
+                            this.tweens.add({ targets: txt, y: effPos.y - 100, alpha: 0, duration: 2000, ease: 'Cubic.easeOut', onComplete: () => txt.destroy() });
+                            
                             delay = 800;
                         }
                     } else if (ev.type === 'break') {
@@ -1947,6 +1959,13 @@ export default class BattleScene extends Phaser.Scene {
                             this._enragedTurns = 0;
                             this.showLog("ENEMY BREAK! (Exhausted)", 'system');
                             this._refreshEnemyHUD();
+
+                            const effPos = this._getVfxTargetPos(target);
+                            const txt = this.add.text(effPos.x, effPos.y - 40, "BREAK", {
+                                fontSize: "40px", fontStyle: "bold", color: "#3498db", stroke: "#000000", strokeThickness: 5
+                            }).setOrigin(0.5).setDepth(200);
+                            this.tweens.add({ targets: txt, y: effPos.y - 100, alpha: 0, duration: 2000, ease: 'Cubic.easeOut', onComplete: () => txt.destroy() });
+
                             delay = 800;
                         }
                     } else if (ev.type === 'effect_removed') {
