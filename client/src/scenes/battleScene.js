@@ -477,15 +477,15 @@ export default class BattleScene extends Phaser.Scene {
             const baseY = 88 + (index * 45);
             const ec = this._elemColor(enemy.element);
 
-            const icon = this.add.rectangle(58, baseY + 10, 40, 40, THEME.PANEL).setStrokeStyle(2, ec);
-            const elemText = this.add.text(58, baseY + 10, enemy.element.substring(0, 2).toUpperCase(), { fontSize: "14px", fontStyle: "bold", color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
-            const hpPct = this.add.text(83, baseY - 2, "100%", { fontSize: "10px", color: "#ffffff", fontStyle: "bold" }).setOrigin(0, 1);
+            const icon = this.add.rectangle(56, baseY + 9, 44, 44, THEME.PANEL).setStrokeStyle(2, ec);
+            const elemText = this.add.text(56, baseY + 9, enemy.element.substring(0, 2).toUpperCase(), { fontSize: "16px", fontStyle: "bold", color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
+            const hpPct = this.add.text(83, baseY - 2, "100%", { fontSize: "14px", color: "#ffffff", fontStyle: "bold" }).setOrigin(0, 1);
 
             const hpBarBg = this.add.rectangle(83, baseY + 4, 360, 12, THEME.BG).setOrigin(0, 0.5).setStrokeStyle(2, THEME.BORDER);
             const hpFill = this.add.rectangle(83, baseY + 4, 356, 10, THEME.DAMAGE).setOrigin(0, 0.5);
             const hpEnrage = this.add.rectangle(83, baseY + 4, 360, 12, 0, 0).setOrigin(0, 0.5).setAlpha(0);
             
-            const effectIndicators = this.add.container(123, baseY - 12);
+            const effectIndicators = this.add.container(123, baseY - 10);
             
             const hitArea = this.add.rectangle(83, baseY + 4, 360, 24, 0x000000, 0).setOrigin(0, 0.5);
             hitArea.setInteractive({ useHandCursor: true });
@@ -560,6 +560,7 @@ export default class BattleScene extends Phaser.Scene {
             }
             
             if (hud.effectIndicators) {
+                hud.effectIndicators.setX(83 + hud.hpPct.width + 6);
                 hud.effectIndicators.removeAll(true);
                 const visibleEffects = enemy.activeEffects || [];
                 const sups = { 0: '', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹' };
@@ -582,8 +583,8 @@ export default class BattleScene extends Phaser.Scene {
                     const label = `${emoji}${durSup}`;
 
                     const txt = this.add.text(
-                        idx * 24, 0, label, 
-                        { fontSize: '11px', color, fontStyle: 'bold', stroke: '#000', strokeThickness: 3 }
+                        idx * 22, 0, label, 
+                        { fontSize: '13px', color, fontStyle: 'bold', stroke: '#000', strokeThickness: 3 }
                     ).setOrigin(0, 0.5);
 
                     hud.effectIndicators.add(txt);
@@ -984,8 +985,8 @@ export default class BattleScene extends Phaser.Scene {
                 let durChar = '';
                 if (dur > 0 && dur <= 9) durChar = sups[dur];
                 
-                const tx = 20 + (idx * 30);
-                const txt = this.add.text(tx, 0, emoji + durChar, { fontSize: "14px", color: color, stroke: '#000', strokeThickness: 2 }).setOrigin(0.5);
+                const tx = (idx * 22);
+                const txt = this.add.text(tx, 0, emoji + durChar, { fontSize: "13px", color: color, stroke: '#000', strokeThickness: 2 }).setOrigin(0, 0.5);
                 this._awEffectsContainer.add(txt);
             });
         }

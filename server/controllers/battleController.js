@@ -390,7 +390,7 @@ exports.saveBattleResult = async (req, res) => {
                     if (partyInvIds.length > 0) {
                         // Baca data party sebelum ditambahkan EXP
                         const [partyRows] = await conn.query(
-                            `SELECT pi.inv_id, pi.item_exp, pi.item_level, pi.limit_break_level, mc.mc_id, mc.mc_name, mc.mc_rarity
+                            `SELECT pi.inv_id, pi.item_exp, pi.item_level, pi.limit_break_level, mc.mc_id, mc.mc_name, mc.mc_rarity, mc.mc_element, mc.mc_portrait_path
                              FROM player_inventories pi
                              JOIN master_characters mc ON pi.master_item_id = mc.mc_id
                              WHERE pi.inv_id IN (?)`,
@@ -439,7 +439,11 @@ exports.saveBattleResult = async (req, res) => {
                             const thresholds = LevelingSystem.getExpThresholds(realLevel, maxLevel, 'Character');
                             expData.party_exp_details.push({
                                 inv_id: char.inv_id,
+                                mc_id: char.mc_id,
                                 name: char.mc_name,
+                                rarity: char.mc_rarity,
+                                element: char.mc_element,
+                                portrait_path: char.mc_portrait_path,
                                 total_exp: newExp,
                                 current_level: realLevel,
                                 old_level: char.item_level,

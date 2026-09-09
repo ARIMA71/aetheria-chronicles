@@ -42,7 +42,7 @@ export default class InventoryScene extends Phaser.Scene {
         this.add.rectangle(0, 0, W, H, THEME.BG).setOrigin(0);
 
         // Header Fixed
-        const headerBg = this.add.rectangle(0, 0, W, 60, 0x0a0f1d, 1).setOrigin(0).setScrollFactor(0).setDepth(1000);
+        const headerBg = this.add.rectangle(0, 0, W, 60, THEME.BG, 1).setOrigin(0).setScrollFactor(0).setDepth(1000);
         headerBg.setStrokeStyle(1, THEME.BORDER);
         this.add.text(CX, 30, 'INVENTORY', { fontSize: '16px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY, letterSpacing: 1 }).setOrigin(0.5).setScrollFactor(0).setDepth(1000);
 

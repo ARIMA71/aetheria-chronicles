@@ -20,6 +20,9 @@ export function initIdleManager(gameInstance) {
         
         if (idleTimer) clearTimeout(idleTimer);
         
+        // Disable AFK timeout if the player hasn't logged in (e.g. AuthScene)
+        if (!localStorage.getItem('aetheria_token')) return;
+        
         idleTimer = setTimeout(() => {
             showAfkOverlay(gameInstance);
         }, INACTIVITY_TIMEOUT);

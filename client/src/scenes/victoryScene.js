@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { THEME } from '../main.js';
-import { checkSession } from '../utils/auth.js';
+import { checkSession, getPlayerUsername } from '../utils/auth.js';
 import BattleApi from '../services/BattleApi.js';
 
 const W = 480, H = 800, CX = 240, CY = 400;
@@ -123,17 +123,16 @@ export default class VictoryScene extends Phaser.Scene {
         let cursorY = 160;
 
         // 1. SEGMENT ATAS (PLAYER RANK)
-        const playerObj = JSON.parse(localStorage.getItem('player') || '{}');
-        const username = playerObj.username || 'Player';
+        const username = getPlayerUsername();
 
         // Username (Left)
         this.add.text(35, cursorY, username, {
-            fontSize: "14px", color: THEME.TEXT_PRIMARY, fontStyle: "bold"
+            fontSize: "14px", color: "#ffffff", fontStyle: "bold"
         }).setOrigin(0, 0.5);
 
         // Rank (Right)
         const rankText = this.add.text(W - 35, cursorY, `Rank ${expData.player_rank}`, {
-            fontSize: "14px", color: THEME.GOLD, fontStyle: "bold"
+            fontSize: "14px", color: "#D4A017", fontStyle: "bold"
         }).setOrigin(1, 0.5);
 
         cursorY += 25;
@@ -160,35 +159,65 @@ export default class VictoryScene extends Phaser.Scene {
             fontSize: "12px", color: THEME.TEXT_SECONDARY, letterSpacing: 2
         }).setOrigin(0.5);
         
-        cursorY += 50;
+        cursorY += 80;
 
         const party = expData.party_exp_details || [];
-        const cW = 58, gap = 15, total = party.length;
+        const cW = 85, gap = 15, total = party.length;
         const totalW = (total * cW) + ((total - 1) * gap);
         const startX = (W - totalW) / 2 + (cW / 2);
 
         party.forEach((char, i) => {
             const px = startX + i * (cW + gap);
-
-            // Portrait Background (same as battleScene)
-            const portBg = this.add.rectangle(px, cursorY, 58, 58, THEME.PANEL, 0.7);
-            portBg.setStrokeStyle(1, THEME.BORDER);
+            const cardY = cursorY + 30; // center Y of the portrait card
             
-            // Name initals or short name
-            const shortName = char.name ? char.name.substring(0, 5) : '?';
-            this.add.text(px, cursorY, shortName, { 
-                fontSize: "12px", color: THEME.TEXT_SECONDARY 
-            }).setOrigin(0.5);
+            // Border color by rarity
+            let rColorInt = THEME.BORDER;
+            let rColorHex = '#ffffff';
+            if (char.rarity === 'SSR') { rColorInt = 0xffd700; rColorHex = '#ffd700'; }
+            else if (char.rarity === 'SR') { rColorInt = 0xc0c0c0; rColorHex = '#c0c0c0'; }
+            else if (char.rarity === 'R') { rColorInt = 0xcd7f32; rColorHex = '#cd7f32'; }
 
-            // Level Text (bold white)
-            const lvlTxt = this.add.text(px, cursorY + 45, `Lv ${char.current_level}`, {
+            // Portrait Background (85x145 like battleScene)
+            const portBg = this.add.rectangle(px, cardY, 85, 145, THEME.PANEL, 0.7);
+            portBg.setStrokeStyle(2, rColorInt);
+            
+            // Character Portrait Image
+            const portTex = `portrait_${char.mc_id}`;
+            if (this.textures.exists(portTex)) {
+                const img = this.add.image(px, cardY, portTex);
+                const imgW = img.width || 1;
+                img.setScale(85 / imgW);
+            }
+            
+            // Element Icon (Top Right)
+            const elKey = char.element ? `element_${char.element.toLowerCase()}` : '';
+            if (this.textures.exists(elKey)) {
+                const ex = px + 42.5 - 12;
+                const ey = cardY - 72.5 + 12;
+                const elImg = this.add.image(ex, ey, elKey).setDisplaySize(18, 18);
+                const elShape = this.make.graphics();
+                elShape.fillCircle(ex, ey, 9);
+                elImg.setMask(elShape.createGeometryMask());
+                this.add.circle(ex, ey, 9).setStrokeStyle(1, THEME.PANEL);
+            }
+            
+            // Rarity Text (Bottom Left)
+            if (char.rarity) {
+                this.add.text(px - 42.5 + 6, cardY + 72.5 - 5, char.rarity, { 
+                    fontSize: '11px', color: rColorHex, fontStyle: 'bold', stroke: '#000000', strokeThickness: 2, fontFamily: 'Outfit' 
+                }).setOrigin(0, 1);
+            }
+
+
+            // Level Text (below card)
+            const lvlTxt = this.add.text(px, cardY + 85, `Lv ${char.current_level}`, {
                 fontSize: "12px", color: "#FFFFFF", fontStyle: "bold"
             }).setOrigin(0.5);
 
             // Mini EXP Bar
-            const barW = 56;
-            const barBg = this.add.rectangle(px, cursorY + 60, barW, 6, 0x334155).setOrigin(0.5);
-            const barFill = this.add.rectangle(px - barW/2, cursorY + 60, 0, 6, 0x06B6D4).setOrigin(0, 0.5);
+            const barW = 75;
+            const barBg = this.add.rectangle(px, cardY + 100, barW, 6, 0x334155).setOrigin(0.5);
+            const barFill = this.add.rectangle(px - barW/2, cardY + 100, 0, 6, 0x06B6D4).setOrigin(0, 0.5);
 
             // Animate Char Bar
             const cTotal = char.total_exp;
@@ -201,7 +230,7 @@ export default class VictoryScene extends Phaser.Scene {
             this.animateProgressBar(barFill, lvlTxt, barW, cOld, cTotal, cBase, cNext, char.current_level, 'Lv', isCharMax, wasAlreadyMax);
         });
 
-        cursorY += 100;
+        cursorY += 160;
 
         // Divider
         const div2 = this.add.graphics();
