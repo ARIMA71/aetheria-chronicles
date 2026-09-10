@@ -17,7 +17,11 @@ export function playGlobalBGM(scene, identifier) {
 
     // Hentikan BGM sebelumnya jika ada
     if (currentBGM) {
-        currentBGM.stop();
+        try {
+            currentBGM.stop();
+        } catch (e) {
+            // Abaikan error jika objek sound sudah dihancurkan oleh Phaser
+        }
         currentBGM = null;
     }
 

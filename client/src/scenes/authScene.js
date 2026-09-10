@@ -45,7 +45,7 @@ export default class AuthScene extends Phaser.Scene {
         // Anti-Autoplay Policy: Putar BGM setelah ada interaksi (klik pertama di kanvas),
         // kecuali audio context sudah aktif (misal: kembali dari scene lain setelah logout).
         if (this.sound.locked) {
-            this.input.once('pointerdown', () => {
+            this.sound.once('unlocked', () => {
                 playGlobalBGM(this, 'bgm_authscene');
             });
         } else {
@@ -113,7 +113,7 @@ export default class AuthScene extends Phaser.Scene {
         this.add.rectangle(CX, 430, 200, 1, THEME.BORDER);
 
         // ── Buttons ──
-        this._createButton(CX, 490, 220, 48, 'NEW GAME', true, () => this._showForm('register'));
+        this._createButton(CX, 490, 220, 48, 'NEW GAME', true, () => this._showGenderSelection());
         this._createButton(CX, 555, 180, 42, 'CONTINUE', false, () => this._showForm('login'));
 
         // ── Footer ──
@@ -145,7 +145,10 @@ export default class AuthScene extends Phaser.Scene {
         btn.on('pointerout', () => {
             btn.setFillStyle(isPrimary ? THEME.AETHER : THEME.PANEL);
         });
-        btn.on('pointerdown', onClick);
+        btn.on('pointerdown', () => {
+            this.sound.play('sfx_select');
+            onClick();
+        });
     }
 
     _showGuideModal() {
@@ -236,7 +239,203 @@ export default class AuthScene extends Phaser.Scene {
         }
     }
 
-    _showForm(mode) {
+    _showGenderSelection() {
+        if (this._formOverlay) this._formOverlay.destroy();
+        if (this._formContainer) this._formContainer.destroy();
+
+        this._formOverlay = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.75)
+            .setInteractive().setDepth(50);
+
+        const html = `
+        <div style="
+            width: 400px;
+            background: #0B1120;
+            padding: 30px;
+            border: 2px solid #1E293B;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.9);
+            text-align: center;
+            font-family: 'Outfit', serif;
+            color: #F8FAFC;
+        ">
+            <h2 style="margin: 0 0 15px 0; font-size: 20px; font-weight: bold; text-shadow: 0 2px 4px rgba(0,0,0,0.9); letter-spacing: 1px;">Gender Setting</h2>
+            <p style="font-size: 14px; line-height: 1.5; margin: 0 0 25px 0; text-shadow: 0 1px 3px rgba(0,0,0,0.9);">
+                Choose the gender of the main character.<br/>
+                Gender can be changed anytime after the tutorial is completed.
+            </p>
+            
+            <div style="display: flex; justify-content: center; gap: 24px; margin-bottom: 30px;">
+                <!-- Male Card -->
+                <div id="card-male" style="
+                    width: 140px;
+                    height: 140px;
+                    background: linear-gradient(to bottom, #1e3a8a, #3b82f6);
+                    border: 2px solid #64748b;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    position: relative;
+                    overflow: hidden;
+                    box-shadow: 0 4px 6px rgba(0,0,0,0.5);
+                    transition: all 0.2s;
+                ">
+                    <img src="assets/portraits/char/1-mc-male-square.png" style="
+                        width: 100%;
+                        height: 100%;
+                        object-fit: cover;
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        pointer-events: none;
+                    "/>
+                    <div style="
+                        position: absolute;
+                        bottom: 0;
+                        width: 100%;
+                        background: linear-gradient(to top, rgba(0,0,0,0.9) 10%, transparent);
+                        padding: 15px 0 8px 0;
+                        font-size: 18px;
+                        font-family: serif;
+                        font-weight: bold;
+                        text-shadow: 0 2px 4px rgba(0,0,0,0.9);
+                        pointer-events: none;
+                    ">Male</div>
+                </div>
+
+                <!-- Female Card -->
+                <div id="card-female" style="
+                    width: 140px;
+                    height: 140px;
+                    background: linear-gradient(to bottom, #7f1d1d, #ef4444);
+                    border: 2px solid #64748b;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    position: relative;
+                    overflow: hidden;
+                    box-shadow: 0 4px 6px rgba(0,0,0,0.5);
+                    transition: all 0.2s;
+                ">
+                    <img src="assets/portraits/char/1-mc-female-square.png" style="
+                        width: 100%;
+                        height: 100%;
+                        object-fit: cover;
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        pointer-events: none;
+                    "/>
+                    <div style="
+                        position: absolute;
+                        bottom: 0;
+                        width: 100%;
+                        background: linear-gradient(to top, rgba(0,0,0,0.9) 10%, transparent);
+                        padding: 15px 0 8px 0;
+                        font-size: 18px;
+                        font-family: serif;
+                        font-weight: bold;
+                        text-shadow: 0 2px 4px rgba(0,0,0,0.9);
+                        pointer-events: none;
+                    ">Female</div>
+                </div>
+            </div>
+
+            <button id="btn-start" style="
+                width: 100%;
+                padding: 10px;
+                background: #6366F1;
+                border: 1px solid #818CF8;
+                color: #FFFFFF;
+                text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+                font-size: 13px;
+                font-weight: bold;
+                font-family: 'Outfit', sans-serif;
+                cursor: not-allowed;
+                letter-spacing: 1px;
+                transition: background 0.2s;
+                opacity: 0.5;
+            ">START</button>
+            
+            <button id="btn-cancel" style="
+                width: 100%;
+                padding: 8px;
+                margin-top: 8px;
+                background: transparent;
+                border: 1px solid #334155;
+                color: #94A3B8;
+                font-size: 11px;
+                font-family: 'Outfit', sans-serif;
+                cursor: pointer;
+            ">CANCEL</button>
+        </div>
+        `;
+
+        this._formContainer = this.add.dom(CX, H / 2).createFromHTML(html).setDepth(55);
+        
+        let selectedGender = null;
+        const dom = this._formContainer.node;
+        
+        if (dom) {
+            const cardMale = dom.querySelector('#card-male');
+            const cardFemale = dom.querySelector('#card-female');
+            const btnStart = dom.querySelector('#btn-start');
+            const btnCancel = dom.querySelector('#btn-cancel');
+
+            const selectGender = (gender) => {
+                selectedGender = gender;
+                // Aktifkan tombol Start
+                btnStart.style.opacity = '1';
+                btnStart.style.cursor = 'pointer';
+
+                if (gender === 'Male') {
+                    cardMale.style.borderColor = '#fcd34d'; // Emas
+                    cardMale.style.boxShadow = '0 0 15px rgba(252, 211, 77, 0.8)';
+                    cardMale.style.transform = 'scale(1.05)';
+                    
+                    cardFemale.style.borderColor = '#64748b';
+                    cardFemale.style.boxShadow = '0 4px 6px rgba(0,0,0,0.5)';
+                    cardFemale.style.transform = 'scale(1)';
+                } else {
+                    cardFemale.style.borderColor = '#fcd34d'; // Emas
+                    cardFemale.style.boxShadow = '0 0 15px rgba(252, 211, 77, 0.8)';
+                    cardFemale.style.transform = 'scale(1.05)';
+                    
+                    cardMale.style.borderColor = '#64748b';
+                    cardMale.style.boxShadow = '0 4px 6px rgba(0,0,0,0.5)';
+                    cardMale.style.transform = 'scale(1)';
+                }
+            };
+
+            // Interactive hovering
+            btnStart.addEventListener('pointerover', () => { if(selectedGender) btnStart.style.background = '#4F46E5'; });
+            btnStart.addEventListener('pointerout', () => { if(selectedGender) btnStart.style.background = '#6366F1'; });
+
+            cardMale.addEventListener('click', () => {
+                this.sound.play('sfx_select');
+                selectGender('Male');
+            });
+            cardFemale.addEventListener('click', () => {
+                this.sound.play('sfx_select');
+                selectGender('Female');
+            });
+
+            btnStart.addEventListener('click', () => {
+                if (selectedGender) {
+                    this.sound.play('sfx_select');
+                    this._showForm('register', selectedGender);
+                }
+            });
+
+            btnCancel.addEventListener('click', () => {
+                this.sound.play('sfx_select');
+                this._hideForm();
+            });
+
+            dom.addEventListener('pointerdown', (e) => e.stopPropagation());
+            dom.addEventListener('mousedown', (e) => e.stopPropagation());
+            dom.addEventListener('click', (e) => e.stopPropagation());
+        }
+    }
+
+    _showForm(mode, gender = null) {
         // Remove existing form if any
         if (this._formOverlay) {
             this._formOverlay.destroy();
@@ -284,9 +483,12 @@ export default class AuthScene extends Phaser.Scene {
                 font-size: 13px;
                 font-family: 'Outfit', sans-serif;
                 outline: none;
+                font-family: 'Outfit', sans-serif;
+                outline: none;
                 box-sizing: border-box;
             " />
 
+            ${!isRegister ? `
             <input id="auth-password" type="password" placeholder="Password" style="
                 width: 100%;
                 padding: 10px 14px;
@@ -299,6 +501,7 @@ export default class AuthScene extends Phaser.Scene {
                 outline: none;
                 box-sizing: border-box;
             " />
+            ` : ''}
 
             <div id="auth-error" style="
                 color: #CD5C5C;
@@ -347,6 +550,7 @@ export default class AuthScene extends Phaser.Scene {
         // Cancel button
         const cancelBtn = domElement.getChildByID('auth-cancel');
         cancelBtn.addEventListener('click', (e) => {
+            this.sound.play('sfx_select');
             e.stopPropagation();
             this._hideForm();
         });
@@ -354,12 +558,14 @@ export default class AuthScene extends Phaser.Scene {
         // Submit button
         const submitBtn = domElement.getChildByID('auth-submit');
         submitBtn.addEventListener('click', () => {
+            this.sound.play('sfx_select');
             const username = domElement.getChildByID('auth-username').value.trim();
-            const password = domElement.getChildByID('auth-password').value;
+            const passwordNode = domElement.getChildByID('auth-password');
+            const password = passwordNode ? passwordNode.value : null;
             const errorDiv = domElement.getChildByID('auth-error');
 
-            if (!username || !password) {
-                errorDiv.textContent = 'Username dan password wajib diisi.';
+            if (!username || (!isRegister && !password)) {
+                errorDiv.textContent = isRegister ? 'Username wajib diisi.' : 'Username dan password wajib diisi.';
                 return;
             }
 
@@ -367,7 +573,7 @@ export default class AuthScene extends Phaser.Scene {
             submitBtn.textContent = 'LOADING...';
             submitBtn.disabled = true;
 
-            this._doAuth(endpoint, username, password, isRegister, errorDiv, submitBtn);
+            this._doAuth(endpoint, username, password, gender, isRegister, errorDiv, submitBtn);
         });
 
         // Dukungan tombol Enter
@@ -382,12 +588,13 @@ export default class AuthScene extends Phaser.Scene {
         if (passInp) passInp.addEventListener('keydown', handleEnterKey);
     }
 
-    async _doAuth(endpoint, username, password, isRegister, errorDiv, submitBtn) {
+    async _doAuth(endpoint, username, password, gender, isRegister, errorDiv, submitBtn) {
         try {
+            const payload = isRegister ? { username, gender } : { username, password };
             const res = await fetch(`http://localhost:3000${endpoint}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password })
+                body: JSON.stringify(payload)
             });
             const json = await res.json();
 
@@ -398,24 +605,7 @@ export default class AuthScene extends Phaser.Scene {
                 return;
             }
 
-            if (isRegister) {
-                // Auto-login setelah register berhasil
-                const loginRes = await fetch('http://localhost:3000/api/auth/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password })
-                });
-                const loginJson = await loginRes.json();
-                if (loginJson.status !== 'success') {
-                    errorDiv.textContent = loginJson.message || 'Auto-login gagal.';
-                    submitBtn.textContent = 'REGISTER';
-                    submitBtn.disabled = false;
-                    return;
-                }
-                this._saveAndProceed(loginJson);
-            } else {
-                this._saveAndProceed(json);
-            }
+            this._saveAndProceed(json);
         } catch (err) {
             errorDiv.textContent = 'Connection error: ' + err.message;
             submitBtn.textContent = isRegister ? 'REGISTER' : 'LOGIN';

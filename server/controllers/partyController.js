@@ -124,16 +124,17 @@ exports.getPlayerInventory = async (req, res) => {
         for (const char of characters) {
             if (char.master_item_id === 1) {
                 char.mc_name = username;
+                if (char.mc_splash_path) char.mc_splash_path += `-${genderSuffix}`;
                 if (char.mc_portrait_path) char.mc_portrait_path += `-${genderSuffix}`;
+                if (char.mc_square_path) char.mc_square_path += `-${genderSuffix}`;
                 if (char.mc_sprite_path) char.mc_sprite_path += `-${genderSuffix}`;
             }
 
+            if (char.mc_splash_path && !char.mc_splash_path.endsWith('.png')) char.mc_splash_path += '.png';
             if (char.mc_portrait_path && !char.mc_portrait_path.endsWith('.png')) char.mc_portrait_path += '.png';
+            if (char.mc_square_path && !char.mc_square_path.endsWith('.png')) char.mc_square_path += '.png';
             if (char.mc_sprite_path && !char.mc_sprite_path.endsWith('.png')) char.mc_sprite_path += '.png';
             
-            if (char.mc_portrait_path) {
-                char.mc_full_portrait_path = char.mc_portrait_path.replace('.png', '-full.png');
-            }
             char.skills = charSkillsMap[char.master_item_id] || [];
             if (char.sa_id) {
                 char.skills.push({

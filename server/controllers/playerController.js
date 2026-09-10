@@ -37,7 +37,7 @@ exports.getPlayerProfile = async (req, res) => {
         await checkAndRegenStamina(playerId, db);
 
         const [playerRows] = await db.query(
-            `SELECT player_id, username, gender, player_level, player_exp, stamina, stamina_last_updated, gold, diamond
+            `SELECT player_id, username, gender, player_level, player_exp, stamina, stamina_last_updated, gold, diamond, is_guest
              FROM players WHERE player_id = ?`,
             [playerId]
         );
@@ -87,6 +87,7 @@ exports.getPlayerProfile = async (req, res) => {
                 stamina_refill_in: staminaRefillIn,
                 gold: player.gold,
                 diamond: player.diamond,
+                is_guest: player.is_guest,
                 current_quest_stage: currentQuestStage
             }
         });

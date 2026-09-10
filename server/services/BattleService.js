@@ -27,7 +27,8 @@ class BattleService {
             (mc.mc_base_hp  + (mc.mc_hp_growth  * (pi.item_level - 1))) AS base_hp,
             (mc.mc_base_atk + (mc.mc_atk_growth * (pi.item_level - 1))) AS base_atk,
             (mc.mc_base_def + (mc.mc_def_growth * (pi.item_level - 1))) AS base_def,
-            mc.mc_max_sa AS max_sa, mc.mc_portrait_path AS portrait_path, mc.mc_sprite_path AS sprite_path
+            mc.mc_max_sa AS max_sa, mc.mc_splash_path AS splash_path,
+            mc.mc_portrait_path AS portrait_path, mc.mc_sprite_path AS sprite_path
         FROM player_party_presets ppp
         JOIN player_inventories pi ON ppp.main_char_inv_id = pi.inv_id
         JOIN master_characters mc ON pi.master_item_id = mc.mc_id AND pi.item_type = 'Character'
@@ -37,7 +38,7 @@ class BattleService {
             (mc.mc_base_hp  + (mc.mc_hp_growth  * (pi.item_level - 1))),
             (mc.mc_base_atk + (mc.mc_atk_growth * (pi.item_level - 1))),
             (mc.mc_base_def + (mc.mc_def_growth * (pi.item_level - 1))),
-            mc.mc_max_sa, mc.mc_portrait_path, mc.mc_sprite_path
+            mc.mc_max_sa, mc.mc_splash_path, mc.mc_portrait_path, mc.mc_sprite_path
         FROM player_party_presets ppp
         JOIN player_inventories pi ON ppp.char_slot_1_inv_id = pi.inv_id
         JOIN master_characters mc  ON pi.master_item_id = mc.mc_id AND pi.item_type = 'Character'
@@ -47,7 +48,7 @@ class BattleService {
             (mc.mc_base_hp  + (mc.mc_hp_growth  * (pi.item_level - 1))),
             (mc.mc_base_atk + (mc.mc_atk_growth * (pi.item_level - 1))),
             (mc.mc_base_def + (mc.mc_def_growth * (pi.item_level - 1))),
-            mc.mc_max_sa, mc.mc_portrait_path, mc.mc_sprite_path
+            mc.mc_max_sa, mc.mc_splash_path, mc.mc_portrait_path, mc.mc_sprite_path
         FROM player_party_presets ppp
         JOIN player_inventories pi ON ppp.char_slot_2_inv_id = pi.inv_id
         JOIN master_characters mc  ON pi.master_item_id = mc.mc_id AND pi.item_type = 'Character'
@@ -57,7 +58,7 @@ class BattleService {
             (mc.mc_base_hp  + (mc.mc_hp_growth  * (pi.item_level - 1))),
             (mc.mc_base_atk + (mc.mc_atk_growth * (pi.item_level - 1))),
             (mc.mc_base_def + (mc.mc_def_growth * (pi.item_level - 1))),
-            mc.mc_max_sa, mc.mc_portrait_path, mc.mc_sprite_path
+            mc.mc_max_sa, mc.mc_splash_path, mc.mc_portrait_path, mc.mc_sprite_path
         FROM player_party_presets ppp
         JOIN player_inventories pi ON ppp.char_slot_3_inv_id = pi.inv_id
         JOIN master_characters mc  ON pi.master_item_id = mc.mc_id AND pi.item_type = 'Character'
@@ -201,6 +202,7 @@ class BattleService {
         charRows.forEach(row => {
             if (row.role_slot === 'Main Character' || row.mc_id === 1) {
                 row.name = username;
+                if (row.splash_path) row.splash_path += `-${genderSuffix}`;
                 if (row.portrait_path) row.portrait_path += `-${genderSuffix}`;
                 if (row.sprite_path) row.sprite_path += `-${genderSuffix}`;
             }
@@ -247,16 +249,14 @@ class BattleService {
                     return skill;
                 });
 
+            let charSplash = char.splash_path;
+            if (charSplash && !charSplash.endsWith('.png')) charSplash += '.png';
+
             let charPortrait = char.portrait_path;
             if (charPortrait && !charPortrait.endsWith('.png')) charPortrait += '.png';
             
             let charSprite = char.sprite_path;
             if (charSprite && !charSprite.endsWith('.png')) charSprite += '.png';
-
-            let fullPortrait = null;
-            if (charPortrait) {
-                fullPortrait = charPortrait.replace('.png', '-full.png');
-            }
 
             return {
                 slot:    char.role_slot,
@@ -274,8 +274,8 @@ class BattleService {
                 current_hp: stats.final_hp,
                 current_sa: 0,
                 active_buffs: [],
+                splash_path:   charSplash,
                 portrait_path: charPortrait,
-                full_portrait_path: fullPortrait,
                 sprite_path:   charSprite,
                 skills: charSkills
             };
@@ -544,7 +544,7 @@ class BattleService {
 
     /**
      * Live Asset Re-Hydration:
-     * Menyegarkan kembali path aset statis (portrait_path, full_portrait_path, sprite_path)
+     * Menyegarkan kembali path aset statis (splash_path, portrait_path, sprite_path)
      * dari tabel master secara live pada saat sesi pertarungan dipulihkan (resume).
      * Mencegah data visual basi (stale assets) sekaligus menjaga keutuhan State Pertarungan (HP, Turn, Cooldown).
      */
@@ -561,7 +561,7 @@ class BattleService {
                 const mcIds = state.player_party.characters.map(c => c.mc_id || c.id).filter(Boolean);
                 if (mcIds.length > 0) {
                     const [charMaster] = await db.query(
-                        'SELECT mc_id, mc_portrait_path, mc_sprite_path FROM master_characters WHERE mc_id IN (?)',
+                        'SELECT mc_id, mc_splash_path, mc_portrait_path, mc_square_path, mc_sprite_path FROM master_characters WHERE mc_id IN (?)',
                         [mcIds]
                     );
                     const charMap = new Map();
@@ -571,19 +571,26 @@ class BattleService {
                         const mcId = c.mc_id || c.id;
                         const master = charMap.get(mcId);
                         if (master) {
+                            let splPath = master.mc_splash_path;
                             let pPath = master.mc_portrait_path;
+                            let sqPath = master.mc_square_path;
                             let sPath = master.mc_sprite_path;
 
                             if (c.slot === 'Main Character' || mcId === 1) {
+                                if (splPath) splPath += `-${genderSuffix}`;
                                 if (pPath) pPath += `-${genderSuffix}`;
+                                if (sqPath) sqPath += `-${genderSuffix}`;
                                 if (sPath) sPath += `-${genderSuffix}`;
                             }
 
+                            if (splPath && !splPath.endsWith('.png')) splPath += '.png';
                             if (pPath && !pPath.endsWith('.png')) pPath += '.png';
+                            if (sqPath && !sqPath.endsWith('.png')) sqPath += '.png';
                             if (sPath && !sPath.endsWith('.png')) sPath += '.png';
 
+                            c.splash_path = splPath;
                             c.portrait_path = pPath;
-                            c.full_portrait_path = pPath ? pPath.replace('.png', '-full.png') : null;
+                            c.square_path = sqPath;
                             c.sprite_path = sPath;
                         }
                     });

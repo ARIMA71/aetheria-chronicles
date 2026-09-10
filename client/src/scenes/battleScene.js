@@ -129,7 +129,7 @@ export default class BattleScene extends Phaser.Scene {
             const keyId = d.mc_id || d.id || d.slot;
             if (d.sprite_path) { this.load.image(`sprite_${keyId}`, d.sprite_path); assetsToLoad++; }
             if (d.portrait_path) { this.load.image(`portrait_${keyId}`, d.portrait_path); assetsToLoad++; }
-            if (d.full_portrait_path) { this.load.image(`portrait_full_${keyId}`, d.full_portrait_path); assetsToLoad++; }
+            if (d.splash_path) { this.load.image(`portrait_full_${keyId}`, d.splash_path); assetsToLoad++; }
         });
         j.data.enemies.forEach(e => {
             if (e.sprite_path) { this.load.image(`mons_${e.id || e.monster_id}`, e.sprite_path); assetsToLoad++; }
@@ -258,7 +258,7 @@ export default class BattleScene extends Phaser.Scene {
             const keyId = d.mc_id || d.id || d.slot;
             if (d.sprite_path) { this.load.image(`sprite_${keyId}`, d.sprite_path); assetsToLoad++; }
             if (d.portrait_path) { this.load.image(`portrait_${keyId}`, d.portrait_path); assetsToLoad++; }
-            if (d.full_portrait_path) { this.load.image(`portrait_full_${keyId}`, d.full_portrait_path); assetsToLoad++; }
+            if (d.splash_path) { this.load.image(`portrait_full_${keyId}`, d.splash_path); assetsToLoad++; }
         });
         state.enemies.forEach(e => {
             if (e.sprite_path) { this.load.image(`mons_${e.id || e.monster_id}`, e.sprite_path); assetsToLoad++; }

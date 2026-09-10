@@ -11,19 +11,12 @@ const JWT_EXPIRES = '7d'; // Token berlaku 7 hari
 // Body: { username, password, gender? }
 // ============================================================
 exports.register = async (req, res) => {
-    const { username, password } = req.body;
+    const { username, gender } = req.body;
 
-    if (!username || !password) {
+    if (!username || !gender) {
         return res.status(400).json({
             status: 'error',
-            message: 'Username dan password wajib diisi.'
-        });
-    }
-
-    if (password.length < 6) {
-        return res.status(400).json({
-            status: 'error',
-            message: 'Password minimal 6 karakter.'
+            message: 'Username dan gender wajib diisi.'
         });
     }
 
@@ -48,17 +41,12 @@ exports.register = async (req, res) => {
         }
 
         // --------------------------------------------------
-        // [KEAMANAN 1] Hash password dengan bcrypt
-        // --------------------------------------------------
-        const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-
-        // --------------------------------------------------
-        // Langkah A: Insert ke tabel players — Parameterized Query
+        // Langkah A: Insert ke tabel players (Guest Account)
         // --------------------------------------------------
         const [playerResult] = await conn.query(
-            `INSERT INTO players (username, password_hash, gender, player_level, player_exp, stamina, gold, diamond)
-             VALUES (?, ?, 'Male', 1, 0, 100, 0, 0)`,
-            [username, passwordHash]
+            `INSERT INTO players (username, password_hash, gender, player_level, player_exp, stamina, gold, diamond, is_guest)
+             VALUES (?, NULL, ?, 1, 0, 100, 0, 0, 1)`,
+            [username, gender]
         );
         const newPlayerId = playerResult.insertId;
 
@@ -124,16 +112,25 @@ exports.register = async (req, res) => {
         await conn.commit();
         conn.release();
 
+        // Buat JWT token
+        const token = jwt.sign(
+            { player_id: newPlayerId, username },
+            JWT_SECRET,
+            { expiresIn: JWT_EXPIRES }
+        );
+
         return res.status(201).json({
             status: 'success',
             message: `Akun berhasil dibuat! Selamat datang, ${username}!`,
+            token,
             data: {
                 player_id: newPlayerId,
                 username,
                 player_level: 1,
                 stamina: 100,
                 gold: 0,
-                diamond: 0
+                diamond: 0,
+                is_guest: 1
             }
         });
 
@@ -166,7 +163,7 @@ exports.login = async (req, res) => {
     try {
         // [KEAMANAN 2] Parameterized Query — tidak ada interpolasi string
         const [rows] = await db.query(
-            `SELECT player_id, username, password_hash, gender, player_level, player_exp, stamina, gold, diamond
+            `SELECT player_id, username, password_hash, gender, player_level, player_exp, stamina, gold, diamond, is_guest
              FROM players
              WHERE username = ?`,
             [username]
@@ -222,7 +219,8 @@ exports.login = async (req, res) => {
                 stamina: player.stamina,
                 max_stamina: Math.min(200, 50 + ((player.player_level - 1) * 5)),
                 gold: player.gold,
-                diamond: player.diamond
+                diamond: player.diamond,
+                is_guest: player.is_guest
             }
         });
 
@@ -262,6 +260,79 @@ exports.verifyToken = async (req, res) => {
         return res.status(401).json({
             status: 'error',
             message: 'Token tidak valid atau telah kedaluwarsa.',
+            error_detail: error.message
+        });
+    }
+};
+
+// ============================================================
+// POST /api/auth/bind-account
+// Body: { password }
+// Headers: { Authorization: Bearer <token> }
+// ============================================================
+exports.bindAccount = async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({
+            status: 'error',
+            message: 'Token tidak disediakan atau format salah.'
+        });
+    }
+
+    const token = authHeader.split(' ')[1];
+    let playerId;
+
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        playerId = decoded.player_id;
+    } catch (error) {
+        return res.status(401).json({
+            status: 'error',
+            message: 'Token tidak valid atau telah kedaluwarsa.',
+            error_detail: error.message
+        });
+    }
+
+    const { password } = req.body;
+
+    if (!playerId || !password) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Password wajib diisi.'
+        });
+    }
+    
+    if (password.length < 6) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Password minimal 6 karakter.'
+        });
+    }
+
+    try {
+        const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+        
+        const [result] = await db.query(
+            'UPDATE players SET password_hash = ?, is_guest = 0 WHERE player_id = ?',
+            [passwordHash, playerId]
+        );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({
+                status: 'error',
+                message: 'Pemain tidak ditemukan.'
+            });
+        }
+
+        return res.status(200).json({
+            status: 'success',
+            message: 'Akun berhasil dikaitkan secara permanen.'
+        });
+    } catch (error) {
+        console.error('[authController.bindAccount] Error:', error);
+        return res.status(500).json({
+            status: 'error',
+            message: 'Terjadi kesalahan saat mengaitkan akun.',
             error_detail: error.message
         });
     }

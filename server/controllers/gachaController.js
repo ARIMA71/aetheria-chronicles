@@ -168,6 +168,20 @@ exports.pull = async (req, res) => {
 
             // Cek apakah ada unlock karakter
             if (pulled.unlocks_mc_id !== null) {
+                // Ambil info karakter untuk display
+                const [charDataRows] = await conn.query(
+                    'SELECT mc_name, mc_splash_path FROM master_characters WHERE mc_id = ?',
+                    [pulled.unlocks_mc_id]
+                );
+                if (charDataRows.length > 0) {
+                    const charData = charDataRows[0];
+                    resultEntry.character_name = charData.mc_name;
+                    resultEntry.character_splash_path = charData.mc_splash_path;
+                    if (resultEntry.character_splash_path && !resultEntry.character_splash_path.endsWith('.png')) {
+                        resultEntry.character_splash_path += '.png';
+                    }
+                }
+
                 // Cek kepemilikan karakter
                 const [charExists] = await conn.query(
                     `SELECT inv_id FROM player_inventories 

@@ -3,6 +3,7 @@ import { THEME } from '../main.js';
 import { playGlobalBGM } from '../utils/audioManager.js';
 import { checkSession, clearSession, saveCurrentScene } from '../utils/auth.js';
 import BattleApi from '../services/BattleApi.js';
+import TopMenuComponent from '../ui/TopMenuComponent.js';
 
 const W = 480, H = 880, CX = 240;
 
@@ -50,7 +51,9 @@ export default class MainMenuScene extends Phaser.Scene {
         this._buildCenterArea();
         this._buildFABCluster();
         this._buildStatsPanel();
-        this._buildMenuModal();
+
+        // Integrate TopMenuComponent
+        this.topMenu = new TopMenuComponent(this);
 
         // Initial UI Update from local cache
         this.updateUIElements();
@@ -77,6 +80,10 @@ export default class MainMenuScene extends Phaser.Scene {
                 this.playerData = json.data;
                 localStorage.setItem('aetheria_player', JSON.stringify(json.data));
                 this.updateUIElements();
+
+                if (this.playerData.is_guest === 1 && !sessionStorage.getItem('guest_reminder_shown')) {
+                    this._showGuestReminderModal();
+                }
             }
         } catch (err) {
             console.error('Failed to fetch player profile:', err);
@@ -167,30 +174,6 @@ export default class MainMenuScene extends Phaser.Scene {
             fontFamily: 'Outfit',
             letterSpacing: 2
         }).setOrigin(0.5);
-
-        // Pojok kanan atas: Bulat bertulisan MENU
-        const menuBtn = this.add.circle(W - 40, 30, 18, THEME.PANEL, THEME.PANEL_ALPHA);
-        menuBtn.setStrokeStyle(1, THEME.BORDER);
-        menuBtn.setInteractive({ useHandCursor: true });
-
-        const menuText = this.add.text(W - 40, 30, 'MENU', {
-            fontSize: '8px',
-            fontStyle: 'bold',
-            fontFamily: 'Outfit',
-            color: THEME.TEXT_PRIMARY
-        }).setOrigin(0.5);
-
-        menuBtn.on('pointerover', () => {
-            menuBtn.setFillStyle(0x334155);
-            menuText.setColor('#ffffff');
-        });
-        menuBtn.on('pointerout', () => {
-            menuBtn.setFillStyle(THEME.PANEL);
-            menuText.setColor(THEME.TEXT_PRIMARY);
-        });
-        menuBtn.on('pointerdown', () => {
-            this.toggleMenuModal(true);
-        });
     }
 
     _buildStaminaBar() {
@@ -350,255 +333,44 @@ export default class MainMenuScene extends Phaser.Scene {
         }).setOrigin(0.5);
     }
 
-    _buildMenuModal() {
-        // Container Menu (modal meluncur/tampil dari atas)
-        this.menuContainer = this.add.container(0, 0).setDepth(300).setVisible(false);
-
-        // 1. Black low-opacity backdrop (full screen)
+    _showGuestReminderModal() {
+        sessionStorage.setItem('guest_reminder_shown', 'true');
+        
+        const rContainer = this.add.container(0, 0).setDepth(9000);
+        
         const sysW = this.scale.width;
         const sysH = this.scale.height;
-        const backdrop = this.add.rectangle(sysW / 2, sysH / 2, sysW, sysH, 0x000000, 0.75).setInteractive();
-        // Prevent click propagation
-        backdrop.on('pointerdown', (pointer, localX, localY, event) => {
-            event.stopPropagation();
-            if (pointer.y > 420) {
-                this.toggleMenuModal(false);
-            }
-        });
+        const rBackdrop = this.add.rectangle(sysW/2, sysH/2, sysW, sysH, 0x000000, 0.8).setInteractive();
+        
+        const rPanel = this.add.rectangle(CX, H/2, 320, 180, 0x0B1120).setInteractive();
+        rPanel.setStrokeStyle(2, 0xfacc15);
 
-        // 2. Modal panel box (half screen dari atas, tinggi 420px)
-        const panel = this.add.rectangle(CX, 210, W, 420, 0x0a0f1d).setInteractive();
-        panel.setStrokeStyle(1, THEME.BORDER);
-        panel.on('pointerdown', (pointer, localX, localY, event) => {
-            event.stopPropagation(); // Cegah interaksi menembus ke canvas utama
-        });
-
-        // 3. Header
-        const header = this.add.text(CX, 30, 'MENU & SETTINGS', {
-            fontSize: '14px',
-            fontStyle: 'bold',
-            fontFamily: 'Outfit',
-            color: THEME.TEXT_PRIMARY,
-            letterSpacing: 2
+        const rTitle = this.add.text(CX, H/2 - 50, '⚠️ PERINGATAN KEAMANAN', {
+            fontSize: '14px', fontStyle: 'bold', fontFamily: 'Outfit', color: '#facc15'
         }).setOrigin(0.5);
 
-        // Seamless divider at Y = 60, spanning full screen width W
-        const divider = this.add.rectangle(CX, 60, W, 1, THEME.BORDER);
-
-        // ── SECTION 1: Horizontal Navigation ──
-        const s1Label = this.add.text(CX, 85, 'QUICK NAVIGATION', {
-            fontSize: '9px',
-            fontFamily: 'Outfit',
-            color: THEME.TEXT_SECONDARY,
-            letterSpacing: 1
+        const rText = this.add.text(CX, H/2 - 10, 'Anda masih bermain menggunakan Akun Guest.\nBind akun dengan password sekarang agar data Anda tidak hilang terhapus sistem!', {
+            fontSize: '12px', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY, align: 'center', wordWrap: { width: 280 }
         }).setOrigin(0.5);
 
-        // 3 Button bulat navigasi horizontal (shifted to Y = 125)
-        const btnParty = this._createModalRoundBtn(CX - 100, 125, 'PARTY', () => {
-            this.toggleMenuModal(false);
-            this.scene.start('LoadingScene', { targetScene: 'PartyScene' });
-        });
-        const btnQuest = this._createModalRoundBtn(CX, 125, 'QUEST', () => {
-            this.toggleMenuModal(false);
-            this.scene.start('LoadingScene', { targetScene: 'QuestScene' });
-        });
-        const btnGacha = this._createModalRoundBtn(CX + 100, 125, 'GACHA', () => {
-            this.toggleMenuModal(false);
-            this.scene.start('LoadingScene', { targetScene: 'GachaScene' });
+        // Nanti Saja Btn
+        const btnLater = this.add.rectangle(CX - 75, H/2 + 50, 120, 32, THEME.PANEL).setInteractive({useHandCursor:true}).setStrokeStyle(1, THEME.BORDER);
+        const txtLater = this.add.text(CX - 75, H/2 + 50, 'Nanti Saja', { fontSize: '12px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_SECONDARY }).setOrigin(0.5);
+        btnLater.on('pointerdown', () => {
+            if(this.sound) this.sound.play('sfx_select');
+            rContainer.destroy();
         });
 
-        // ── SECTION 2: Inventory & Shop ──
-        const s2Label = this.add.text(CX, 185, 'ITEMS & MARKET', {
-            fontSize: '9px',
-            fontFamily: 'Outfit',
-            color: THEME.TEXT_SECONDARY,
-            letterSpacing: 1
-        }).setOrigin(0.5);
-
-        const btnInventory = this._createModalRectBtn(CX - 90, 215, 160, 30, 'INVENTORY', () => {
-            this.toggleMenuModal(false);
-            this.scene.start('LoadingScene', { targetScene: 'InventoryScene' });
-        });
-        const btnShop = this._createModalRectBtn(CX + 90, 215, 160, 30, 'SHOP', () => {
-            // Navigasi Shop
+        // Bind Sekarang Btn
+        const btnBind = this.add.rectangle(CX + 75, H/2 + 50, 120, 32, 0xca8a04).setInteractive({useHandCursor:true}).setStrokeStyle(1, 0xfacc15);
+        const txtBind = this.add.text(CX + 75, H/2 + 50, 'Bind Sekarang', { fontSize: '12px', fontStyle: 'bold', fontFamily: 'Outfit', color: '#ffffff' }).setOrigin(0.5);
+        btnBind.on('pointerdown', () => {
+            if(this.sound) this.sound.play('sfx_select');
+            rContainer.destroy();
+            if(this.topMenu) this.topMenu.showBindAccountForm();
         });
 
-        // ── SECTION 3: Settings Music & SFX ──
-        const s3Label = this.add.text(CX, 270, 'AUDIO SETTINGS', {
-            fontSize: '9px',
-            fontFamily: 'Outfit',
-            color: THEME.TEXT_SECONDARY,
-            letterSpacing: 1
-        }).setOrigin(0.5);
-
-        // Music toggle button
-        this.musicBtn = this._createModalRectBtn(CX - 90, 300, 160, 30, '', () => this.toggleMusic());
-        this.musicTxt = this.add.text(CX - 90, 300, '', {
-            fontSize: '10px',
-            fontStyle: 'bold',
-            fontFamily: 'Outfit'
-        }).setOrigin(0.5);
-
-        // SFX toggle button
-        this.sfxBtn = this._createModalRectBtn(CX + 90, 300, 160, 30, '', () => this.toggleSfx());
-        this.sfxTxt = this.add.text(CX + 90, 300, '', {
-            fontSize: '10px',
-            fontStyle: 'bold',
-            fontFamily: 'Outfit'
-        }).setOrigin(0.5);
-
-        this.updateAudioButtonVisuals();
-
-        // ── SECTION 4: Logout Button ──
-        const btnLogout = this._createModalRectBtn(CX, 360, 340, 32, 'LOGOUT', () => {
-            this.showLogoutConfirmation();
-        }, 0x7f1d1d, 0xef4444); // Red tones for logout
-
-        // Pojok kanan atas: Bulat bertulisan CLOSE (sama persis posisinya dengan tombol MENU)
-        const closeBtnCircle = this.add.circle(W - 40, 30, 18, THEME.PANEL, THEME.PANEL_ALPHA);
-        closeBtnCircle.setStrokeStyle(1, THEME.BORDER);
-        closeBtnCircle.setInteractive({ useHandCursor: true });
-
-        const closeBtnText = this.add.text(W - 40, 30, 'CLOSE', {
-            fontSize: '8px',
-            fontStyle: 'bold',
-            fontFamily: 'Outfit',
-            color: THEME.TEXT_PRIMARY
-        }).setOrigin(0.5);
-
-        closeBtnCircle.on('pointerover', () => {
-            closeBtnCircle.setFillStyle(0x334155);
-            closeBtnText.setColor('#ffffff');
-        });
-        closeBtnCircle.on('pointerout', () => {
-            closeBtnCircle.setFillStyle(THEME.PANEL);
-            closeBtnText.setColor(THEME.TEXT_PRIMARY);
-        });
-        closeBtnCircle.on('pointerdown', () => {
-            this.toggleMenuModal(false);
-        });
-
-        // Add to container (closeText has been removed)
-        this.menuContainer.add([
-            backdrop, panel, header, divider,
-            s1Label, btnParty.circle, btnParty.text, btnQuest.circle, btnQuest.text, btnGacha.circle, btnGacha.text,
-            s2Label, btnInventory.rect, btnInventory.text, btnShop.rect, btnShop.text,
-            s3Label, this.musicBtn.rect, this.musicTxt, this.sfxBtn.rect, this.sfxTxt,
-            btnLogout.rect, btnLogout.text, closeBtnCircle, closeBtnText
-        ]);
-
-        // ── CONFIRMATION DIALOG LAYER (hidden by default) ──
-        this.confirmContainer = this.add.container(0, 0).setDepth(310).setVisible(false);
-
-        const cBackdrop = this.add.rectangle(sysW / 2, sysH / 2, sysW, sysH, 0x000000, 0.8).setInteractive();
-        cBackdrop.on('pointerdown', (pointer, localX, localY, event) => event.stopPropagation());
-
-        const cPanel = this.add.rectangle(CX, H / 2, 300, 150, 0x0d1425).setInteractive();
-        cPanel.setStrokeStyle(2, 0xe74c3c);
-        cPanel.on('pointerdown', (pointer, localX, localY, event) => event.stopPropagation());
-
-        const cText = this.add.text(CX, H / 2 - 25, 'Apakah Anda yakin ingin logout?', {
-            fontSize: '12px',
-            fontStyle: 'bold',
-            fontFamily: 'Outfit',
-            color: THEME.TEXT_PRIMARY,
-            align: 'center',
-            wordWrap: { width: 260 }
-        }).setOrigin(0.5);
-
-        // YES Button
-        const btnYesObj = this._createModalRectBtn(CX - 65, H / 2 + 30, 100, 32, 'LOGOUT', () => {
-            clearSession(this);
-        }, 0x7f1d1d, 0xef4444);
-
-        // CANCEL Button
-        const btnNoObj = this._createModalRectBtn(CX + 65, H / 2 + 30, 100, 32, 'BATAL', () => {
-            this.confirmContainer.setVisible(false);
-        }, THEME.PANEL, THEME.BORDER);
-
-        this.confirmContainer.add([
-            cBackdrop, cPanel, cText,
-            btnYesObj.rect, btnYesObj.text,
-            btnNoObj.rect, btnNoObj.text
-        ]);
-    }
-
-    _createModalRoundBtn(x, y, label, onClick) {
-        const circle = this.add.circle(x, y, 22, THEME.PANEL);
-        circle.setStrokeStyle(1, THEME.BORDER);
-        circle.setInteractive({ useHandCursor: true });
-
-        const text = this.add.text(x, y, label, {
-            fontSize: '8px',
-            fontStyle: 'bold',
-            fontFamily: 'Outfit',
-            color: THEME.TEXT_PRIMARY
-        }).setOrigin(0.5);
-
-        circle.on('pointerover', () => circle.setFillStyle(0x334155));
-        circle.on('pointerout', () => circle.setFillStyle(THEME.PANEL));
-        circle.on('pointerdown', onClick);
-
-        return { circle, text };
-    }
-
-    _createModalRectBtn(x, y, w, h, label, onClick, bgColor = THEME.PANEL, borderColor = THEME.BORDER) {
-        const rect = this.add.rectangle(x, y, w, h, bgColor);
-        rect.setStrokeStyle(1, borderColor);
-        rect.setInteractive({ useHandCursor: true });
-
-        const text = this.add.text(x, y, label, {
-            fontSize: '10px',
-            fontStyle: 'bold',
-            fontFamily: 'Outfit',
-            color: THEME.TEXT_PRIMARY
-        }).setOrigin(0.5);
-
-        rect.on('pointerover', () => rect.setFillStyle(0x334155));
-        rect.on('pointerout', () => rect.setFillStyle(bgColor));
-        rect.on('pointerdown', onClick);
-
-        return { rect, text };
-    }
-
-    toggleMenuModal(show) {
-        this.menuContainer.setVisible(show);
-        if (show) {
-            // Update audio visuals each time modal opens in case changed elsewhere
-            this.updateAudioButtonVisuals();
-        }
-    }
-
-    toggleMusic() {
-        this.musicOn = !this.musicOn;
-        localStorage.setItem('music_on', this.musicOn);
-        this.updateAudioButtonVisuals();
-        if (window.AetheriaAudioManager) window.AetheriaAudioManager.updateMuteState(this);
-    }
-
-    toggleSfx() {
-        this.sfxOn = !this.sfxOn;
-        localStorage.setItem('sfx_on', this.sfxOn);
-        this.updateAudioButtonVisuals();
-        if (window.AetheriaAudioManager) window.AetheriaAudioManager.updateMuteState(this);
-    }
-
-    updateAudioButtonVisuals() {
-        if (!this.musicBtn || !this.sfxBtn) return;
-
-        // Music button visual
-        this.musicBtn.rect.setFillStyle(this.musicOn ? 0x0d2a1a : 0x2a0d0d);
-        this.musicBtn.rect.setStrokeStyle(1, this.musicOn ? 0x2ecc71 : 0xe74c3c);
-        this.musicTxt.setText(`MUSIC: ${this.musicOn ? 'ON' : 'OFF'}`).setColor(this.musicOn ? '#a8e6cf' : '#ff8a80');
-
-        // SFX button visual
-        this.sfxBtn.rect.setFillStyle(this.sfxOn ? 0x0d2a1a : 0x2a0d0d);
-        this.sfxBtn.rect.setStrokeStyle(1, this.sfxOn ? 0x2ecc71 : 0xe74c3c);
-        this.sfxTxt.setText(`SFX: ${this.sfxOn ? 'ON' : 'OFF'}`).setColor(this.sfxOn ? '#a8e6cf' : '#ff8a80');
-    }
-
-    showLogoutConfirmation() {
-        this.confirmContainer.setVisible(true);
+        rContainer.add([rBackdrop, rPanel, rTitle, rText, btnLater, txtLater, btnBind, txtBind]);
     }
 
     async _checkActiveBattle() {

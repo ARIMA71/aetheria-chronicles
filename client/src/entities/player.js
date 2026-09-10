@@ -19,7 +19,7 @@ export default class Player extends Phaser.GameObjects.Container {
         this.slot = data.slot;
         this.mc_id = data.mc_id || data.id || data.slot;
         this._portraitPath = data.portrait_path;
-        this._fullPortraitPath = data.full_portrait_path;
+        this._splashPath = data.splash_path;
         this.id = data.id || data.slot;
         this.charName = data.name;
         this.element = data.element || 'None';

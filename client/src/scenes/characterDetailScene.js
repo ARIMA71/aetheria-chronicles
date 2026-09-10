@@ -3,6 +3,7 @@ import { THEME } from '../main.js';
 import { playGlobalBGM } from '../utils/audioManager.js';
 import { checkSession, saveCurrentScene, clearSession, getPlayerId } from '../utils/auth.js';
 import PartyApi from '../services/PartyApi.js';
+import TopMenuComponent from '../ui/TopMenuComponent.js';
 
 // Element icons are loaded as PNGs in preload
 
@@ -38,7 +39,7 @@ export default class CharacterDetailScene extends Phaser.Scene {
         this.musicOn = localStorage.getItem('music_on') !== 'false';
         this.sfxOn = localStorage.getItem('sfx_on') !== 'false';
 
-        this._buildMenuModal();
+        this.topMenu = new TopMenuComponent(this);
 
         this.input.on('wheel', (pointer, gameObjects, deltaX, deltaY, deltaZ) => {
             if (this.modalGroup.getChildren().length > 0) return;
@@ -62,7 +63,16 @@ export default class CharacterDetailScene extends Phaser.Scene {
         });
         this.input.on('pointerup', () => { isDragging = false; });
 
-        this.renderUI();
+        const path = this.char.mc_splash_path;
+        if (path && !this.textures.exists(`char_sp_${this.char.mc_id}`)) {
+            this.load.image(`char_sp_${this.char.mc_id}`, path);
+            this.load.once('complete', () => {
+                this.renderUI();
+            });
+            this.load.start();
+        } else {
+            this.renderUI();
+        }
     }
 
     getElementColor(element) {
@@ -107,23 +117,34 @@ export default class CharacterDetailScene extends Phaser.Scene {
         backBtn.on('pointerout', () => { backBtn.setFillStyle(THEME.PANEL); homeTxt.setColor(THEME.TEXT_PRIMARY); });
         backBtn.on('pointerdown', () => this.scene.start('LoadingScene', { targetScene: 'MainMenuScene' }));
 
-        // MENU Button
-        const menuBtn = this.add.circle(W - 40, 30, 18, THEME.PANEL, 1).setScrollFactor(0).setDepth(1000);
-        menuBtn.setStrokeStyle(1, THEME.BORDER);
-        menuBtn.setInteractive({ useHandCursor: true });
-        const menuText = this.add.text(W - 40, 30, 'MENU', { fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5).setScrollFactor(0).setDepth(1000);
-
-        menuBtn.on('pointerover', () => { menuBtn.setFillStyle(0x334155); menuText.setColor('#ffffff'); });
-        menuBtn.on('pointerout', () => { menuBtn.setFillStyle(THEME.PANEL); menuText.setColor(THEME.TEXT_PRIMARY); });
-        menuBtn.on('pointerdown', () => this.toggleMenuModal(true));
-
         const bannerW = W - 60; // Added padding
         cy += 70;
 
         // PORTRAIT PLACEHOLDER
         const portraitH = 160;
-        const portraitBox = this.add.rectangle(CX, cy + portraitH/2, bannerW, portraitH, 0x0a0f1d, 0.5).setStrokeStyle(1, THEME.BORDER);
-        this.scrollGroup.add(portraitBox);
+        const spKey = `char_sp_${char.mc_id}`;
+        
+        if (this.textures.exists(spKey)) {
+            const portrait = this.add.image(CX, cy + portraitH/2, spKey);
+            // Fit to banner width
+            const scale = Math.max(bannerW / portrait.width, portraitH / portrait.height);
+            portrait.setScale(scale);
+            
+            // Mask it to rounded rect
+            const maskShape = this.make.graphics();
+            maskShape.fillStyle(0xffffff);
+            maskShape.fillRoundedRect(CX - bannerW/2, cy, bannerW, portraitH, 8);
+            portrait.setMask(maskShape.createGeometryMask());
+            this.scrollGroup.add(portrait);
+            
+            // Add a subtle border overlay
+            const border = this.add.graphics().lineStyle(1, THEME.BORDER);
+            border.strokeRoundedRect(CX - bannerW/2, cy, bannerW, portraitH, 8);
+            this.scrollGroup.add(border);
+        } else {
+            const portraitBox = this.add.rectangle(CX, cy + portraitH/2, bannerW, portraitH, 0x0a0f1d, 0.5).setStrokeStyle(1, THEME.BORDER);
+            this.scrollGroup.add(portraitBox);
+        }
 
         // Rarity at top right of portrait container
         const rarity = char.mc_rarity;
@@ -539,146 +560,6 @@ export default class CharacterDetailScene extends Phaser.Scene {
         this.modalGroup.addMultiple([confirmBg, confirmZone, this.add.text(310, 440, 'Confirm', { fontSize: '12px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5)]);
     }
 
-    _buildMenuModal() {
-        this.menuContainer = this.add.container(0, 0).setDepth(300).setVisible(false).setScrollFactor(0);
-
-        const sysW = this.scale.width;
-        const sysH = this.scale.height;
-        const backdrop = this.add.rectangle(sysW / 2, sysH / 2, sysW, sysH, 0x000000, 0.75).setInteractive();
-        backdrop.on('pointerdown', (pointer, localX, localY, event) => {
-            event.stopPropagation();
-            if (pointer.y > 420) this.toggleMenuModal(false);
-        });
-
-        const panel = this.add.rectangle(CX, 210, W, 420, 0x0a0f1d).setInteractive();
-        panel.setStrokeStyle(1, THEME.BORDER);
-        panel.on('pointerdown', (pointer, localX, localY, event) => event.stopPropagation());
-
-        const header = this.add.text(CX, 30, 'MENU & SETTINGS', { fontSize: '14px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY, letterSpacing: 2 }).setOrigin(0.5);
-        const divider = this.add.rectangle(CX, 60, W, 1, THEME.BORDER);
-
-        const s1Label = this.add.text(CX, 85, 'QUICK NAVIGATION', { fontSize: '9px', fontFamily: 'Outfit', color: THEME.TEXT_SECONDARY, letterSpacing: 1 }).setOrigin(0.5);
-
-        const btnParty = this._createModalRoundBtn(CX - 100, 125, 'PARTY', () => {
-            this.toggleMenuModal(false);
-            this.scene.start('LoadingScene', { targetScene: 'PartyScene' });
-        });
-        const btnQuest = this._createModalRoundBtn(CX, 125, 'QUEST', () => {
-            this.toggleMenuModal(false);
-            this.scene.start('LoadingScene', { targetScene: 'QuestScene' });
-        });
-        const btnGacha = this._createModalRoundBtn(CX + 100, 125, 'GACHA', () => {
-            this.toggleMenuModal(false);
-            this.scene.start('LoadingScene', { targetScene: 'GachaScene' });
-        });
-
-        const s2Label = this.add.text(CX, 185, 'ITEMS & MARKET', { fontSize: '9px', fontFamily: 'Outfit', color: THEME.TEXT_SECONDARY, letterSpacing: 1 }).setOrigin(0.5);
-        const btnInventory = this._createModalRectBtn(CX - 90, 215, 160, 30, 'INVENTORY', () => {
-            this.toggleMenuModal(false);
-            this.scene.start('LoadingScene', { targetScene: 'InventoryScene' });
-        });
-        const btnShop = this._createModalRectBtn(CX + 90, 215, 160, 30, 'SHOP', () => { });
-
-        const s3Label = this.add.text(CX, 270, 'AUDIO SETTINGS', { fontSize: '9px', fontFamily: 'Outfit', color: THEME.TEXT_SECONDARY, letterSpacing: 1 }).setOrigin(0.5);
-
-        this.musicBtn = this._createModalRectBtn(CX - 90, 300, 160, 30, '', () => this.toggleMusic());
-        this.musicTxt = this.add.text(CX - 90, 300, '', { fontSize: '10px', fontStyle: 'bold', fontFamily: 'Outfit' }).setOrigin(0.5);
-
-        this.sfxBtn = this._createModalRectBtn(CX + 90, 300, 160, 30, '', () => this.toggleSfx());
-        this.sfxTxt = this.add.text(CX + 90, 300, '', { fontSize: '10px', fontStyle: 'bold', fontFamily: 'Outfit' }).setOrigin(0.5);
-
-        this.updateAudioButtonVisuals();
-
-        const btnLogout = this._createModalRectBtn(CX, 360, 340, 32, 'LOGOUT', () => {
-            this.showLogoutConfirmation();
-        }, 0x7f1d1d, 0xef4444);
-
-        const closeBtnCircle = this.add.circle(W - 40, 30, 18, THEME.PANEL, THEME.PANEL_ALPHA);
-        closeBtnCircle.setStrokeStyle(1, THEME.BORDER);
-        closeBtnCircle.setInteractive({ useHandCursor: true });
-        const closeBtnText = this.add.text(W - 40, 30, 'CLOSE', { fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
-
-        closeBtnCircle.on('pointerover', () => { closeBtnCircle.setFillStyle(0x334155); closeBtnText.setColor('#ffffff'); });
-        closeBtnCircle.on('pointerout', () => { closeBtnCircle.setFillStyle(THEME.PANEL); closeBtnText.setColor(THEME.TEXT_PRIMARY); });
-        closeBtnCircle.on('pointerdown', () => this.toggleMenuModal(false));
-
-        this.menuContainer.add([
-            backdrop, panel, header, divider,
-            s1Label, btnParty.circle, btnParty.text, btnQuest.circle, btnQuest.text, btnGacha.circle, btnGacha.text,
-            s2Label, btnInventory.rect, btnInventory.text, btnShop.rect, btnShop.text,
-            s3Label, this.musicBtn.rect, this.musicTxt, this.sfxBtn.rect, this.sfxTxt,
-            btnLogout.rect, btnLogout.text, closeBtnCircle, closeBtnText
-        ]);
-
-        this.confirmContainer = this.add.container(0, 0).setDepth(310).setVisible(false).setScrollFactor(0);
-        const cBackdrop = this.add.rectangle(sysW / 2, sysH / 2, sysW, sysH, 0x000000, 0.8).setInteractive();
-        cBackdrop.on('pointerdown', (p, x, y, e) => e.stopPropagation());
-
-        const cPanel = this.add.rectangle(CX, H / 2, 300, 150, 0x0d1425).setInteractive();
-        cPanel.setStrokeStyle(2, 0xe74c3c);
-        cPanel.on('pointerdown', (p, x, y, e) => e.stopPropagation());
-
-        const cText = this.add.text(CX, H / 2 - 25, 'Apakah Anda yakin ingin logout?', {
-            fontSize: '12px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY, align: 'center', wordWrap: { width: 260 }
-        }).setOrigin(0.5);
-
-        const btnYesObj = this._createModalRectBtn(CX - 65, H / 2 + 30, 100, 32, 'LOGOUT', () => clearSession(this), 0x7f1d1d, 0xef4444);
-        const btnNoObj = this._createModalRectBtn(CX + 65, H / 2 + 30, 100, 32, 'BATAL', () => this.confirmContainer.setVisible(false), THEME.PANEL, THEME.BORDER);
-
-        this.confirmContainer.add([cBackdrop, cPanel, cText, btnYesObj.rect, btnYesObj.text, btnNoObj.rect, btnNoObj.text]);
-    }
-
-    _createModalRoundBtn(x, y, label, onClick) {
-        const circle = this.add.circle(x, y, 22, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
-        const text = this.add.text(x, y, label, { fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
-        circle.on('pointerover', () => circle.setFillStyle(0x334155));
-        circle.on('pointerout', () => circle.setFillStyle(THEME.PANEL));
-        circle.on('pointerdown', onClick);
-        return { circle, text };
-    }
-
-    _createModalRectBtn(x, y, w, h, label, onClick, bgColor = THEME.PANEL, borderColor = THEME.BORDER) {
-        const rect = this.add.rectangle(x, y, w, h, bgColor).setStrokeStyle(1, borderColor).setInteractive({ useHandCursor: true });
-        const text = this.add.text(x, y, label, { fontSize: '10px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
-        rect.on('pointerover', () => rect.setFillStyle(0x334155));
-        rect.on('pointerout', () => rect.setFillStyle(bgColor));
-        rect.on('pointerdown', onClick);
-        return { rect, text };
-    }
-
-    toggleMenuModal(show) {
-        this.menuContainer.setVisible(show);
-        if (show) this.updateAudioButtonVisuals();
-    }
-
-    toggleMusic() {
-        this.musicOn = !this.musicOn;
-        localStorage.setItem('music_on', this.musicOn);
-        this.updateAudioButtonVisuals();
-        if (window.AetheriaAudioManager) window.AetheriaAudioManager.updateMuteState(this);
-    }
-
-    toggleSfx() {
-        this.sfxOn = !this.sfxOn;
-        localStorage.setItem('sfx_on', this.sfxOn);
-        this.updateAudioButtonVisuals();
-        if (window.AetheriaAudioManager) window.AetheriaAudioManager.updateMuteState(this);
-    }
-
-    updateAudioButtonVisuals() {
-        if (!this.musicBtn || !this.sfxBtn) return;
-        this.musicBtn.rect.setFillStyle(this.musicOn ? 0x0d2a1a : 0x2a0d0d);
-        this.musicBtn.rect.setStrokeStyle(1, this.musicOn ? 0x2ecc71 : 0xe74c3c);
-        this.musicTxt.setText(`MUSIC: ${this.musicOn ? 'ON' : 'OFF'}`).setColor(this.musicOn ? '#a8e6cf' : '#ff8a80');
-
-        this.sfxBtn.rect.setFillStyle(this.sfxOn ? 0x0d2a1a : 0x2a0d0d);
-        this.sfxBtn.rect.setStrokeStyle(1, this.sfxOn ? 0x2ecc71 : 0xe74c3c);
-        this.sfxTxt.setText(`SFX: ${this.sfxOn ? 'ON' : 'OFF'}`).setColor(this.sfxOn ? '#a8e6cf' : '#ff8a80');
-    }
-
-    showLogoutConfirmation() {
-        this.confirmContainer.setVisible(true);
-    }
 
     showSkillEffectModal(skill) {
         const effects = skill.status_effects || [];

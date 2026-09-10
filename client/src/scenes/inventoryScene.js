@@ -4,6 +4,7 @@ import { playGlobalBGM } from '../utils/audioManager.js';
 import { checkSession, saveCurrentScene, clearSession, getPlayerId } from '../utils/auth.js';
 import PartyApi from '../services/PartyApi.js';
 import { CameraScrollManager } from '../utils/cameraScroll.js';
+import TopMenuComponent from '../ui/TopMenuComponent.js';
 
 // Element icons are loaded as PNGs in preload
 
@@ -56,21 +57,9 @@ export default class InventoryScene extends Phaser.Scene {
             this.scene.start('LoadingScene', { targetScene: 'MainMenuScene' });
         });
 
-        // MENU Button
-        const menuBtn = this.add.circle(W - 40, 30, 18, THEME.PANEL, 1).setScrollFactor(0).setDepth(1000);
-        menuBtn.setStrokeStyle(1, THEME.BORDER);
-        menuBtn.setInteractive({ useHandCursor: true });
-        const menuText = this.add.text(W - 40, 30, 'MENU', { fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5).setScrollFactor(0).setDepth(1000);
-
-        menuBtn.on('pointerover', () => { menuBtn.setFillStyle(0x334155); menuText.setColor('#ffffff'); });
-        menuBtn.on('pointerout', () => { menuBtn.setFillStyle(THEME.PANEL); menuText.setColor(THEME.TEXT_PRIMARY); });
-        menuBtn.on('pointerdown', () => this.toggleMenuModal(true));
+        this.topMenu = new TopMenuComponent(this);
 
         this.modalGroup = this.add.group();
-        this.musicOn = localStorage.getItem('music_on') !== 'false';
-        this.sfxOn = localStorage.getItem('sfx_on') !== 'false';
-
-        this._buildMenuModal();
         this.uiGroup = this.add.group();
         this.scrollGroup = this.add.group();
 
@@ -105,8 +94,26 @@ export default class InventoryScene extends Phaser.Scene {
                 }
             }
 
-            this.loadingText.destroy();
-            this.renderUI();
+            // Dynamically load missing character square portraits
+            let assetsToLoad = 0;
+            this.characters.forEach(char => {
+                const path = char.mc_square_path;
+                if (path && !this.textures.exists(`char_sq_${char.mc_id}`)) {
+                    this.load.image(`char_sq_${char.mc_id}`, path);
+                    assetsToLoad++;
+                }
+            });
+
+            if (assetsToLoad > 0) {
+                this.load.once('complete', () => {
+                    this.loadingText.destroy();
+                    this.renderUI();
+                });
+                this.load.start();
+            } else {
+                this.loadingText.destroy();
+                this.renderUI();
+            }
         } else {
             this.loadingText.setText('Failed to load inventory.');
         }
@@ -340,8 +347,22 @@ export default class InventoryScene extends Phaser.Scene {
                 artBg.strokeRoundedRect(ix - boxW / 2 + 4, iy - boxH / 2 + 4, boxW - 8, artH, 6);
                 this.scrollGroup.add(artBg);
 
+                if (!isWeapon) {
+                    const sqKey = `char_sq_${item.mc_id}`;
+                    if (this.textures.exists(sqKey)) {
+                        const portrait = this.add.image(ix, iy - boxH / 2 + 4 + artH / 2, sqKey);
+                        portrait.setDisplaySize(boxW - 8, artH); // Fit within the box
+                        // Add rounded mask for the image
+                        const maskShape = this.make.graphics();
+                        maskShape.fillStyle(0xffffff);
+                        maskShape.fillRoundedRect(ix - boxW / 2 + 4, iy - boxH / 2 + 4, boxW - 8, artH, 6);
+                        portrait.setMask(maskShape.createGeometryMask());
+                        this.scrollGroup.add(portrait);
+                    }
+                }
+
                 const itemName = isWeapon ? item.mw_name : item.mc_name;
-                this.scrollGroup.add(this.add.text(ix, iy - boxH / 2 + 4 + artH / 2, itemName.split(' ')[0], { fontSize: '10px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold' }).setOrigin(0.5));
+                this.scrollGroup.add(this.add.text(ix, iy - boxH / 2 + 4 + artH / 2, itemName.split(' ')[0], { fontSize: '10px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold', stroke: '#000', strokeThickness: 2 }).setOrigin(0.5));
 
                 const element = isWeapon ? item.mw_element : item.mc_element;
                 const elColor = this.getElementColor(element);
@@ -353,8 +374,7 @@ export default class InventoryScene extends Phaser.Scene {
                     const shape = this.make.graphics();
                     shape.fillCircle(ix + boxW / 2 - 10, iy - boxH / 2 + 10, 7);
                     iconImg.setMask(shape.createGeometryMask());
-
-                    // Stroke overlay
+                    
                     const strokeCircle = this.add.circle(ix + boxW / 2 - 10, iy - boxH / 2 + 10, 7).setStrokeStyle(1, THEME.PANEL);
                     this.scrollGroup.addMultiple([iconImg, strokeCircle]);
                 } else {
@@ -459,187 +479,4 @@ export default class InventoryScene extends Phaser.Scene {
         CameraScrollManager.enable(this, bottomY + 100);
     }
 
-    _buildMenuModal() {
-        this.menuContainer = this.add.container(0, 0).setDepth(2000).setVisible(false).setScrollFactor(0);
-
-        const sysW = this.scale.width;
-        const sysH = this.scale.height;
-        const backdrop = this.add.rectangle(sysW / 2, sysH / 2, sysW, sysH, 0x000000, 0.75).setInteractive();
-        backdrop.on('pointerdown', (pointer, localX, localY, event) => {
-            event.stopPropagation();
-            if (pointer.y > 420) this.toggleMenuModal(false);
-        });
-
-        const panel = this.add.rectangle(CX, 210, W, 420, 0x0a0f1d).setInteractive();
-        panel.setStrokeStyle(1, THEME.BORDER);
-        panel.on('pointerdown', (pointer, localX, localY, event) => event.stopPropagation());
-
-        const header = this.add.text(CX, 30, 'MENU & SETTINGS', { fontSize: '14px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY, letterSpacing: 2 }).setOrigin(0.5);
-        const divider = this.add.rectangle(CX, 60, W, 1, THEME.BORDER);
-
-        const s1Label = this.add.text(CX, 85, 'QUICK NAVIGATION', { fontSize: '9px', fontFamily: 'Outfit', color: THEME.TEXT_SECONDARY, letterSpacing: 1 }).setOrigin(0.5);
-
-        const btnParty = this._createModalRoundBtn(CX - 100, 125, 'PARTY', () => {
-            this.toggleMenuModal(false);
-            this.scene.start('LoadingScene', { targetScene: 'PartyScene' });
-        });
-        const btnQuest = this._createModalRoundBtn(CX, 125, 'QUEST', () => {
-            this.toggleMenuModal(false);
-            this.scene.start('LoadingScene', { targetScene: 'QuestScene' });
-        });
-        const btnGacha = this._createModalRoundBtn(CX + 100, 125, 'GACHA', () => {
-            this.toggleMenuModal(false);
-            this.scene.start('LoadingScene', { targetScene: 'GachaScene' });
-        });
-
-        const s2Label = this.add.text(CX, 185, 'ITEMS & MARKET', { fontSize: '9px', fontFamily: 'Outfit', color: THEME.TEXT_SECONDARY, letterSpacing: 1 }).setOrigin(0.5);
-        const btnInventory = this._createModalRectBtn(CX - 90, 215, 160, 30, 'INVENTORY', () => {
-            this.toggleMenuModal(false);
-            this.scene.start('LoadingScene', { targetScene: 'InventoryScene' });
-        });
-        const btnShop = this._createModalRectBtn(CX + 90, 215, 160, 30, 'SHOP', () => { });
-
-        const s3Label = this.add.text(CX, 270, 'AUDIO SETTINGS', { fontSize: '9px', fontFamily: 'Outfit', color: THEME.TEXT_SECONDARY, letterSpacing: 1 }).setOrigin(0.5);
-
-        this.musicBtn = this._createModalRectBtn(CX - 90, 300, 160, 30, '', () => this.toggleMusic());
-        this.musicTxt = this.add.text(CX - 90, 300, '', { fontSize: '10px', fontStyle: 'bold', fontFamily: 'Outfit' }).setOrigin(0.5);
-
-        this.sfxBtn = this._createModalRectBtn(CX + 90, 300, 160, 30, '', () => this.toggleSfx());
-        this.sfxTxt = this.add.text(CX + 90, 300, '', { fontSize: '10px', fontStyle: 'bold', fontFamily: 'Outfit' }).setOrigin(0.5);
-
-        this.updateAudioButtonVisuals();
-
-        const btnLogout = this._createModalRectBtn(CX, 360, 340, 32, 'LOGOUT', () => {
-            this.showLogoutConfirmation();
-        }, 0x7f1d1d, 0xef4444);
-
-        const closeBtnCircle = this.add.circle(W - 40, 30, 18, THEME.PANEL, 1);
-        closeBtnCircle.setStrokeStyle(1, THEME.BORDER);
-        closeBtnCircle.setInteractive({ useHandCursor: true });
-        const closeBtnText = this.add.text(W - 40, 30, 'CLOSE', { fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
-
-        closeBtnCircle.on('pointerover', () => { closeBtnCircle.setFillStyle(0x334155); closeBtnText.setColor('#ffffff'); });
-        closeBtnCircle.on('pointerout', () => { closeBtnCircle.setFillStyle(THEME.PANEL); closeBtnText.setColor(THEME.TEXT_PRIMARY); });
-        closeBtnCircle.on('pointerdown', () => this.toggleMenuModal(false));
-
-        this.menuContainer.add([
-            backdrop, panel, header, divider,
-            s1Label, btnParty.circle, btnParty.text, btnQuest.circle, btnQuest.text, btnGacha.circle, btnGacha.text,
-            s2Label, btnInventory.rect, btnInventory.text, btnShop.rect, btnShop.text,
-            s3Label, this.musicBtn.rect, this.musicTxt, this.sfxBtn.rect, this.sfxTxt,
-            btnLogout.rect, btnLogout.text, closeBtnCircle, closeBtnText
-        ]);
-
-        this.confirmContainer = this.add.container(0, 0).setDepth(2100).setVisible(false).setScrollFactor(0);
-        const cBackdrop = this.add.rectangle(sysW / 2, sysH / 2, sysW, sysH, 0x000000, 0.8).setInteractive();
-        cBackdrop.on('pointerdown', (p, x, y, e) => e.stopPropagation());
-
-        const cPanel = this.add.rectangle(CX, H / 2, 300, 150, 0x0d1425).setInteractive();
-        cPanel.setStrokeStyle(2, 0xe74c3c);
-        cPanel.on('pointerdown', (p, x, y, e) => e.stopPropagation());
-
-        const cText = this.add.text(CX, H / 2 - 25, 'Apakah Anda yakin ingin logout?', {
-            fontSize: '12px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY, align: 'center', wordWrap: { width: 260 }
-        }).setOrigin(0.5);
-
-        const btnYesObj = this._createModalRectBtn(CX - 65, H / 2 + 30, 100, 32, 'LOGOUT', () => clearSession(this), 0x7f1d1d, 0xef4444);
-        const btnNoObj = this._createModalRectBtn(CX + 65, H / 2 + 30, 100, 32, 'BATAL', () => this.confirmContainer.setVisible(false), THEME.PANEL, THEME.BORDER);
-
-        this.confirmContainer.add([cBackdrop, cPanel, cText, btnYesObj.rect, btnYesObj.text, btnNoObj.rect, btnNoObj.text]);
-    }
-
-    _createModalRoundBtn(x, y, label, onClick) {
-        const circle = this.add.circle(x, y, 22, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
-        const text = this.add.text(x, y, label, { fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
-        circle.on('pointerover', () => circle.setFillStyle(0x334155));
-        circle.on('pointerout', () => circle.setFillStyle(THEME.PANEL));
-        circle.on('pointerdown', onClick);
-        return { circle, text };
-    }
-
-    _createModalRectBtn(x, y, w, h, label, onClick, bgColor = THEME.PANEL, borderColor = THEME.BORDER) {
-        const rect = this.add.rectangle(x, y, w, h, bgColor).setStrokeStyle(1, borderColor).setInteractive({ useHandCursor: true });
-        const text = this.add.text(x, y, label, { fontSize: '10px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
-        rect.on('pointerover', () => rect.setFillStyle(0x334155));
-        rect.on('pointerout', () => rect.setFillStyle(bgColor));
-        rect.on('pointerdown', onClick);
-        return { rect, text };
-    }
-
-    showSkillReadOnlyModal(skill, isLocked) {
-        const container = this.add.container(0, 0).setDepth(200);
-
-        const bg = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.8).setInteractive();
-        container.add(bg);
-        bg.on('pointerdown', () => container.destroy());
-
-        const CY = H / 2;
-        const mBox = this.add.graphics().fillStyle(THEME.PANEL, 1).lineStyle(1, 0x475569).fillRoundedRect(20, CY - 60, W - 40, 100, 4).strokeRoundedRect(20, CY - 60, W - 40, 100, 4);
-        container.add(mBox);
-
-        // Icon
-        const iconColor = skill.ms_category === 'Special' ? 0xd97706 : 0x4f46e5;
-        const iconBox = this.add.graphics().fillStyle(iconColor, 1).fillRoundedRect(35, CY - 45, 45, 45, 8);
-        const init = skill.ms_name.substring(0, 2).toUpperCase();
-        const iconTxt = this.add.text(57, CY - 22, init, { fontSize: '16px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
-
-        container.add([iconBox, iconTxt]);
-
-        if (isLocked) {
-            const lockBox = this.add.graphics().fillStyle(0x000000, 0.6).fillRoundedRect(35, CY - 45, 45, 45, 8);
-            const lockTxt = this.add.text(57, CY - 22, '🔒', { fontSize: '16px' }).setOrigin(0.5);
-            container.add([lockBox, lockTxt]);
-        }
-
-        const titleColor = isLocked ? THEME.TEXT_MUTED : (skill.ms_category === 'Special' ? THEME.GOLD : '#60a5fa');
-        container.add(this.add.text(95, CY - 45, skill.ms_name, { fontSize: '14px', color: titleColor, fontStyle: 'bold' }));
-
-        // Cooldown (Hide for Passive skills)
-        if (skill.ms_category !== 'Passive') {
-            container.add(this.add.text(W - 35, CY - 45, `CD: ${skill.ms_cooldown}T`, { fontSize: '10px', color: THEME.TEXT_MUTED }).setOrigin(1, 0));
-        }
-
-        // Desc
-        container.add(this.add.text(95, CY - 20, skill.ms_desc, { fontSize: '11px', color: '#ffffff', wordWrap: { width: W - 140 }, lineSpacing: 4 }));
-
-        if (isLocked) {
-            const warningBox = this.add.graphics().fillStyle(0x000000, 0.8).lineStyle(1, THEME.DANGER).fillRoundedRect(20, CY + 50, W - 40, 40, 4).strokeRoundedRect(20, CY + 50, W - 40, 40, 4);
-            const warningTxt = this.add.text(CX, CY + 70, `🔒 Syarat Level: ${skill.unlock_level}  |  Syarat LB: ${skill.unlock_limit_break}`, { fontSize: '12px', color: THEME.GOLD, fontStyle: 'bold' }).setOrigin(0.5);
-            container.add([warningBox, warningTxt]);
-        }
-    }
-
-    toggleMenuModal(show) {
-        this.menuContainer.setVisible(show);
-        if (show) this.updateAudioButtonVisuals();
-    }
-
-    toggleMusic() {
-        this.musicOn = !this.musicOn;
-        localStorage.setItem('music_on', this.musicOn);
-        this.updateAudioButtonVisuals();
-        if (window.AetheriaAudioManager) window.AetheriaAudioManager.updateMuteState(this);
-    }
-
-    toggleSfx() {
-        this.sfxOn = !this.sfxOn;
-        localStorage.setItem('sfx_on', this.sfxOn);
-        this.updateAudioButtonVisuals();
-        if (window.AetheriaAudioManager) window.AetheriaAudioManager.updateMuteState(this);
-    }
-
-    updateAudioButtonVisuals() {
-        if (!this.musicBtn || !this.sfxBtn) return;
-        this.musicBtn.rect.setFillStyle(this.musicOn ? 0x0d2a1a : 0x2a0d0d);
-        this.musicBtn.rect.setStrokeStyle(1, this.musicOn ? 0x2ecc71 : 0xe74c3c);
-        this.musicTxt.setText(`MUSIC: ${this.musicOn ? 'ON' : 'OFF'}`).setColor(this.musicOn ? '#a8e6cf' : '#ff8a80');
-
-        this.sfxBtn.rect.setFillStyle(this.sfxOn ? 0x0d2a1a : 0x2a0d0d);
-        this.sfxBtn.rect.setStrokeStyle(1, this.sfxOn ? 0x2ecc71 : 0xe74c3c);
-        this.sfxTxt.setText(`SFX: ${this.sfxOn ? 'ON' : 'OFF'}`).setColor(this.sfxOn ? '#a8e6cf' : '#ff8a80');
-    }
-
-    showLogoutConfirmation() {
-        this.confirmContainer.setVisible(true);
-    }
 }

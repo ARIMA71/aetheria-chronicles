@@ -3,9 +3,11 @@ import { THEME } from '../main.js';
 import { playGlobalBGM } from '../utils/audioManager.js';
 import { checkSession, saveCurrentScene, clearSession } from '../utils/auth.js';
 import BattleApi from '../services/BattleApi.js';
+import PartyApi from '../services/PartyApi.js';
 import { CameraScrollManager } from '../utils/cameraScroll.js';
+import TopMenuComponent from '../ui/TopMenuComponent.js';
 
-const W = 480, H = 880, CX = 240;
+const W = 480, H = 830, CX = 240;
 const API_BASE = 'http://localhost:3000/api';
 
 // Area dot positions on the map (top half)
@@ -38,16 +40,61 @@ export default class QuestScene extends Phaser.Scene {
         this.staminaModalContainer = null;
         this.areaData = [];
 
+        this.fullPresets = [];
+        this.fullCharacters = [];
+        this.fullWeapons = [];
+        this.fullMcSkills = [];
+        this.partyDataLoaded = false;
+
         this.musicOn = localStorage.getItem('music_on') !== 'false';
         this.sfxOn = localStorage.getItem('sfx_on') !== 'false';
 
         this.add.rectangle(CX, H / 2, W, H, THEME.BG);
         this._buildTopBar();
-        this._buildMenuModal();
+        this.topMenu = new TopMenuComponent(this);
         this._buildMap();
         this._buildQuestPanel();
         this.fetchQuestData();
         this._checkActiveBattle();
+        this._loadFullPartyData();
+    }
+
+    async _loadFullPartyData() {
+        const presetsRes = await PartyApi.getPresets(this.playerId);
+        const invRes = await PartyApi.getInventory(this.playerId);
+        const skillsRes = await PartyApi.getMcSkills(this.playerId);
+        if (presetsRes.status === 'success' && invRes.status === 'success' && skillsRes.status === 'success') {
+            this.fullPresets = presetsRes.data;
+            this.fullCharacters = invRes.data.characters;
+            this.fullWeapons = invRes.data.weapons;
+            this.fullMcSkills = skillsRes.data;
+            this.partyDataLoaded = true;
+
+            let assetsToLoad = 0;
+            if (!this.textures.exists('element_fire')) { this.load.image('element_fire', 'assets/icons/elements/fire.png'); assetsToLoad++; }
+            if (!this.textures.exists('element_wind')) { this.load.image('element_wind', 'assets/icons/elements/wind.png'); assetsToLoad++; }
+            if (!this.textures.exists('element_earth')) { this.load.image('element_earth', 'assets/icons/elements/rock.png'); assetsToLoad++; }
+
+            this.fullCharacters.forEach(c => {
+                if (c.mc_portrait_path && !this.textures.exists(`portrait_${c.mc_id}`)) {
+                    this.load.image(`portrait_${c.mc_id}`, c.mc_portrait_path);
+                    assetsToLoad++;
+                }
+            });
+
+            if (assetsToLoad > 0) {
+                this.load.once('complete', () => {
+                    if (this.preBattleContainer && this.presetCardsStartY) {
+                        this._renderPresetCards(this.presetCardsStartY);
+                    }
+                });
+                this.load.start();
+            } else {
+                if (this.preBattleContainer && this.presetCardsStartY) {
+                    this._renderPresetCards(this.presetCardsStartY);
+                }
+            }
+        }
     }
 
     _buildTopBar() {
@@ -58,27 +105,6 @@ export default class QuestScene extends Phaser.Scene {
         backBtn.on('pointerover', () => { backBtn.setFillStyle(0x334155); homeTxt.setColor('#ffffff'); });
         backBtn.on('pointerout', () => { backBtn.setFillStyle(THEME.PANEL); homeTxt.setColor(THEME.TEXT_PRIMARY); });
         backBtn.on('pointerdown', () => this.scene.start('LoadingScene', { targetScene: 'MainMenuScene' }));
-
-        // Pojok kanan atas: Bulat bertulisan MENU
-        const menuBtn = this.add.circle(W - 40, 30, 18, THEME.PANEL, THEME.PANEL_ALPHA).setScrollFactor(0).setDepth(100);
-        menuBtn.setStrokeStyle(1, THEME.BORDER);
-        menuBtn.setInteractive({ useHandCursor: true });
-
-        const menuText = this.add.text(W - 40, 30, 'MENU', {
-            fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY
-        }).setOrigin(0.5).setScrollFactor(0).setDepth(100);
-
-        menuBtn.on('pointerover', () => {
-            menuBtn.setFillStyle(0x334155);
-            menuText.setColor('#ffffff');
-        });
-        menuBtn.on('pointerout', () => {
-            menuBtn.setFillStyle(THEME.PANEL);
-            menuText.setColor(THEME.TEXT_PRIMARY);
-        });
-        menuBtn.on('pointerdown', () => {
-            this.toggleMenuModal(true);
-        });
     }
 
     _buildMap() {
@@ -212,7 +238,7 @@ export default class QuestScene extends Phaser.Scene {
                 bg.on('pointerdown', () => this._showPreBattleModal(q));
             }
 
-            this.questListContainer.add(items);
+        this.questListContainer.add(items);
         });
 
         // Aktifkan scroll dinamis berdasarkan quest terakhir
@@ -222,15 +248,23 @@ export default class QuestScene extends Phaser.Scene {
 
     _showPreBattleModal(quest) {
         if (this.preBattleContainer) this.preBattleContainer.destroy();
-        this.preBattleContainer = this.add.container(0, 0).setDepth(50);
+        // Bersihkan listener lama
+        if (this._modalDragMove) this.input.off('pointermove', this._modalDragMove);
+        if (this._modalDragUp) this.input.off('pointerup', this._modalDragUp);
+
+        this.preBattleContainer = this.add.container(0, 0).setDepth(50).setScrollFactor(0);
+
+        // Overlay FIXED — tidak ikut scroll
+        const overlay = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.85).setInteractive();
+        this.preBattleContainer.add(overlay);
+
+        // scrollContainer — ini yang akan bergeser saat di-drag
+        const scrollContainer = this.add.container(0, 0);
+        this.preBattleContainer.add(scrollContainer);
 
         const items = [];
 
-        const overlay = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.85).setInteractive();
-        overlay.on('pointerdown', (p, x, y, e) => e.stopPropagation());
-        items.push(overlay);
-
-        let currentY = 130; // Starting Y coordinate for content
+        let currentY = 100; // Starting Y coordinate for content
         const topY = currentY;
 
         // --- SECTION 1: HEADER ---
@@ -246,7 +280,6 @@ export default class QuestScene extends Phaser.Scene {
         items.push(this.add.text(50, currentY, 'ENEMY INFO', { fontSize: '10px', fontStyle: 'bold', color: THEME.TEXT_SECONDARY, fontFamily: 'Outfit', letterSpacing: 1 }).setOrigin(0, 0.5));
         currentY += 25;
 
-        // Use a Set to filter unique enemies based on name and level
         const uniqueEnemiesMap = new Map();
         quest.enemies.forEach(e => {
             const key = `${e.name}_${e.level}_${e.element}`;
@@ -290,38 +323,43 @@ export default class QuestScene extends Phaser.Scene {
 
         currentY += 20;
         items.push(this.add.rectangle(CX, currentY, W - 70, 1, 0x334155)); // Divider
-        currentY += 25;
-
-        // --- SECTION 5: PARTY PRESET ---
         items.push(this.add.text(CX, currentY, 'SELECT PARTY PRESET', { fontSize: '10px', fontStyle: 'bold', color: THEME.TEXT_SECONDARY, fontFamily: 'Outfit', letterSpacing: 1 }).setOrigin(0.5));
         currentY += 30;
 
         this._presetBtns = [];
-        for (let s = 1; s <= 3; s++) {
-            const bx = CX - 100 + (s - 1) * 100;
+        for (let s = 1; s <= 5; s++) {
+            const bx = CX - 160 + (s - 1) * 80;
             const active = s === this.selectedPresetSlot;
-            const btn = this.add.rectangle(bx, currentY, 80, 36, active ? 0x1a2744 : THEME.PANEL).setStrokeStyle(2, active ? THEME.AETHER : THEME.BORDER).setInteractive({ useHandCursor: true });
-            const txt = this.add.text(bx, currentY, `Slot ${s}`, { fontSize: '11px', fontStyle: 'bold', color: active ? '#A5B4FC' : THEME.TEXT_SECONDARY, fontFamily: 'Outfit' }).setOrigin(0.5);
+            const btn = this.add.rectangle(bx, currentY, 70, 36, active ? 0x1a2744 : THEME.PANEL).setStrokeStyle(2, active ? THEME.AETHER : THEME.BORDER).setInteractive({ useHandCursor: true });
+            const txt = this.add.text(bx, currentY, `Slot ${s}`, { fontSize: '10px', fontStyle: 'bold', color: active ? '#A5B4FC' : THEME.TEXT_SECONDARY, fontFamily: 'Outfit' }).setOrigin(0.5);
             btn.on('pointerdown', () => { this.selectedPresetSlot = s; this._showPreBattleModal(quest); });
             this._presetBtns.push({ btn, txt });
             items.push(btn, txt);
         }
 
-        currentY += 30;
+        currentY += 35; // Menambah jarak antara tombol slot dan tulisan Party Power
 
-        // Power display
-        this.presetPowerText = this.add.text(CX, currentY, 'Loading power...', { fontSize: '10px', color: THEME.TEXT_MUTED, fontFamily: 'Outfit' }).setOrigin(0.5);
-        this._fetchPresetPower();
-        items.push(this.presetPowerText);
+        // Container untuk Preset Cards & Skills
+        if (this.presetCardsContainer) this.presetCardsContainer.destroy();
+        this.presetCardsContainer = this.add.container(0, 0);
+        items.push(this.presetCardsContainer);
 
-        currentY += 40;
+        this.presetPowerText = this.add.text(CX, currentY, 'Loading data...', { fontSize: '10px', color: THEME.TEXT_MUTED, fontFamily: 'Outfit' }).setOrigin(0.5);
+        this.presetCardsContainer.add(this.presetPowerText);
+
+        this.presetCardsStartY = currentY + 35; // Menambah jarak antara Party Power dan Card
+        if (this.partyDataLoaded) {
+            this._renderPresetCards(this.presetCardsStartY);
+        }
+
+        // Tambah jarak untuk cards (potret + kotak skill) agar tidak overlap dengan tombol action
+        currentY += 300; 
 
         // --- SECTION 6: ACTION BUTTONS ---
         const partyBtn = this.add.rectangle(CX - 85, currentY, 150, 40, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
         const partyTxt = this.add.text(CX - 85, currentY, '⚙ Atur Party', { fontSize: '11px', fontStyle: 'bold', color: THEME.TEXT_PRIMARY, fontFamily: 'Outfit' }).setOrigin(0.5);
         partyBtn.on('pointerover', () => partyBtn.setFillStyle(0x334155));
         partyBtn.on('pointerout', () => partyBtn.setFillStyle(THEME.PANEL));
-        partyBtn.on('pointerdown', () => { this.preBattleContainer.destroy(); this.scene.start('LoadingScene', { targetScene: 'PartyScene' }); });
         items.push(partyBtn, partyTxt);
 
         const startBtn = this.add.rectangle(CX + 85, currentY, 150, 40, 0x1a3a2a).setStrokeStyle(2, THEME.HEALTH).setInteractive({ useHandCursor: true });
@@ -331,45 +369,225 @@ export default class QuestScene extends Phaser.Scene {
         startBtn.on('pointerdown', () => this._startBattle(quest));
         items.push(startBtn, startTxt);
 
-        currentY += 20;
+        currentY += 40;
 
         // --- BACKGROUND PANEL ---
-        const topPadding = 40;
+        const topPadding = 30;
         const bottomPadding = 30;
         const totalHeight = (currentY - topY) + topPadding + bottomPadding;
         const panelCenterY = (topY - topPadding) + (totalHeight / 2);
 
         const panel = this.add.rectangle(CX, panelCenterY, W - 30, totalHeight, 0x0d1b2a).setStrokeStyle(2, THEME.AETHER).setInteractive();
-        panel.on('pointerdown', (p, x, y, e) => e.stopPropagation());
 
-        // Insert panel immediately behind content (index 1, right after overlay)
-        items.splice(1, 0, panel);
+        // Insert panel di belakang semua konten
+        items.splice(0, 0, panel);
+
+        // --- GEOMETRY MASK UNTUK SCROLLING ---
+        // Membuat mask agar konten yang di-scroll terpotong rapi di batas panel
+        const panelTop = topY - topPadding;
+        const maskShape = this.make.graphics();
+        maskShape.fillStyle(0xffffff);
+        // Kotak mask seukuran panel background
+        maskShape.fillRect(CX - (W - 30) / 2, panelTop, W - 30, totalHeight);
+        const scrollMask = maskShape.createGeometryMask();
+        scrollContainer.setMask(scrollMask);
 
         // Close button (Top-Right relative to panel)
-        const panelTop = topY - topPadding;
         const panelRight = CX + (W - 30) / 2;
         const closeBtn = this.add.circle(panelRight - 25, panelTop + 25, 14, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
         const closeTxt = this.add.text(panelRight - 25, panelTop + 25, '✕', { fontSize: '12px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
         closeBtn.on('pointerover', () => closeBtn.setFillStyle(0x334155));
         closeBtn.on('pointerout', () => closeBtn.setFillStyle(THEME.PANEL));
-        closeBtn.on('pointerdown', () => this.preBattleContainer.destroy());
         items.push(closeBtn, closeTxt);
 
-        this.preBattleContainer.add(items);
+        scrollContainer.add(items);
+
+        // ============================================================
+        // SCROLLABLE MODAL SYSTEM
+        // ============================================================
+        // Hitung apakah konten melebihi tinggi layar
+        const contentBottom = panelTop + totalHeight;
+        const maxScroll = Math.max(0, contentBottom - H + 20);
+
+        let isDragging = false;
+        let dragStartY = 0;
+        let dragStartContentY = 0;
+
+        const handleDragStart = (pointer, localX, localY, e) => {
+            if (e) e.stopPropagation();
+            isDragging = true;
+            dragStartY = pointer.y;
+            dragStartContentY = scrollContainer.y;
+        };
+
+        overlay.on('pointerdown', handleDragStart);
+        panel.on('pointerdown', handleDragStart);
+
+        this._modalDragMove = (pointer) => {
+            if (!isDragging) return;
+            const dy = pointer.y - dragStartY;
+            let newY = dragStartContentY + dy;
+            // Clamp: tidak boleh scroll ke bawah (newY > 0), dan tidak boleh lebih dari maxScroll ke atas
+            if (newY > 0) newY = 0;
+            if (newY < -maxScroll) newY = -maxScroll;
+            scrollContainer.setY(newY);
+        };
+
+        this._modalDragUp = () => { isDragging = false; };
+
+        this.input.on('pointermove', this._modalDragMove);
+        this.input.on('pointerup', this._modalDragUp);
+
+        // Fungsi untuk cleanup saat modal ditutup
+        const destroyModal = () => {
+            this.input.off('pointermove', this._modalDragMove);
+            this.input.off('pointerup', this._modalDragUp);
+            if (this.preBattleContainer) this.preBattleContainer.destroy();
+            this.preBattleContainer = null;
+        };
+
+        closeBtn.on('pointerdown', destroyModal);
+        partyBtn.on('pointerdown', () => {
+            destroyModal();
+            this.scene.start('LoadingScene', { targetScene: 'PartyScene' });
+        });
     }
 
-    async _fetchPresetPower() {
-        try {
-            const res = await fetch(`${API_BASE}/player/${this.playerId}/party-presets`);
-            const json = await res.json();
-            if (json.status === 'success') {
-                this.presetsData = json.data.presets;
-                const preset = this.presetsData.find(p => p.slot === this.selectedPresetSlot);
-                if (preset && this.presetPowerText && this.presetPowerText.active) {
-                    this.presetPowerText.setText(`⚡ Party Power: ${preset.total_power}${preset.has_data ? '' : ' (Empty)'}`);
+    _renderPresetCards(startY) {
+        if (!this.presetCardsContainer || !this.partyDataLoaded) return;
+
+        // Bersihkan renderan card sebelumnya
+        this.presetCardsContainer.removeAll(true);
+
+        const preset = this.fullPresets.find(p => p.preset_slot === this.selectedPresetSlot);
+        if (!preset) {
+            const txt = this.add.text(CX, startY - 25, 'Preset tidak ditemukan', { fontSize: '12px', color: THEME.TEXT_MUTED }).setOrigin(0.5);
+            this.presetCardsContainer.add(txt);
+            return;
+        }
+
+        const slotInvIds = [
+            preset.main_char_inv_id,
+            preset.char_slot_1_inv_id,
+            preset.char_slot_2_inv_id,
+            preset.char_slot_3_inv_id
+        ].filter(id => id !== null);
+
+        const charsInPreset = slotInvIds.map(invId => this.fullCharacters.find(c => c.inv_id === invId)).filter(c => c);
+
+        // Hitung total power (Simplified, di real game mungkin ada utility khusus)
+        let totalPower = 0;
+        charsInPreset.forEach(c => {
+            const hp = c.mc_base_hp + (c.mc_hp_growth * (c.item_level - 1));
+            const atk = c.mc_base_atk + (c.mc_atk_growth * (c.item_level - 1));
+            const def = c.mc_base_def + (c.mc_def_growth * (c.item_level - 1));
+            totalPower += Math.floor((hp / 10) + (atk * 1.5) + (def * 1.2));
+        });
+
+        const pwrTxt = this.add.text(CX, startY - 25, `⚡ Party Power: ${totalPower}${charsInPreset.length > 0 ? '' : ' (Empty)'}`, { fontSize: '11px', color: '#D4A017', fontStyle: 'bold', fontFamily: 'Outfit' }).setOrigin(0.5);
+        this.presetCardsContainer.add(pwrTxt);
+
+        if (charsInPreset.length === 0) return;
+
+        const cW = 85, gap = 10, total = charsInPreset.length;
+        const totalW = (total * cW) + ((total - 1) * gap);
+        const startX = (W - totalW) / 2 + (cW / 2);
+
+        charsInPreset.forEach((char, i) => {
+            const px = startX + i * (cW + gap);
+            const cardY = startY + (145 / 2); // Center Y of portrait
+
+            // Border color by rarity
+            let rColorInt = THEME.BORDER;
+            let rColorHex = '#ffffff';
+            if (char.mc_rarity === 'SSR') { rColorInt = 0xffd700; rColorHex = '#ffd700'; }
+            else if (char.mc_rarity === 'SR') { rColorInt = 0xc0c0c0; rColorHex = '#c0c0c0'; }
+            else if (char.mc_rarity === 'R') { rColorInt = 0xcd7f32; rColorHex = '#cd7f32'; }
+
+            // Portrait Background
+            const portBg = this.add.rectangle(px, cardY, 85, 145, THEME.PANEL, 0.7);
+            portBg.setStrokeStyle(2, rColorInt);
+            this.presetCardsContainer.add(portBg);
+
+            // Image
+            const portTex = `portrait_${char.mc_id}`;
+            if (this.textures.exists(portTex)) {
+                const img = this.add.image(px, cardY, portTex);
+                const imgW = img.width || 1;
+                img.setScale(85 / imgW);
+                this.presetCardsContainer.add(img);
+            }
+
+            // Element Icon
+            let elementStr = char.mc_element;
+            if (char.mc_id === 1 && preset.weap_grid_1_inv_id) {
+                const mainWeap = this.fullWeapons.find(w => w.inv_id === preset.weap_grid_1_inv_id);
+                if (mainWeap && mainWeap.sa_element) {
+                    elementStr = mainWeap.sa_element;
                 }
             }
-        } catch (e) { console.error('Failed to fetch presets:', e); }
+            const elKey = elementStr ? `element_${elementStr.toLowerCase()}` : '';
+            if (this.textures.exists(elKey)) {
+                const ex = px + 42.5 - 12;
+                const ey = cardY - 72.5 + 12;
+                const elImg = this.add.image(ex, ey, elKey).setDisplaySize(18, 18);
+                const shape = this.make.graphics();
+                shape.fillCircle(ex, ey, 9);
+                elImg.setMask(shape.createGeometryMask());
+                
+                const elBorder = this.add.circle(ex, ey, 9).setStrokeStyle(1, THEME.PANEL);
+                this.presetCardsContainer.add([elImg, elBorder]);
+            }
+
+            // Rarity Text
+            if (char.mc_rarity) {
+                const rarTxt = this.add.text(px - 42.5 + 6, cardY + 72.5 - 5, char.mc_rarity, {
+                    fontSize: '11px', color: rColorHex, fontStyle: 'bold', stroke: '#000000', strokeThickness: 2, fontFamily: 'Outfit'
+                }).setOrigin(0, 1);
+                this.presetCardsContainer.add(rarTxt);
+            }
+
+            // Level
+            const lvlTxt = this.add.text(px, cardY + 72.5 + 10, `Lv ${char.item_level}`, {
+                fontSize: "10px", color: "#FFFFFF", fontStyle: "bold"
+            }).setOrigin(0.5);
+            this.presetCardsContainer.add(lvlTxt);
+
+            // Skills Grid (4 rows)
+            // Untuk karakter biasa, ambil 3 skill pertama (atau yang aktif). Untuk MC, ambil dari preset.mc_skills.
+            let activeSkills = [];
+            if (char.mc_id === 1) {
+                const skillSlots = [1, 2, 3, 4];
+                skillSlots.forEach(s => {
+                    const skRec = preset.mc_skills.find(sk => sk.slot_number === s);
+                    if (skRec) {
+                        const skDef = this.fullMcSkills.find(sk => sk.ms_id === skRec.ms_id);
+                        activeSkills.push(skDef ? skDef.ms_name : 'Unknown');
+                    } else {
+                        activeSkills.push(null);
+                    }
+                });
+            } else {
+                const unlocked = char.skills.filter(s => char.item_level >= s.unlock_level && char.limit_break_level >= s.unlock_limit_break);
+                activeSkills = unlocked.slice(0, 3).map(s => s.ms_name);
+                while (activeSkills.length < 4) activeSkills.push(null);
+            }
+
+            let sy = cardY + 72.5 + 25;
+            for (let r = 0; r < 4; r++) {
+                const skName = activeSkills[r];
+                const skBg = this.add.rectangle(px, sy, 80, 14, 0x1e293b).setStrokeStyle(1, 0x334155);
+                this.presetCardsContainer.add(skBg);
+                if (skName) {
+                    const skTxt = this.add.text(px, sy, skName.substring(0, 12), { fontSize: '8px', color: '#cbd5e1' }).setOrigin(0.5);
+                    this.presetCardsContainer.add(skTxt);
+                } else {
+                    const lckTxt = this.add.text(px, sy, '🔒', { fontSize: '8px', color: '#64748b' }).setOrigin(0.5);
+                    this.presetCardsContainer.add(lckTxt);
+                }
+                sy += 16;
+            }
+        });
     }
 
     async _startBattle(quest) {
@@ -565,144 +783,4 @@ export default class QuestScene extends Phaser.Scene {
         this.resumeContainer.add(items);
     }
 
-    _buildMenuModal() {
-        this.menuContainer = this.add.container(0, 0).setDepth(300).setVisible(false);
-
-        const sysW = this.scale.width;
-        const sysH = this.scale.height;
-        const backdrop = this.add.rectangle(sysW / 2, sysH / 2, sysW, sysH, 0x000000, 0.75).setInteractive();
-        backdrop.on('pointerdown', (pointer, localX, localY, event) => {
-            event.stopPropagation();
-            if (pointer.y > 420) this.toggleMenuModal(false);
-        });
-
-        const panel = this.add.rectangle(CX, 210, W, 420, 0x0a0f1d).setInteractive();
-        panel.setStrokeStyle(1, THEME.BORDER);
-        panel.on('pointerdown', (pointer, localX, localY, event) => event.stopPropagation());
-
-        const header = this.add.text(CX, 30, 'MENU & SETTINGS', { fontSize: '14px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY, letterSpacing: 2 }).setOrigin(0.5);
-        const divider = this.add.rectangle(CX, 60, W, 1, THEME.BORDER);
-
-        const s1Label = this.add.text(CX, 85, 'QUICK NAVIGATION', { fontSize: '9px', fontFamily: 'Outfit', color: THEME.TEXT_SECONDARY, letterSpacing: 1 }).setOrigin(0.5);
-
-        const btnParty = this._createModalRoundBtn(CX - 100, 125, 'PARTY', () => {
-            this.toggleMenuModal(false);
-            this.scene.start('LoadingScene', { targetScene: 'PartyScene' });
-        });
-        const btnQuest = this._createModalRoundBtn(CX, 125, 'QUEST', () => {
-            this.toggleMenuModal(false);
-            this.scene.start('LoadingScene', { targetScene: 'QuestScene' });
-        });
-        const btnGacha = this._createModalRoundBtn(CX + 100, 125, 'GACHA', () => {
-            this.toggleMenuModal(false);
-            this.scene.start('LoadingScene', { targetScene: 'GachaScene' });
-        });
-
-        const s2Label = this.add.text(CX, 185, 'ITEMS & MARKET', { fontSize: '9px', fontFamily: 'Outfit', color: THEME.TEXT_SECONDARY, letterSpacing: 1 }).setOrigin(0.5);
-        const btnInventory = this._createModalRectBtn(CX - 90, 215, 160, 30, 'INVENTORY', () => {
-            this.toggleMenuModal(false);
-            this.scene.start('LoadingScene', { targetScene: 'InventoryScene' });
-        });
-        const btnShop = this._createModalRectBtn(CX + 90, 215, 160, 30, 'SHOP', () => { });
-
-        const s3Label = this.add.text(CX, 270, 'AUDIO SETTINGS', { fontSize: '9px', fontFamily: 'Outfit', color: THEME.TEXT_SECONDARY, letterSpacing: 1 }).setOrigin(0.5);
-
-        this.musicBtn = this._createModalRectBtn(CX - 90, 300, 160, 30, '', () => this.toggleMusic());
-        this.musicTxt = this.add.text(CX - 90, 300, '', { fontSize: '10px', fontStyle: 'bold', fontFamily: 'Outfit' }).setOrigin(0.5);
-
-        this.sfxBtn = this._createModalRectBtn(CX + 90, 300, 160, 30, '', () => this.toggleSfx());
-        this.sfxTxt = this.add.text(CX + 90, 300, '', { fontSize: '10px', fontStyle: 'bold', fontFamily: 'Outfit' }).setOrigin(0.5);
-
-        this.updateAudioButtonVisuals();
-
-        const btnLogout = this._createModalRectBtn(CX, 360, 340, 32, 'LOGOUT', () => {
-            this.showLogoutConfirmation();
-        }, 0x7f1d1d, 0xef4444);
-
-        const closeBtnCircle = this.add.circle(W - 40, 30, 18, THEME.PANEL, THEME.PANEL_ALPHA);
-        closeBtnCircle.setStrokeStyle(1, THEME.BORDER);
-        closeBtnCircle.setInteractive({ useHandCursor: true });
-        const closeBtnText = this.add.text(W - 40, 30, 'CLOSE', { fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
-
-        closeBtnCircle.on('pointerover', () => { closeBtnCircle.setFillStyle(0x334155); closeBtnText.setColor('#ffffff'); });
-        closeBtnCircle.on('pointerout', () => { closeBtnCircle.setFillStyle(THEME.PANEL); closeBtnText.setColor(THEME.TEXT_PRIMARY); });
-        closeBtnCircle.on('pointerdown', () => this.toggleMenuModal(false));
-
-        this.menuContainer.add([
-            backdrop, panel, header, divider,
-            s1Label, btnParty.circle, btnParty.text, btnQuest.circle, btnQuest.text, btnGacha.circle, btnGacha.text,
-            s2Label, btnInventory.rect, btnInventory.text, btnShop.rect, btnShop.text,
-            s3Label, this.musicBtn.rect, this.musicTxt, this.sfxBtn.rect, this.sfxTxt,
-            btnLogout.rect, btnLogout.text, closeBtnCircle, closeBtnText
-        ]);
-
-        this.confirmContainer = this.add.container(0, 0).setDepth(310).setVisible(false);
-        const cBackdrop = this.add.rectangle(sysW / 2, sysH / 2, sysW, sysH, 0x000000, 0.8).setInteractive();
-        cBackdrop.on('pointerdown', (p, x, y, e) => e.stopPropagation());
-
-        const cPanel = this.add.rectangle(CX, H / 2, 300, 150, 0x0d1425).setInteractive();
-        cPanel.setStrokeStyle(2, 0xe74c3c);
-        cPanel.on('pointerdown', (p, x, y, e) => e.stopPropagation());
-
-        const cText = this.add.text(CX, H / 2 - 25, 'Apakah Anda yakin ingin logout?', {
-            fontSize: '12px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY, align: 'center', wordWrap: { width: 260 }
-        }).setOrigin(0.5);
-
-        const btnYesObj = this._createModalRectBtn(CX - 65, H / 2 + 30, 100, 32, 'LOGOUT', () => clearSession(this), 0x7f1d1d, 0xef4444);
-        const btnNoObj = this._createModalRectBtn(CX + 65, H / 2 + 30, 100, 32, 'BATAL', () => this.confirmContainer.setVisible(false), THEME.PANEL, THEME.BORDER);
-
-        this.confirmContainer.add([cBackdrop, cPanel, cText, btnYesObj.rect, btnYesObj.text, btnNoObj.rect, btnNoObj.text]);
-    }
-
-    _createModalRoundBtn(x, y, label, onClick) {
-        const circle = this.add.circle(x, y, 22, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
-        const text = this.add.text(x, y, label, { fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
-        circle.on('pointerover', () => circle.setFillStyle(0x334155));
-        circle.on('pointerout', () => circle.setFillStyle(THEME.PANEL));
-        circle.on('pointerdown', onClick);
-        return { circle, text };
-    }
-
-    _createModalRectBtn(x, y, w, h, label, onClick, bgColor = THEME.PANEL, borderColor = THEME.BORDER) {
-        const rect = this.add.rectangle(x, y, w, h, bgColor).setStrokeStyle(1, borderColor).setInteractive({ useHandCursor: true });
-        const text = this.add.text(x, y, label, { fontSize: '10px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
-        rect.on('pointerover', () => rect.setFillStyle(0x334155));
-        rect.on('pointerout', () => rect.setFillStyle(bgColor));
-        rect.on('pointerdown', onClick);
-        return { rect, text };
-    }
-
-    toggleMenuModal(show) {
-        this.menuContainer.setVisible(show);
-        if (show) this.updateAudioButtonVisuals();
-    }
-
-    toggleMusic() {
-        this.musicOn = !this.musicOn;
-        localStorage.setItem('music_on', this.musicOn);
-        this.updateAudioButtonVisuals();
-        if (window.AetheriaAudioManager) window.AetheriaAudioManager.updateMuteState(this);
-    }
-
-    toggleSfx() {
-        this.sfxOn = !this.sfxOn;
-        localStorage.setItem('sfx_on', this.sfxOn);
-        this.updateAudioButtonVisuals();
-        if (window.AetheriaAudioManager) window.AetheriaAudioManager.updateMuteState(this);
-    }
-
-    updateAudioButtonVisuals() {
-        if (!this.musicBtn || !this.sfxBtn) return;
-        this.musicBtn.rect.setFillStyle(this.musicOn ? 0x0d2a1a : 0x2a0d0d);
-        this.musicBtn.rect.setStrokeStyle(1, this.musicOn ? 0x2ecc71 : 0xe74c3c);
-        this.musicTxt.setText(`MUSIC: ${this.musicOn ? 'ON' : 'OFF'}`).setColor(this.musicOn ? '#a8e6cf' : '#ff8a80');
-
-        this.sfxBtn.rect.setFillStyle(this.sfxOn ? 0x0d2a1a : 0x2a0d0d);
-        this.sfxBtn.rect.setStrokeStyle(1, this.sfxOn ? 0x2ecc71 : 0xe74c3c);
-        this.sfxTxt.setText(`SFX: ${this.sfxOn ? 'ON' : 'OFF'}`).setColor(this.sfxOn ? '#a8e6cf' : '#ff8a80');
-    }
-
-    showLogoutConfirmation() {
-        this.confirmContainer.setVisible(true);
-    }
 }

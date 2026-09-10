@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { THEME } from '../main.js';
 import { checkSession, getPlayerUsername } from '../utils/auth.js';
 import BattleApi from '../services/BattleApi.js';
+import PartyApi from '../services/PartyApi.js';
 
 const W = 480, H = 800, CX = 240, CY = 400;
 
@@ -67,7 +68,7 @@ export default class VictoryScene extends Phaser.Scene {
             repeat: -1
         });
 
-        // Trigger POST /api/battle/result
+        // Trigger POST /api/battle/result and fetch party data
         const payload = {
             bsId: this.bsId,
             playerId: this.playerId,
@@ -76,13 +77,21 @@ export default class VictoryScene extends Phaser.Scene {
             fullPotionsUsed: this.fullPotionsUsed
         };
         
-        BattleApi.saveBattleResult(payload)
-        .then(res => {
+        const raw = localStorage.getItem('aetheria_player');
+        const playerData = raw ? JSON.parse(raw) : {};
+        this.selectedPresetSlot = playerData.selected_preset_slot || 1;
+
+        Promise.all([
+            BattleApi.saveBattleResult(payload),
+            PartyApi.getPresets(this.playerId),
+            PartyApi.getInventory(this.playerId)
+        ])
+        .then(([res, presetsRes, invRes]) => {
             this.loadingText.destroy();
             this.spinCircle.destroy();
 
             if (res.status === "success") {
-                this.renderVictoryData(res.data);
+                this.renderVictoryData(res.data, presetsRes.data, invRes.data);
             } else {
                 this.showError(res.message || "Failed to process battle results.");
             }
@@ -116,9 +125,20 @@ export default class VictoryScene extends Phaser.Scene {
         });
     }
 
-    renderVictoryData(data) {
+    renderVictoryData(data, presets, inventory) {
         const expData = data.exp_data || {};
         const rewards = data.obtained_rewards || [];
+        
+        let mcElement = 'Any';
+        if (presets && inventory && inventory.weapons) {
+            const preset = presets.find(p => p.preset_slot === this.selectedPresetSlot);
+            if (preset && preset.weap_grid_1_inv_id) {
+                const weap = inventory.weapons.find(w => w.inv_id === preset.weap_grid_1_inv_id);
+                if (weap && weap.sa_element) {
+                    mcElement = weap.sa_element;
+                }
+            }
+        }
         
         let cursorY = 160;
 
@@ -190,7 +210,11 @@ export default class VictoryScene extends Phaser.Scene {
             }
             
             // Element Icon (Top Right)
-            const elKey = char.element ? `element_${char.element.toLowerCase()}` : '';
+            let elementStr = char.element;
+            if (char.mc_id === 1 && mcElement) {
+                elementStr = mcElement;
+            }
+            const elKey = elementStr ? `element_${elementStr.toLowerCase()}` : '';
             if (this.textures.exists(elKey)) {
                 const ex = px + 42.5 - 12;
                 const ey = cardY - 72.5 + 12;
