@@ -246,6 +246,30 @@ exports.getMcSkills = async (req, res) => {
             WHERE isc.item_id = 1 AND isc.item_type = 'Character'
             ORDER BY isc.unlock_level ASC, ms.ms_id ASC
         `);
+
+        if (skills.length > 0) {
+            const skillIds = skills.map(s => s.ms_id);
+            const [effects] = await db.query(`
+                 SELECT sse.ms_id, mse.mse_name AS effect_name, mse.mse_type AS effect_type, mse.modifier_target AS target_stat, mse.modifier_value AS value, mse.mse_duration AS duration, sse.effect_target
+                 FROM skill_status_effects sse
+                 JOIN master_status_effects mse ON sse.mse_id = mse.mse_id
+                 WHERE sse.ms_id IN (?)
+            `, [skillIds]);
+
+            const effectMap = {};
+            for (const e of effects) {
+                if (!effectMap[e.ms_id]) effectMap[e.ms_id] = [];
+                effectMap[e.ms_id].push({
+                    effect_name: e.effect_name, effect_type: e.effect_type, target_stat: e.target_stat,
+                    value: e.value, duration: e.duration, effect_target: e.effect_target
+                });
+            }
+
+            skills.forEach(s => {
+                s.status_effects = effectMap[s.ms_id] || [];
+            });
+        }
+
         return res.status(200).json({
             status: 'success',
             data: skills
@@ -382,6 +406,29 @@ exports.savePartyPreset = async (req, res) => {
         }
         console.error('[savePartyPreset] Error:', error);
         return res.status(500).json({ status: 'error', message: 'Gagal menyimpan party preset.' });
+    }
+};
+
+exports.getLimitBreakCost = async (req, res) => {
+    const { mcId, targetLb } = req.params;
+    let conn;
+    try {
+        conn = await db.getConnection();
+        const [costRows] = await conn.query(
+            "SELECT c.mat_id, c.mat_qty, c.gold_cost, m.mat_name FROM char_lb_costs c LEFT JOIN master_materials m ON c.mat_id = m.mat_id WHERE c.mc_id = ? AND c.target_lb_level = ?",
+            [mcId, targetLb]
+        );
+
+        if (costRows.length === 0) {
+            return res.status(404).json({ status: 'error', message: 'LB Cost not found' });
+        }
+
+        return res.status(200).json({ status: 'success', data: costRows[0] });
+    } catch (error) {
+        console.error('[getLimitBreakCost] Error:', error);
+        return res.status(500).json({ status: 'error', message: 'Internal Server Error' });
+    } finally {
+        if (conn) conn.release();
     }
 };
 
@@ -555,9 +602,11 @@ exports.upgradeItem = async (req, res) => {
 
         // Get max level
         let maxLevel = 1;
+        let sysItemType = itemType;
         if (itemType === 'Character') {
             const [mcRows] = await conn.query('SELECT mc_rarity FROM master_characters WHERE mc_id = ?', [invItem.master_item_id]);
             maxLevel = LevelingSystem.getCharMaxLevel(invItem.master_item_id, mcRows[0].mc_rarity, invItem.limit_break_level);
+            if (invItem.master_item_id === 1) sysItemType = 'MC';
         } else {
             const [mwRows] = await conn.query('SELECT mw_rarity FROM master_weapons WHERE mw_id = ?', [invItem.master_item_id]);
             maxLevel = LevelingSystem.getWeaponMaxLevel(mwRows[0].mw_rarity);
@@ -571,7 +620,7 @@ exports.upgradeItem = async (req, res) => {
 
         // Process EXP
         const newTotalExp = invItem.item_exp + totalExpGain;
-        const newLevel = LevelingSystem.calculateCurrentLevel(newTotalExp, maxLevel, itemType);
+        const newLevel = LevelingSystem.calculateCurrentLevel(newTotalExp, maxLevel, sysItemType);
 
         // Deduct
         await conn.query('UPDATE players SET gold = gold - ? WHERE player_id = ?', [totalCost, playerId]);

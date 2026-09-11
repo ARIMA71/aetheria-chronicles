@@ -115,23 +115,30 @@ export default class PartyScene extends Phaser.Scene {
             this.load.once('complete', () => {
                 this.loadingText.destroy();
                 this.renderUI();
-                if (this.targetData && this.targetData.openMcSkillManager) {
-                    this.showMcSkillsManagerModal();
-                }
-                if (this.targetData && this.targetData.openWeaponModal) {
-                    this.showItemSelectionModal('Weapon', this.targetData.openWeaponModal);
-                }
+                this.checkTargetDataActions();
             });
             this.load.start();
         } else {
             this.loadingText.destroy();
             this.renderUI();
-            if (this.targetData && this.targetData.openMcSkillManager) {
-                this.showMcSkillsManagerModal();
-            }
-            if (this.targetData && this.targetData.openWeaponModal) {
-                this.showItemSelectionModal('Weapon', this.targetData.openWeaponModal);
-            }
+            this.checkTargetDataActions();
+        }
+    }
+
+    checkTargetDataActions() {
+        if (this.targetData && this.targetData.openMcSkillManager) {
+            this.showMcSkillsManagerModal();
+        }
+        if (this.targetData && this.targetData.openWeaponModal) {
+            this.showItemSelectionModal('Weapon', this.targetData.openWeaponModal);
+        }
+        if (this.targetData && this.targetData.weaponChanged) {
+            this.showWeaponChangedSuccessModal(this.targetData.weaponChanged);
+            delete this.targetData.weaponChanged;
+        }
+        if (this.targetData && this.targetData.characterChanged) {
+            this.showCharacterChangedSuccessModal(this.targetData.characterChanged);
+            delete this.targetData.characterChanged;
         }
     }
 
@@ -188,10 +195,10 @@ export default class PartyScene extends Phaser.Scene {
 
         const partyPower = Math.floor(charHp + weapHp) + Math.floor(charAtk + weapAtk);
 
-        return { 
-            weapHp: Math.floor(weapHp), 
+        return {
+            weapHp: Math.floor(weapHp),
             weapAtk: Math.floor(weapAtk),
-            partyPower 
+            partyPower
         };
     }
 
@@ -263,7 +270,7 @@ export default class PartyScene extends Phaser.Scene {
 
         // Display Party Power
         this.uiGroup.add(this.add.text(CX, partyPowerY, `PARTY POWER: ${stats.partyPower}`, { fontSize: '16px', color: '#ffffff', fontStyle: 'bold', fontFamily: 'Outfit' }).setOrigin(0.5));
-        
+
         // --- Bottom Actions ---
         const autoZone = this.add.zone(CX, autoY, 200, 40).setInteractive({ useHandCursor: true });
         this.drawRoundedBox(CX, autoY, 200, 40, 8, THEME.PANEL, THEME.AETHER);
@@ -274,11 +281,11 @@ export default class PartyScene extends Phaser.Scene {
     renderMC(preset, stats) {
         const invId = preset.main_char_inv_id;
         const char = this.characters.find(c => c.inv_id === invId);
-        
+
         // Determine MC Element from Main Weapon, default to Fire
         const mainWeap = this.weapons.find(w => w.inv_id === preset.weap_grid_1_inv_id);
         const mcElement = mainWeap && mainWeap.mw_element ? mainWeap.mw_element : 'Fire';
-        
+
         const strokeColor = char ? this.getElementColor(mcElement) : COLOR_EMPTY;
         const cy = 178; // Shifted down further by 6px
 
@@ -322,7 +329,7 @@ export default class PartyScene extends Phaser.Scene {
                 const shape = this.make.graphics();
                 shape.fillCircle(ex, ey, 8);
                 elImg.setMask(shape.createGeometryMask());
-                
+
                 const elBorder = this.add.circle(ex, ey, 8).setStrokeStyle(1, THEME.PANEL);
                 this.uiGroup.addMultiple([elImg, elBorder]);
             }
@@ -349,20 +356,25 @@ export default class PartyScene extends Phaser.Scene {
 
             // Skills Rendering
             this.uiGroup.add(this.add.text(228, cy - 8, 'SKILLS', { fontSize: '9px', color: THEME.TEXT_MUTED, fontStyle: 'bold' }).setOrigin(0.5));
-            
+
             // 4 skill placeholders (no SA gap)
             const presetSkills = preset.mc_skills || [];
             for (let i = 0; i < 4; i++) {
                 const sx = 168 + (i * 40);
                 const sy = cy + 18;
-                
+
                 const skill = presetSkills[i];
                 const sBox = this.add.graphics().fillStyle(THEME.AETHER, 1).fillRoundedRect(sx - 18, sy - 18, 36, 36, 4);
                 const sZone = this.add.zone(sx, sy, 36, 36).setInteractive({ useHandCursor: true });
-                sZone.on('pointerdown', () => this.showMcSkillsManagerModal());
-                
+                sZone.on('pointerdown', () => {
+                    if (skill) {
+                        const skillData = this.mcSkills.find(s => s.ms_id === skill.ms_id);
+                        if (skillData) this.showSkillReadOnlyModal(skillData, false);
+                    }
+                });
+
                 this.uiGroup.addMultiple([sBox, sZone]);
-                
+
                 if (skill) {
                     const init = skill.ms_name ? skill.ms_name.substring(0, 2).toUpperCase() : 'SK';
                     this.uiGroup.add(this.add.text(sx, sy, init, { fontSize: '11px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5));
@@ -376,7 +388,7 @@ export default class PartyScene extends Phaser.Scene {
         const btnZone = this.add.zone(410, cy - 30, 80, 22).setInteractive({ useHandCursor: true });
         this.drawRoundedBox(410, cy - 30, 80, 22, 4, 0x458B74, null); // HEALTH color
         btnZone.on('pointerdown', () => this.showMcSkillsManagerModal());
-        
+
         this.uiGroup.addMultiple([btnZone, this.add.text(410, cy - 30, 'CHANGE SKILLS', { fontSize: '9px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5)]);
     }
 
@@ -434,7 +446,20 @@ export default class PartyScene extends Phaser.Scene {
 
             portZone.on('pointerdown', () => {
                 this.tweens.add({ targets: portZone, scale: 0.9, yoyo: true, duration: 100 });
-                this.showItemSelectionModal('Character', slot.id);
+                if (char) {
+                    const preset = this.localPresets[this.currentSlot - 1];
+                    const partyState = {
+                        currentSlot: this.currentSlot,
+                        currentTab: this.currentTab,
+                        partySlotId: slot.id,
+                        preset: preset,
+                        weapAtk: stats ? stats.weapAtk : 0,
+                        weapHp: stats ? stats.weapHp : 0
+                    };
+                    this.scene.start('LoadingScene', { targetScene: 'CharacterDetailScene', targetData: { item: char, isWeapon: false, fromParty: true, partyState } });
+                } else {
+                    this.showItemSelectionModal('Character', slot.id);
+                }
             });
             this.uiGroup.add(portZone);
 
@@ -449,7 +474,7 @@ export default class PartyScene extends Phaser.Scene {
                     const shape = this.make.graphics();
                     shape.fillCircle(ex, ey, 8);
                     elImg.setMask(shape.createGeometryMask());
-                    
+
                     const elBorder = this.add.circle(ex, ey, 8).setStrokeStyle(1, THEME.PANEL);
                     this.uiGroup.addMultiple([elImg, elBorder]);
                 }
@@ -459,22 +484,6 @@ export default class PartyScene extends Phaser.Scene {
                 this.uiGroup.add(this.add.text(23, slot.y + 47, char.mc_rarity, {
                     fontSize: '11px', color: rColorHex, fontStyle: 'bold', stroke: '#000000', strokeThickness: 2, fontFamily: 'Outfit'
                 }).setOrigin(0, 1));
-            }
-
-            // INFO Button (!) at top right
-            if (char) {
-                const infoCircle = this.add.circle(440, slot.y - 30, 12, THEME.PANEL).setStrokeStyle(1, THEME.BORDER);
-                const infoZone = this.add.zone(440, slot.y - 30, 24, 24).setInteractive({ useHandCursor: true });
-                const infoTxt = this.add.text(440, slot.y - 30, '!', { fontSize: '14px', color: THEME.TEXT_MUTED, fontStyle: 'bold' }).setOrigin(0.5);
-
-                infoZone.on('pointerover', () => { infoCircle.setFillStyle(0x334155); infoTxt.setColor('#fff'); });
-                infoZone.on('pointerout', () => { infoCircle.setFillStyle(THEME.PANEL); infoTxt.setColor(THEME.TEXT_MUTED); });
-                infoZone.on('pointerdown', () => {
-                    const partyState = { currentSlot: this.currentSlot, currentTab: this.currentTab };
-                    this.scene.start('LoadingScene', { targetScene: 'CharacterDetailScene', targetData: { item: char, isWeapon: false, fromParty: true, partyState } });
-                });
-
-                this.uiGroup.addMultiple([infoCircle, infoTxt, infoZone]);
             }
 
             if (char) {
@@ -545,7 +554,7 @@ export default class PartyScene extends Phaser.Scene {
         if (stats) {
             this.drawRoundedBox(CX - 80, 325, 140, 26, 6, THEME.PANEL, null);
             this.uiGroup.add(this.add.text(CX - 80, 325, `TOTAL ATK: ${stats.weapAtk}`, { fontSize: '13px', color: '#ef4444', fontStyle: 'bold', fontFamily: 'Outfit' }).setOrigin(0.5));
-            
+
             this.drawRoundedBox(CX + 80, 325, 140, 26, 6, THEME.PANEL, null);
             this.uiGroup.add(this.add.text(CX + 80, 325, `TOTAL HP: ${stats.weapHp}`, { fontSize: '13px', color: '#4ade80', fontStyle: 'bold', fontFamily: 'Outfit' }).setOrigin(0.5));
         }
@@ -582,7 +591,7 @@ export default class PartyScene extends Phaser.Scene {
                 const artH = slot.h * 0.45;
                 const artBg = this.add.graphics();
                 artBg.fillStyle(THEME.BG, 1);
-                
+
                 let rColorNum = 0xffffff;
                 let rColorStr = '#ffffff';
                 if (weap.mw_rarity === 'SSR') { rColorNum = 0xffd700; rColorStr = '#ffd700'; }
@@ -606,7 +615,7 @@ export default class PartyScene extends Phaser.Scene {
                     const shape = this.make.graphics();
                     shape.fillCircle(slot.x + slot.w / 2 - 14, slot.y - slot.h / 2 + 14, 7);
                     iconImg.setMask(shape.createGeometryMask());
-                    
+
                     const strokeCircle = this.add.circle(slot.x + slot.w / 2 - 14, slot.y - slot.h / 2 + 14, 7).setStrokeStyle(1, THEME.PANEL);
                     this.uiGroup.addMultiple([iconImg, strokeCircle]);
                 } else {
@@ -729,110 +738,281 @@ export default class PartyScene extends Phaser.Scene {
 
     showMcSkillsManagerModal() {
         this.modalGroup.clear(true, true);
-        const bg = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.9).setInteractive();
-        this.modalGroup.add(bg);
+        const overlay = this.add.rectangle(0, 0, W, H, 0x000000, 0.85).setOrigin(0).setInteractive();
+        this.modalGroup.add(overlay);
 
-        this.modalGroup.add(this.add.text(CX, 100, 'MC SKILLS MANAGER', { fontSize: '18px', color: '#fff', fontStyle: 'bold', fontFamily: 'Outfit' }).setOrigin(0.5));
+        const panelTop = 110;
+        const panelBottom = 720;
+        const panelHeight = panelBottom - panelTop;
+        const panelCenterY = panelTop + (panelHeight / 2);
+        const panelWidth = W - 30;
 
-        const closeBtn = this.add.text(W - 40, 100, 'X', { fontSize: '20px', color: '#fff' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+        const panel = this.add.rectangle(CX, panelCenterY, panelWidth, panelHeight, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive();
+        this.modalGroup.add(panel);
+
+        this.modalGroup.add(this.add.text(CX, panelTop + 25, 'MC SKILLS MANAGER', { fontSize: '16px', color: '#fff', fontStyle: 'bold', fontFamily: 'Outfit', letterSpacing: 1 }).setOrigin(0.5));
+        this.modalGroup.add(this.add.rectangle(CX, panelTop + 45, panelWidth - 40, 1, 0x334155));
+
+        const closeBtn = this.add.circle(CX + (panelWidth / 2) - 25, panelTop + 25, 14, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
+        const closeTxt = this.add.text(CX + (panelWidth / 2) - 25, panelTop + 25, '✕', { fontSize: '12px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
         closeBtn.on('pointerdown', () => { this.modalGroup.clear(true, true); this.renderUI(); });
-        this.modalGroup.add(closeBtn);
+        this.modalGroup.addMultiple([closeBtn, closeTxt]);
 
-        this.modalGroup.add(this.add.text(CX, 125, `Saved to Preset ${this.currentSlot}`, { fontSize: '11px', color: THEME.TEXT_MUTED, fontStyle: 'italic' }).setOrigin(0.5));
+        this.modalGroup.add(this.add.text(CX, panelTop + 65, `Saved to Preset ${this.currentSlot}`, { fontSize: '11px', color: THEME.TEXT_MUTED, fontStyle: 'bold' }).setOrigin(0.5));
 
         const preset = this.localPresets[this.currentSlot - 1];
 
         for (let i = 0; i < 4; i++) {
-            const y = 180 + i * 90;
+            const y = panelTop + 140 + i * 125;
             const skillObj = preset.mc_skills && preset.mc_skills[i];
             const skillData = skillObj ? this.mcSkills.find(s => s.ms_id === skillObj.ms_id) : null;
 
-            const card = this.add.graphics().fillStyle(THEME.PANEL, 1).lineStyle(1, THEME.BORDER).fillRoundedRect(40, y - 35, W - 80, 70, 8).strokeRoundedRect(40, y - 35, W - 80, 70, 8);
-            const zone = this.add.zone(CX, y, W - 80, 70).setInteractive({ useHandCursor: true });
+            // Card Container (Blends with panel, only outline)
+            const card = this.add.graphics().fillStyle(THEME.PANEL, 1).lineStyle(1, THEME.BORDER).fillRoundedRect(35, y - 50, W - 70, 100, 8).strokeRoundedRect(35, y - 50, W - 70, 100, 8);
+            const zone = this.add.zone(CX, y, W - 70, 100).setInteractive({ useHandCursor: true });
 
             zone.on('pointerdown', () => this.showMcSkillSelectionList(i));
             this.modalGroup.addMultiple([card, zone]);
 
-            this.modalGroup.add(this.add.text(60, y, `Slot ${i + 1}`, { fontSize: '14px', color: THEME.TEXT_MUTED, fontStyle: 'bold' }).setOrigin(0, 0.5));
+            // Slot Badge (Top-left protruding)
+            const slotTextBg = this.add.graphics().fillStyle(THEME.PANEL, 1).lineStyle(1, THEME.BORDER).fillRoundedRect(40, y - 58, 40, 16, 4).strokeRoundedRect(40, y - 58, 40, 16, 4);
+            this.modalGroup.add(slotTextBg);
+            this.modalGroup.add(this.add.text(60, y - 50, `Slot ${i + 1}`, { fontSize: '10px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5));
 
             if (skillData) {
-                this.modalGroup.add(this.add.text(130, y - 10, skillData.ms_name, { fontSize: '14px', color: THEME.GOLD, fontStyle: 'bold' }).setOrigin(0, 0.5));
-                this.modalGroup.add(this.add.text(130, y + 10, `CD: ${skillData.ms_cooldown}T | ${skillData.ms_action_type}`, { fontSize: '11px', color: THEME.TEXT_PRIMARY }).setOrigin(0, 0.5));
+                let actionTypeText = skillData.ms_action_type.toUpperCase();
+                let typeColor = '#fff';
+                let typeHex = 0xffffff;
 
-                // Fast unequip btn
-                const unx = W - 70;
-                const unBox = this.add.graphics().fillStyle(THEME.DANGER, 1).fillRoundedRect(unx - 25, y - 15, 50, 30, 6);
-                const unZone = this.add.zone(unx, y, 50, 30).setInteractive({ useHandCursor: true });
+                if (skillData.ms_action_type === 'Support') {
+                    const hasBuff = skillData.status_effects && skillData.status_effects.some(e => e.effect_type === 'Buff');
+                    const hasDebuff = skillData.status_effects && skillData.status_effects.some(e => e.effect_type === 'Debuff');
+
+                    if (hasBuff && !hasDebuff) {
+                        actionTypeText = 'BUFF';
+                        typeColor = '#facc15'; typeHex = 0xfacc15;
+                    } else if (hasDebuff && !hasBuff) {
+                        actionTypeText = 'DEBUFF';
+                        typeColor = '#3b82f6'; typeHex = 0x3b82f6;
+                    } else if (hasBuff && hasDebuff) {
+                        actionTypeText = 'SUPPORT';
+                        typeColor = '#facc15'; typeHex = 0xfacc15;
+                    } else {
+                        // Fallback if no status effects linked
+                        if (['All_Allies', 'Single_Ally', 'Self'].includes(skillData.ms_target_type)) {
+                            actionTypeText = 'BUFF';
+                            typeColor = '#facc15'; typeHex = 0xfacc15;
+                        } else {
+                            actionTypeText = 'DEBUFF';
+                            typeColor = '#3b82f6'; typeHex = 0x3b82f6;
+                        }
+                    }
+                } else if (skillData.ms_action_type === 'Damage') {
+                    typeColor = '#ef4444'; typeHex = 0xef4444;
+                } else if (skillData.ms_action_type === 'Heal' || skillData.ms_action_type === 'Revive' || skillData.ms_action_type === 'Cleanse') {
+                    typeColor = '#4ade80'; typeHex = 0x4ade80;
+                }
+
+                // Skill Icon 1:1 on the left with colored stroke
+                const iconBox = this.add.graphics().fillStyle(0x334155, 1).lineStyle(2, typeHex).fillRoundedRect(45, y - 25, 50, 50, 8).strokeRoundedRect(45, y - 25, 50, 50, 8);
+                this.modalGroup.add(iconBox);
+                const init = skillData.ms_name.substring(0, 2).toUpperCase();
+                this.modalGroup.add(this.add.text(70, y, init, { fontSize: '16px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5));
+
+                // Action Type Text (Small, above name)
+                this.modalGroup.add(this.add.text(110, y - 26, actionTypeText, { fontSize: '9px', color: typeColor, fontStyle: 'bold' }).setOrigin(0, 0.5));
+
+                // Skill Name (White with darker rounded background)
+                const tempName = this.add.text(0, 0, skillData.ms_name, { fontSize: '14px', color: '#fff', fontStyle: 'bold' });
+                const th = tempName.height;
+                tempName.destroy();
+
+                // const nameBg = this.add.graphics().fillStyle(THEME.BG, 1).fillRoundedRect(106, y - 10 - (th/2) - 2, 230, th + 4, 4);
+                // this.modalGroup.add(nameBg);
+
+                this.modalGroup.add(this.add.text(110, y - 10, skillData.ms_name, { fontSize: '14px', color: '#fff', fontStyle: 'bold' }).setOrigin(0, 0.5));
+
+                // Description (Word Wrap)
+                this.modalGroup.add(this.add.text(110, y + 4, skillData.ms_desc, { fontSize: '13px', color: '#ccc', fontStyle: 'italic', wordWrap: { width: 220 } }).setOrigin(0, 0));
+
+                // CD & Duration (White)
+                let durText = '';
+                if (skillData.status_effects && skillData.status_effects.length > 0) {
+                    const maxDur = Math.max(...skillData.status_effects.map(e => e.duration || 0));
+                    if (maxDur > 0) durText = ` | Duration: ${maxDur}T`;
+                }
+                this.modalGroup.add(this.add.text(110, y + 38, `CD: ${skillData.ms_cooldown}T${durText}`, { fontSize: '9px', color: '#fff' }).setOrigin(0, 0.5));
+
+                // Clear Button
+                const unx = W - 75;
+                const unBox = this.add.graphics().fillStyle(0xb91c1c, 1).fillRoundedRect(unx - 25, y - 14, 50, 28, 6);
+                const unZone = this.add.zone(unx, y, 50, 28).setInteractive({ useHandCursor: true });
                 unZone.on('pointerdown', (ptr, lx, ly, ev) => {
                     ev.stopPropagation();
-                    preset.mc_skills[i] = null; // Fixed logic to preserve array structure
+                    preset.mc_skills[i] = null;
                     this.saveCurrentPreset();
-                    this.showMcSkillsManagerModal(); // refresh
+                    this.showMcSkillsManagerModal();
                 });
                 this.modalGroup.addMultiple([unBox, unZone, this.add.text(unx, y, 'Clear', { fontSize: '11px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5)]);
             } else {
-                this.modalGroup.add(this.add.text(130, y, 'Tap to assign skill...', { fontSize: '12px', color: THEME.TEXT_MUTED, fontStyle: 'italic' }).setOrigin(0, 0.5));
+                const iconBox = this.add.graphics().fillStyle(THEME.PANEL, 1).lineStyle(1, THEME.BORDER).fillRoundedRect(45, y - 25, 50, 50, 8).strokeRoundedRect(45, y - 25, 50, 50, 8);
+                this.modalGroup.add(iconBox);
+                this.modalGroup.add(this.add.text(70, y, '+', { fontSize: '20px', color: THEME.TEXT_MUTED }).setOrigin(0.5));
+
+                this.modalGroup.add(this.add.text(110, y, 'Tap to assign skill...', { fontSize: '12px', color: '#fff', fontStyle: 'italic' }).setOrigin(0, 0.5));
             }
         }
     }
 
     showMcSkillSelectionList(slotIndex) {
-        // Overlay on top of manager
-        const listGroup = this.add.group();
-        const bg = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.95).setInteractive();
-        listGroup.add(bg);
+        if (this.listGroup) this.listGroup.clear(true, true);
+        this.listGroup = this.add.group();
 
-        listGroup.add(this.add.text(CX, 50, `Select Skill for Slot ${slotIndex + 1}`, { fontSize: '16px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5));
+        const bg = this.add.rectangle(0, 0, W, H, 0x000000, 0.95).setOrigin(0).setInteractive();
+        this.listGroup.add(bg);
 
-        const closeBtn = this.add.text(W - 40, 50, 'Back', { fontSize: '14px', color: '#fff' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-        closeBtn.on('pointerdown', () => { listGroup.clear(true, true); });
-        listGroup.add(closeBtn);
+        const panelTop = 110;
+        const panelBottom = 720;
+        const panelHeight = panelBottom - panelTop;
+        const panelWidth = W - 30;
 
-        let y = 100;
+        const panel = this.add.rectangle(CX, panelTop + panelHeight / 2, panelWidth, panelHeight, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive();
+        this.listGroup.add(panel);
 
-        // Filter out already equipped skills to avoid duplicates
+        this.listGroup.add(this.add.text(CX, panelTop + 25, `SELECT SKILL FOR SLOT ${slotIndex + 1}`, { fontSize: '16px', color: '#fff', fontStyle: 'bold', fontFamily: 'Outfit', letterSpacing: 1 }).setOrigin(0.5));
+        this.listGroup.add(this.add.rectangle(CX, panelTop + 45, panelWidth - 40, 1, 0x334155));
+
+        const closeBtn = this.add.circle(CX + (panelWidth / 2) - 35, panelTop + 25, 14, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
+        const closeTxt = this.add.text(CX + (panelWidth / 2) - 35, panelTop + 25, '✕', { fontSize: '12px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
+        closeBtn.on('pointerdown', () => { this.listGroup.clear(true, true); });
+        this.listGroup.addMultiple([closeBtn, closeTxt]);
+
         const preset = this.localPresets[this.currentSlot - 1];
-        const equippedIds = (preset.mc_skills || []).map(s => s ? s.ms_id : null).filter(id => id);
+        if (!preset.mc_skills) preset.mc_skills = [null, null, null, null];
 
-        const availableSkills = this.mcSkills.filter(s => !equippedIds.includes(s.ms_id));
+        const currentSlotSkillId = preset.mc_skills[slotIndex] ? preset.mc_skills[slotIndex].ms_id : null;
+        
+        // Exclude the skill currently equipped in THIS slot
+        const availableSkills = this.mcSkills.filter(s => s.ms_id !== currentSlotSkillId);
 
         const mcInvId = preset.main_char_inv_id;
         const mcChar = this.characters.find(c => c.inv_id === mcInvId);
         const mcLevel = mcChar ? mcChar.item_level : 1;
         const mcLb = mcChar ? mcChar.limit_break_level : 0;
 
-        availableSkills.slice(0, 8).forEach(skill => {
-            const isLocked = (mcLevel < skill.unlock_level) || (mcLb < skill.unlock_limit_break);
+        const itemsPerPage = 4;
+        const totalPages = Math.ceil(availableSkills.length / itemsPerPage);
+        if (!this.mcSkillSelectPage || this.mcSkillSelectPage > totalPages) this.mcSkillSelectPage = 1;
 
-            const cardColor = isLocked ? 0x222222 : THEME.PANEL;
-            const card = this.add.graphics().fillStyle(cardColor, 1).fillRoundedRect(30, y - 30, W - 60, 60, 8);
-            const zone = this.add.zone(CX, y, W - 60, 60).setInteractive({ useHandCursor: true });
+        const startIndex = (this.mcSkillSelectPage - 1) * itemsPerPage;
+        const pagedSkills = availableSkills.slice(startIndex, startIndex + itemsPerPage);
+
+        pagedSkills.forEach((skillData, i) => {
+            const y = panelTop + 115 + i * 125;
+            const isLocked = (mcLevel < skillData.unlock_level) || (mcLb < skillData.unlock_limit_break);
+
+            const otherEquippedSlot = preset.mc_skills.findIndex((s, idx) => s && s.ms_id === skillData.ms_id && idx !== slotIndex);
+            const isEquippedElsewhere = otherEquippedSlot !== -1;
+
+            const cardColor = isLocked ? 0x0f172a : THEME.PANEL;
+            const cardAlpha = isLocked ? 0.6 : 1;
+
+            const card = this.add.graphics().fillStyle(cardColor, cardAlpha).lineStyle(1, THEME.BORDER).fillRoundedRect(35, y - 50, W - 70, 100, 8).strokeRoundedRect(35, y - 50, W - 70, 100, 8);
+            const zone = this.add.zone(CX, y, W - 70, 100).setInteractive({ useHandCursor: true });
 
             zone.on('pointerdown', () => {
                 if (isLocked) {
-                    this.showSkillReadOnlyModal(skill, isLocked);
+                    this.showSkillReadOnlyModal(skillData, isLocked);
                 } else {
-                    if (!preset.mc_skills) preset.mc_skills = [];
-                    preset.mc_skills[slotIndex] = { ms_id: skill.ms_id, slot_number: slotIndex + 1 };
+                    if (isEquippedElsewhere) {
+                        // Swap logic
+                        const temp = preset.mc_skills[slotIndex];
+                        preset.mc_skills[slotIndex] = preset.mc_skills[otherEquippedSlot];
+                        preset.mc_skills[otherEquippedSlot] = temp;
+                    } else {
+                        preset.mc_skills[slotIndex] = { ms_id: skillData.ms_id, slot_number: slotIndex + 1 };
+                    }
                     this.saveCurrentPreset();
-                    listGroup.clear(true, true);
-                    this.showMcSkillsManagerModal(); // return and refresh manager
+                    this.listGroup.clear(true, true);
+                    this.modalGroup.clear(true, true);
+                    this.renderUI();
                 }
             });
+            this.listGroup.addMultiple([card, zone]);
 
-            listGroup.addMultiple([card, zone]);
+            let actionTypeText = skillData.ms_action_type.toUpperCase();
+            let typeColor = '#fff';
+            let typeHex = 0xffffff;
 
-            if (isLocked) {
-                listGroup.add(this.add.text(45, y - 10, `🔒 ${skill.ms_name}`, { fontSize: '14px', color: THEME.TEXT_MUTED, fontStyle: 'bold' }).setOrigin(0, 0.5));
-                listGroup.add(this.add.text(45, y + 10, `Requires Lv ${skill.unlock_level} / LB ${skill.unlock_limit_break}`, { fontSize: '11px', color: THEME.DANGER }).setOrigin(0, 0.5));
-            } else {
-                listGroup.add(this.add.text(45, y - 10, skill.ms_name, { fontSize: '14px', color: THEME.GOLD, fontStyle: 'bold' }).setOrigin(0, 0.5));
-                listGroup.add(this.add.text(45, y + 10, `${skill.ms_category} | ${skill.ms_action_type}`, { fontSize: '11px', color: '#ccc' }).setOrigin(0, 0.5));
+            if (skillData.ms_action_type === 'Support') {
+                const hasBuff = skillData.status_effects && skillData.status_effects.some(e => e.effect_type === 'Buff');
+                const hasDebuff = skillData.status_effects && skillData.status_effects.some(e => e.effect_type === 'Debuff');
+
+                if (hasBuff && !hasDebuff) { actionTypeText = 'BUFF'; typeColor = '#facc15'; typeHex = 0xfacc15; }
+                else if (hasDebuff && !hasBuff) { actionTypeText = 'DEBUFF'; typeColor = '#3b82f6'; typeHex = 0x3b82f6; }
+                else if (hasBuff && hasDebuff) { actionTypeText = 'SUPPORT'; typeColor = '#facc15'; typeHex = 0xfacc15; }
+                else {
+                    if (['All_Allies', 'Single_Ally', 'Self'].includes(skillData.ms_target_type)) { actionTypeText = 'BUFF'; typeColor = '#facc15'; typeHex = 0xfacc15; }
+                    else { actionTypeText = 'DEBUFF'; typeColor = '#3b82f6'; typeHex = 0x3b82f6; }
+                }
+            } else if (skillData.ms_action_type === 'Damage') { typeColor = '#ef4444'; typeHex = 0xef4444; }
+            else if (skillData.ms_action_type === 'Heal' || skillData.ms_action_type === 'Revive' || skillData.ms_action_type === 'Cleanse') { typeColor = '#4ade80'; typeHex = 0x4ade80; }
+
+            if (isLocked) { typeHex = 0x475569; typeColor = '#94a3b8'; }
+
+            const iconBox = this.add.graphics().fillStyle(0x334155, cardAlpha).lineStyle(2, typeHex).fillRoundedRect(45, y - 25, 50, 50, 8).strokeRoundedRect(45, y - 25, 50, 50, 8);
+            this.listGroup.add(iconBox);
+            const init = skillData.ms_name.substring(0, 2).toUpperCase();
+            this.listGroup.add(this.add.text(70, y, isLocked ? '🔒' : init, { fontSize: isLocked ? '24px' : '16px', color: isLocked ? '#94a3b8' : '#fff', fontStyle: 'bold' }).setOrigin(0.5));
+
+            this.listGroup.add(this.add.text(110, y - 26, actionTypeText, { fontSize: '9px', color: typeColor, fontStyle: 'bold' }).setOrigin(0, 0.5));
+
+
+            this.listGroup.add(this.add.text(110, y - 10, skillData.ms_name, { fontSize: '14px', color: isLocked ? '#94a3b8' : '#fff', fontStyle: 'bold' }).setOrigin(0, 0.5));
+
+            this.listGroup.add(this.add.text(110, y + 4, skillData.ms_desc, { fontSize: '13px', color: isLocked ? '#64748b' : '#ccc', fontStyle: 'italic', wordWrap: { width: 220 } }).setOrigin(0, 0));
+
+            let durText = '';
+            if (skillData.status_effects && skillData.status_effects.length > 0) {
+                const maxDur = Math.max(...skillData.status_effects.map(e => e.duration || 0));
+                if (maxDur > 0) durText = ` | Dur: ${maxDur}T`;
             }
+            this.listGroup.add(this.add.text(110, y + 38, `CD: ${skillData.ms_cooldown}T${durText}`, { fontSize: '9px', color: isLocked ? '#64748b' : '#fff' }).setOrigin(0, 0.5));
 
-            listGroup.add(this.add.text(W - 45, y - 10, `CD: ${skill.ms_cooldown}T`, { fontSize: '10px', color: THEME.TEXT_MUTED }).setOrigin(1, 0.5));
+            if (isEquippedElsewhere) {
+                const eqX = W - 75;
+                const eqY = y - 35;
+                const eqBg = this.add.graphics().fillStyle(0x1e3a8a, cardAlpha).fillRoundedRect(eqX - 35, eqY - 10, 70, 20, 10);
+                this.listGroup.add(eqBg);
+                this.listGroup.add(this.add.text(eqX, eqY, 'EQUIPPED', { fontSize: '10px', color: '#60a5fa', fontStyle: 'bold' }).setOrigin(0.5));
+            } else if (isLocked) {
+                this.listGroup.add(this.add.text(W - 60, y, `Req\nLv ${skillData.unlock_level}`, { fontSize: '10px', color: THEME.DANGER, fontStyle: 'bold', align: 'center' }).setOrigin(0.5, 0.5));
+            }
+        });
 
-            y += 70;
+        // Pagination Controls
+        const pageY = panelBottom - 30;
+        
+        const prevBg = this.add.rectangle(CX - 80, pageY, 80, 30, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
+        this.listGroup.add(prevBg);
+        this.listGroup.add(this.add.text(CX - 80, pageY, '< PREV', { fontSize: '12px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5));
+        prevBg.on('pointerdown', () => {
+            if (this.mcSkillSelectPage > 1) {
+                this.mcSkillSelectPage--;
+                this.showMcSkillSelectionList(slotIndex);
+            }
+        });
+
+        this.listGroup.add(this.add.text(CX, pageY, `${this.mcSkillSelectPage} / ${totalPages}`, { fontSize: '12px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5));
+
+        const nextBg = this.add.rectangle(CX + 80, pageY, 80, 30, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
+        this.listGroup.add(nextBg);
+        this.listGroup.add(this.add.text(CX + 80, pageY, 'NEXT >', { fontSize: '12px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5));
+        nextBg.on('pointerdown', () => {
+            if (this.mcSkillSelectPage < totalPages) {
+                this.mcSkillSelectPage++;
+                this.showMcSkillSelectionList(slotIndex);
+            }
         });
     }
 
@@ -1308,5 +1488,177 @@ export default class PartyScene extends Phaser.Scene {
             alert(res.message || 'Gagal menyimpan party preset.');
         }
     }
+    showWeaponChangedSuccessModal(data) {
+        this.modalGroup.clear(true, true);
+        const W = this.cameras.main.width, H = this.cameras.main.height, CX = W / 2;
+        const bg = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.9).setInteractive();
+        this.modalGroup.add(bg);
 
+        const mBox = this.add.graphics().fillStyle(THEME.PANEL, 1).lineStyle(1, THEME.BORDER)
+            .fillRoundedRect(CX - 120, H / 2 - 130, 240, 260, 12)
+            .strokeRoundedRect(CX - 120, H / 2 - 130, 240, 260, 12);
+        this.modalGroup.add(mBox);
+
+        this.modalGroup.add(this.add.text(CX, H / 2 - 100, 'WEAPON CHANGED', { fontSize: '18px', color: '#ffffff', fontStyle: 'bold', fontFamily: 'Outfit' }).setOrigin(0.5));
+
+        if (data.newInvId) {
+            const weap = this.weapons.find(w => w.inv_id === data.newInvId);
+            if (weap) {
+                const px = CX;
+                const py = H / 2 - 20;
+
+                let rColor = THEME.BORDER;
+                let rStr = '#ffffff';
+                if (weap.mw_rarity === 'SSR') { rColor = 0xffd700; rStr = '#ffd700'; }
+                else if (weap.mw_rarity === 'SR') { rColor = 0xc0c0c0; rStr = '#c0c0c0'; }
+                else if (weap.mw_rarity === 'R') { rColor = 0xcd7f32; rStr = '#cd7f32'; }
+
+                const boxW = 120;
+                const boxH = 80;
+                const boxBg = this.add.graphics();
+                boxBg.fillStyle(THEME.BG, 1);
+                boxBg.lineStyle(2, rColor);
+                boxBg.fillRoundedRect(px - boxW / 2, py - boxH / 2, boxW, boxH, 8);
+                boxBg.strokeRoundedRect(px - boxW / 2, py - boxH / 2, boxW, boxH, 8);
+                this.modalGroup.add(boxBg);
+
+                // Element Icon
+                const elStr = weap.mw_element;
+                const elKey = elStr ? `element_${elStr.toLowerCase()}` : '';
+                if (this.textures.exists(elKey)) {
+                    const ex = px + boxW / 2 - 12;
+                    const ey = py - boxH / 2 + 12;
+                    const iconImg = this.add.image(ex, ey, elKey).setDisplaySize(16, 16);
+                    const shape = this.make.graphics();
+                    shape.fillCircle(ex, ey, 8);
+                    iconImg.setMask(shape.createGeometryMask());
+                    const strokeCircle = this.add.circle(ex, ey, 8).setStrokeStyle(1, THEME.PANEL);
+                    this.modalGroup.addMultiple([iconImg, strokeCircle]);
+                }
+
+                // Rarity text
+                if (weap.mw_rarity) {
+                    this.modalGroup.add(this.add.text(px - boxW / 2 + 6, py + boxH / 2 - 6, weap.mw_rarity, {
+                        fontSize: '14px', color: rStr, fontStyle: 'bold', stroke: '#000000', strokeThickness: 2, fontFamily: 'Outfit'
+                    }).setOrigin(0, 1));
+                }
+            }
+        } else {
+            this.modalGroup.add(this.add.text(CX, H / 2 - 20, 'Unequipped', { fontSize: '14px', color: THEME.TEXT_MUTED }).setOrigin(0.5));
+        }
+
+        const cY = H / 2 + 45;
+
+        const oldAtkStr = data.oldAtk.toString();
+        const newAtkStr = data.newAtk.toString();
+        const atkColor = data.newAtk >= data.oldAtk ? (data.newAtk > data.oldAtk ? '#10b981' : '#ffffff') : '#ef4444';
+        this.modalGroup.add(this.add.text(CX, cY, `Grid ATK:  ${oldAtkStr}  ➔  ${newAtkStr}`, { fontSize: '13px', color: atkColor, fontStyle: 'bold' }).setOrigin(0.5));
+
+        const oldHpStr = data.oldHp.toString();
+        const newHpStr = data.newHp.toString();
+        const hpColor = data.newHp >= data.oldHp ? (data.newHp > data.oldHp ? '#10b981' : '#ffffff') : '#ef4444';
+        this.modalGroup.add(this.add.text(CX, cY + 25, `Grid HP:  ${oldHpStr}  ➔  ${newHpStr}`, { fontSize: '13px', color: hpColor, fontStyle: 'bold' }).setOrigin(0.5));
+
+        const okBtn = this.add.rectangle(CX, H / 2 + 105, 100, 32, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
+        okBtn.on('pointerover', () => okBtn.setFillStyle(0x334155));
+        okBtn.on('pointerout', () => okBtn.setFillStyle(THEME.PANEL));
+        okBtn.on('pointerdown', () => this.modalGroup.clear(true, true));
+        this.modalGroup.addMultiple([
+            okBtn,
+            this.add.text(CX, H / 2 + 105, 'OK', { fontSize: '14px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5)
+        ]);
+    }
+
+    showCharacterChangedSuccessModal(data) {
+        this.modalGroup.clear(true, true);
+        const W = this.cameras.main.width, H = this.cameras.main.height, CX = W / 2;
+        const bg = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.9).setInteractive();
+        this.modalGroup.add(bg);
+
+        const mBox = this.add.graphics().fillStyle(THEME.PANEL, 1).lineStyle(1, THEME.BORDER)
+            .fillRoundedRect(CX - 120, H / 2 - 130, 240, 260, 12)
+            .strokeRoundedRect(CX - 120, H / 2 - 130, 240, 260, 12);
+        this.modalGroup.add(mBox);
+
+        this.modalGroup.add(this.add.text(CX, H / 2 - 100, 'CHARACTER CHANGED', { fontSize: '18px', color: '#ffffff', fontStyle: 'bold', fontFamily: 'Outfit' }).setOrigin(0.5));
+
+        if (data.newInvId) {
+            const char = this.characters.find(c => c.inv_id === data.newInvId);
+            if (char) {
+                const px = CX;
+                const py = H / 2 - 20;
+
+                let rColor = THEME.BORDER;
+                let rStr = '#ffffff';
+                if (char.mc_rarity === 'SSR') { rColor = 0xffd700; rStr = '#ffd700'; }
+                else if (char.mc_rarity === 'SR') { rColor = 0xc0c0c0; rStr = '#c0c0c0'; }
+                else if (char.mc_rarity === 'R') { rColor = 0xcd7f32; rStr = '#cd7f32'; }
+
+                const pSize = 80;
+
+                const boxBg = this.add.graphics();
+                boxBg.fillStyle(THEME.BG, 1);
+                boxBg.fillRoundedRect(px - pSize / 2, py - pSize / 2, pSize, pSize, 8);
+                this.modalGroup.add(boxBg);
+
+                const sqKey = `char_sq_${char.mc_id}`;
+                if (this.textures.exists(sqKey)) {
+                    const portrait = this.add.image(px, py, sqKey).setDisplaySize(pSize, pSize);
+                    portrait.setAlpha(1, 1, 0.25, 0.25);
+                    const maskShape = this.make.graphics();
+                    maskShape.fillStyle(0xffffff);
+                    maskShape.fillRoundedRect(px - pSize / 2, py - pSize / 2, pSize, pSize, 8);
+                    portrait.setMask(maskShape.createGeometryMask());
+                    this.modalGroup.add(portrait);
+                }
+
+                const border = this.add.graphics();
+                border.lineStyle(2, rColor);
+                border.strokeRoundedRect(px - pSize / 2, py - pSize / 2, pSize, pSize, 8);
+                this.modalGroup.add(border);
+
+                // Element Icon
+                const elStr = char.mc_element;
+                const elKey = elStr ? `element_${elStr.toLowerCase()}` : '';
+                if (this.textures.exists(elKey)) {
+                    const ex = px - pSize / 2 + 12;
+                    const ey = py - pSize / 2 + 12;
+                    const iconImg = this.add.image(ex, ey, elKey).setDisplaySize(16, 16);
+                    const shape = this.make.graphics();
+                    shape.fillCircle(ex, ey, 8);
+                    iconImg.setMask(shape.createGeometryMask());
+                    const strokeCircle = this.add.circle(ex, ey, 8).setStrokeStyle(1, THEME.PANEL);
+                    this.modalGroup.addMultiple([iconImg, strokeCircle]);
+                }
+
+                // Rarity text
+                if (char.mc_rarity) {
+                    this.modalGroup.add(this.add.text(px - pSize / 2 + 6, py + pSize / 2 - 6, char.mc_rarity, {
+                        fontSize: '14px', color: rStr, fontStyle: 'bold', stroke: '#000000', strokeThickness: 2, fontFamily: 'Outfit'
+                    }).setOrigin(0, 1));
+                }
+            }
+        }
+
+        const cY = H / 2 + 45;
+
+        const oldAtkStr = data.oldAtk.toString();
+        const newAtkStr = data.newAtk.toString();
+        const atkColor = data.newAtk >= data.oldAtk ? (data.newAtk > data.oldAtk ? '#10b981' : '#ffffff') : '#ef4444';
+        this.modalGroup.add(this.add.text(CX, cY, `Total ATK:  ${oldAtkStr}  ➔  ${newAtkStr}`, { fontSize: '13px', color: atkColor, fontStyle: 'bold' }).setOrigin(0.5));
+
+        const oldHpStr = data.oldHp.toString();
+        const newHpStr = data.newHp.toString();
+        const hpColor = data.newHp >= data.oldHp ? (data.newHp > data.oldHp ? '#10b981' : '#ffffff') : '#ef4444';
+        this.modalGroup.add(this.add.text(CX, cY + 25, `Total HP:  ${oldHpStr}  ➔  ${newHpStr}`, { fontSize: '13px', color: hpColor, fontStyle: 'bold' }).setOrigin(0.5));
+
+        const okBtn = this.add.rectangle(CX, H / 2 + 105, 100, 32, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
+        okBtn.on('pointerover', () => okBtn.setFillStyle(0x334155));
+        okBtn.on('pointerout', () => okBtn.setFillStyle(THEME.PANEL));
+        okBtn.on('pointerdown', () => this.modalGroup.clear(true, true));
+        this.modalGroup.addMultiple([
+            okBtn,
+            this.add.text(CX, H / 2 + 105, 'OK', { fontSize: '14px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5)
+        ]);
+    }
 }

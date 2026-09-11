@@ -278,12 +278,12 @@ export default class InventoryScene extends Phaser.Scene {
         let paddingX = 12;
         let paddingY = 10;
 
-        if (this.currentTab !== 'Materials') {
-            cols = 4;
+        if (this.currentTab === 'Characters') {
+            boxW = 85;
+            boxH = 135;
+        } else if (this.currentTab === 'Weapons') {
             boxW = 84;
-            boxH = 100; // Portrait ratio
-            paddingX = 12;
-            paddingY = 10;
+            boxH = 100;
         }
 
         const gridW = (cols * boxW) + ((cols - 1) * paddingX);
@@ -292,9 +292,10 @@ export default class InventoryScene extends Phaser.Scene {
         let bottomY = startYGrid;
 
         // Pagination Logic
-        const totalPages = Math.max(1, Math.ceil(items.length / this.itemsPerPage));
-        const startIndex = (this.currentPage - 1) * this.itemsPerPage;
-        const pagedItems = items.slice(startIndex, startIndex + this.itemsPerPage);
+        const itemsPerPage = this.currentTab === 'Characters' ? 16 : this.itemsPerPage;
+        const totalPages = Math.max(1, Math.ceil(items.length / itemsPerPage));
+        const startIndex = (this.currentPage - 1) * itemsPerPage;
+        const pagedItems = items.slice(startIndex, startIndex + itemsPerPage);
 
         pagedItems.forEach((item, index) => {
             const col = index % cols;
@@ -337,83 +338,100 @@ export default class InventoryScene extends Phaser.Scene {
                 this.scrollGroup.add(this.add.text(ix, iy + 20, item.mat_name.substring(0, 10), { fontSize: '10px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5));
                 this.scrollGroup.add(this.add.text(ix, iy + 35, `x${item.quantity}`, { fontSize: '12px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5));
             } else {
-                // Character / Weapon Custom Layout
-                // Art Placeholder (Top 45%)
-                const artH = boxH * 0.45;
+                const artH = isWeapon ? boxH * 0.45 : boxW - 8;
+                const yTop = iy - boxH / 2;
+                
                 const artBg = this.add.graphics();
                 artBg.fillStyle(THEME.BG, 1);
-                artBg.lineStyle(1, color);
-                artBg.fillRoundedRect(ix - boxW / 2 + 4, iy - boxH / 2 + 4, boxW - 8, artH, 6);
-                artBg.strokeRoundedRect(ix - boxW / 2 + 4, iy - boxH / 2 + 4, boxW - 8, artH, 6);
-                this.scrollGroup.add(artBg);
-
-                if (!isWeapon) {
+                
+                if (isWeapon) {
+                    artBg.lineStyle(1, color);
+                    artBg.fillRoundedRect(ix - boxW / 2 + 4, yTop + 4, boxW - 8, artH, 6);
+                    artBg.strokeRoundedRect(ix - boxW / 2 + 4, yTop + 4, boxW - 8, artH, 6);
+                    this.scrollGroup.add(artBg);
+                } else {
+                    const pSize = boxW - 8;
                     const sqKey = `char_sq_${item.mc_id}`;
                     if (this.textures.exists(sqKey)) {
-                        const portrait = this.add.image(ix, iy - boxH / 2 + 4 + artH / 2, sqKey);
-                        portrait.setDisplaySize(boxW - 8, artH); // Fit within the box
-                        // Add rounded mask for the image
+                        const portrait = this.add.image(ix, yTop + 4 + pSize / 2, sqKey).setDisplaySize(pSize, pSize);
+                        portrait.setAlpha(1, 1, 0.25, 0.25);
                         const maskShape = this.make.graphics();
                         maskShape.fillStyle(0xffffff);
-                        maskShape.fillRoundedRect(ix - boxW / 2 + 4, iy - boxH / 2 + 4, boxW - 8, artH, 6);
+                        maskShape.fillRoundedRect(ix - pSize / 2, yTop + 4, pSize, pSize, 4);
                         portrait.setMask(maskShape.createGeometryMask());
                         this.scrollGroup.add(portrait);
+                    } else {
+                        artBg.fillRoundedRect(ix - pSize / 2, yTop + 4, pSize, pSize, 4);
+                        this.scrollGroup.add(artBg);
                     }
+
+                    const border = this.add.graphics();
+                    border.lineStyle(1, color);
+                    border.strokeRoundedRect(ix - pSize / 2, yTop + 4, pSize, pSize, 4);
+                    this.scrollGroup.add(border);
                 }
 
                 const itemName = isWeapon ? item.mw_name : item.mc_name;
-                this.scrollGroup.add(this.add.text(ix, iy - boxH / 2 + 4 + artH / 2, itemName.split(' ')[0], { fontSize: '10px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold', stroke: '#000', strokeThickness: 2 }).setOrigin(0.5));
+                const nameY = isWeapon ? (yTop + 4 + artH / 2) : (yTop + 4 + artH + 10);
+                this.scrollGroup.add(this.add.text(ix, nameY, itemName.split(' ')[0], { fontSize: '10px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold', stroke: isWeapon ? '#000' : null, strokeThickness: isWeapon ? 2 : 0 }).setOrigin(0.5));
 
                 const element = isWeapon ? item.mw_element : item.mc_element;
                 const elColor = this.getElementColor(element);
                 const elKey = element ? `element_${element.toLowerCase()}` : '';
 
-                // ELEMENT Indicator at top right
+                // ELEMENT Indicator
+                const elX = isWeapon ? (ix + boxW / 2 - 10) : (ix + (boxW - 8) / 2 - 8);
+                const elY = isWeapon ? (yTop + 10) : (yTop + 4 + 8);
                 if (this.textures.exists(elKey)) {
-                    const iconImg = this.add.image(ix + boxW / 2 - 10, iy - boxH / 2 + 10, elKey).setDisplaySize(14, 14);
+                    const iconImg = this.add.image(elX, elY, elKey).setDisplaySize(14, 14);
                     const shape = this.make.graphics();
-                    shape.fillCircle(ix + boxW / 2 - 10, iy - boxH / 2 + 10, 7);
+                    shape.fillCircle(elX, elY, 7);
                     iconImg.setMask(shape.createGeometryMask());
-                    
-                    const strokeCircle = this.add.circle(ix + boxW / 2 - 10, iy - boxH / 2 + 10, 7).setStrokeStyle(1, THEME.PANEL);
+                    const strokeCircle = this.add.circle(elX, elY, 7).setStrokeStyle(1, THEME.PANEL);
                     this.scrollGroup.addMultiple([iconImg, strokeCircle]);
                 } else {
-                    const elCircle = this.add.circle(ix + boxW / 2 - 10, iy - boxH / 2 + 10, 7, elColor).setStrokeStyle(1, THEME.PANEL);
+                    const elCircle = this.add.circle(elX, elY, 7, elColor).setStrokeStyle(1, THEME.PANEL);
                     const elLetter = element ? element.charAt(0).toUpperCase() : '?';
-                    const elTxt = this.add.text(ix + boxW / 2 - 10, iy - boxH / 2 + 10, elLetter, { fontSize: '9px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5);
+                    const elTxt = this.add.text(elX, elY, elLetter, { fontSize: '9px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5);
                     this.scrollGroup.addMultiple([elCircle, elTxt]);
                 }
 
-                // EQUIPPED Indicator at top left
+                // EQUIPPED Indicator
                 if (this.equippedItemIds && this.equippedItemIds.has(item.inv_id)) {
-                    const eBg = this.add.circle(ix - boxW / 2 + 10, iy - boxH / 2 + 10, 7, 0x3b82f6).setStrokeStyle(1, THEME.PANEL);
-                    const eTxt = this.add.text(ix - boxW / 2 + 10, iy - boxH / 2 + 10, 'E', { fontSize: '9px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5);
+                    const eX = isWeapon ? (ix - boxW / 2 + 10) : (ix - (boxW - 8) / 2 + 8);
+                    const eY = isWeapon ? (yTop + 10) : (yTop + 4 + 8);
+                    const eBg = this.add.circle(eX, eY, 7, 0x3b82f6).setStrokeStyle(1, THEME.PANEL);
+                    const eTxt = this.add.text(eX, eY, 'E', { fontSize: '9px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5);
                     this.scrollGroup.addMultiple([eBg, eTxt]);
                 }
 
-                // RARITY Indicator at bottom left of art
+                // RARITY Indicator
                 const itemRarity = isWeapon ? item.mw_rarity : item.mc_rarity;
                 let rColor = '#ffffff';
-                if (itemRarity === 'SSR') rColor = '#ffd700'; // Gold
-                else if (itemRarity === 'SR') rColor = '#c0c0c0'; // Silver
-                else if (itemRarity === 'R') rColor = '#cd7f32'; // Bronze
+                if (itemRarity === 'SSR') rColor = '#ffd700';
+                else if (itemRarity === 'SR') rColor = '#c0c0c0';
+                else if (itemRarity === 'R') rColor = '#cd7f32';
 
                 if (itemRarity) {
-                    const rTxt = this.add.text(ix - boxW / 2 + 6, iy - boxH / 2 + artH + 5, itemRarity, { fontSize: '9px', color: rColor, fontStyle: 'bold', stroke: '#000000', strokeThickness: 2, fontFamily: 'Outfit' }).setOrigin(0, 1);
+                    const rX = isWeapon ? (ix - boxW / 2 + 6) : (ix - (boxW - 8) / 2 + 4);
+                    const rY = yTop + 4 + artH + (isWeapon ? 5 : -2);
+                    const rTxt = this.add.text(rX, rY, itemRarity, { fontSize: '9px', color: rColor, fontStyle: 'bold', stroke: '#000000', strokeThickness: 2, fontFamily: 'Outfit' }).setOrigin(0, 1);
                     this.scrollGroup.add(rTxt);
                 }
 
                 // Display Info below art box
                 const effMode = (this.currentTab === 'Characters' && this.displayMode === 'Skills') ? 'ATK/HP' : this.displayMode;
+                const stat1Y = isWeapon ? (iy + 12) : (yTop + 4 + artH + 24);
+                const stat2Y = isWeapon ? (iy + 30) : (yTop + 4 + artH + 38);
 
                 if (effMode === 'Level/LB') {
-                    this.scrollGroup.add(this.add.text(ix, iy + 12, `Lv: ${item.item_level}`, { fontSize: '10px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5));
-                    this.scrollGroup.add(this.add.text(ix, iy + 30, `LB: ${item.limit_break_level}`, { fontSize: '10px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5));
+                    this.scrollGroup.add(this.add.text(ix, stat1Y, `Lv: ${item.item_level}`, { fontSize: '10px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5));
+                    this.scrollGroup.add(this.add.text(ix, stat2Y, `LB: ${item.limit_break_level}`, { fontSize: '10px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5));
                 } else if (effMode === 'Skills') {
                     const skills = (item.skills || []).filter(s => s.ms_category === 'Passive');
                     skills.slice(0, 2).forEach((skill, i) => {
                         const sx = ix + (i === 0 && skills.length > 1 ? -15 : (i === 1 ? 15 : 0));
-                        const sy = iy + 20;
+                        const sy = isWeapon ? (iy + 20) : (yTop + 4 + artH + 30);
 
                         const isLocked = (item.item_level < skill.unlock_level) || (item.limit_break_level < skill.unlock_limit_break);
                         const sBox = this.add.graphics().fillStyle(isLocked ? 0x555555 : 0x458B74, 1).fillRoundedRect(sx - 10, sy - 10, 20, 20, 4);
@@ -427,19 +445,19 @@ export default class InventoryScene extends Phaser.Scene {
                         this.scrollGroup.add(this.add.text(sx, sy, 'P', { fontSize: '10px', color: isLocked ? '#999' : '#fff' }).setOrigin(0.5));
                     });
                     if (skills.length === 0) {
-                        this.scrollGroup.add(this.add.text(ix, iy + 20, 'No Passives', { fontSize: '9px', color: THEME.TEXT_MUTED }).setOrigin(0.5));
+                        this.scrollGroup.add(this.add.text(ix, isWeapon ? (iy + 20) : (yTop + 4 + artH + 30), 'No Passives', { fontSize: '9px', color: THEME.TEXT_MUTED }).setOrigin(0.5));
                     }
                 } else {
                     const atk = this.calculateBaseStat(item, 'atk', isWeapon);
                     const hp = this.calculateBaseStat(item, 'hp', isWeapon);
-                    this.scrollGroup.add(this.add.text(ix, iy + 12, `ATK: ${atk}`, { fontSize: '10px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold' }).setOrigin(0.5));
-                    this.scrollGroup.add(this.add.text(ix, iy + 30, `HP:  ${hp}`, { fontSize: '10px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold' }).setOrigin(0.5));
+                    this.scrollGroup.add(this.add.text(ix, stat1Y, `ATK: ${atk}`, { fontSize: '10px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold' }).setOrigin(0.5));
+                    this.scrollGroup.add(this.add.text(ix, stat2Y, `HP:  ${hp}`, { fontSize: '10px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold' }).setOrigin(0.5));
                 }
             }
         });
 
         // --- Pagination Controls ---
-        const pageY = 765; // perfectly centered vertically in the bottom padding space
+        const pageY = 790; // shifted down to fit 4x4 characters
 
         // Prev Button
         const prevActive = this.currentPage > 1;

@@ -85,10 +85,12 @@ export default class CharacterDetailScene extends Phaser.Scene {
     }
 
     calculateMaxLevel() {
-        if (this.char.mc_id === 1) return 20;
-        if (this.char.mc_rarity === 'SSR') return 60;
-        if (this.char.mc_rarity === 'SR') return 50;
-        return 1;
+        const lb = this.char.limit_break_level || 0;
+        if (this.char.mc_id === 1) return 40 + (lb * 20);
+        if (this.char.mc_rarity === 'SSR') return 40 + (lb * 20);
+        if (this.char.mc_rarity === 'SR') return 30 + (lb * 20);
+        if (this.char.mc_rarity === 'R') return 20 + (lb * 20);
+        return 20 + (lb * 20);
     }
 
     calculateBaseStat(statType, customLevel = null) {
@@ -117,7 +119,7 @@ export default class CharacterDetailScene extends Phaser.Scene {
         backBtn.on('pointerout', () => { backBtn.setFillStyle(THEME.PANEL); homeTxt.setColor(THEME.TEXT_PRIMARY); });
         backBtn.on('pointerdown', () => this.scene.start('LoadingScene', { targetScene: 'MainMenuScene' }));
 
-        const bannerW = W - 60; // Added padding
+        const bannerW = W - 30; // Matched skill container width
         cy += 70;
 
         // PORTRAIT PLACEHOLDER
@@ -164,6 +166,13 @@ export default class CharacterDetailScene extends Phaser.Scene {
 
         // Name
         this.scrollGroup.add(this.add.text(CX - bannerW / 2 + 20, cy + 25, char.mc_name, { fontSize: '18px', color: '#fff', fontStyle: 'bold' }).setOrigin(0, 0.5));
+        
+        // Limit Break Stars (Right aligned, above ATK)
+        let stars = '';
+        if (char.limit_break_level > 0) {
+            stars = '⭐'.repeat(char.limit_break_level);
+            this.scrollGroup.add(this.add.text(CX + bannerW / 2 - 20, cy + 25, stars, { fontSize: '14px' }).setOrigin(1, 0.5));
+        }
 
         // Element Logo on the left
         const elKey = char.mc_element ? `element_${char.mc_element.toLowerCase()}` : '';
@@ -185,7 +194,8 @@ export default class CharacterDetailScene extends Phaser.Scene {
 
         // Element Name (colored)
         const elNameStr = char.mc_element ? char.mc_element.toUpperCase() : '?';
-        this.scrollGroup.add(this.add.text(elX + 15, elY, elNameStr, { fontSize: '13px', color: color, fontStyle: 'bold' }).setOrigin(0, 0.5));
+        const colorStr = '#' + color.toString(16).padStart(6, '0');
+        this.scrollGroup.add(this.add.text(elX + 15, elY, elNameStr, { fontSize: '13px', color: colorStr, fontStyle: 'bold' }).setOrigin(0, 0.5));
 
         // Level (white)
         const maxLevel = this.calculateMaxLevel();
@@ -207,28 +217,55 @@ export default class CharacterDetailScene extends Phaser.Scene {
         const expFill = this.add.rectangle(barX, barY, barW * expPct, 6, 0x3b82f6).setOrigin(0, 0.5);
         this.scrollGroup.add(expFill);
 
-        // Stats (white)
+        // Stats (colored)
         const atk = this.calculateBaseStat('atk');
         const hp = this.calculateBaseStat('hp');
-        this.scrollGroup.add(this.add.text(CX + bannerW / 2 - 20, cy + 60, `ATK: ${atk}`, { fontSize: '14px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(1, 0.5));
-        this.scrollGroup.add(this.add.text(CX + bannerW / 2 - 20, cy + 85, `HP:  ${hp}`, { fontSize: '14px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(1, 0.5));
+        this.scrollGroup.add(this.add.text(CX + bannerW / 2 - 20, cy + 60, `ATK: ${atk}`, { fontSize: '14px', color: '#ef4444', fontStyle: 'bold' }).setOrigin(1, 0.5));
+        this.scrollGroup.add(this.add.text(CX + bannerW / 2 - 20, cy + 85, `HP:  ${hp}`, { fontSize: '14px', color: '#4ade80', fontStyle: 'bold' }).setOrigin(1, 0.5));
 
         cy += 140;
 
         // ACTION BUTTONS
-        const btnW = 160;
+        if (this.fromParty && this.partyState && this.partyState.partySlotId !== 'char_slot_1') {
+            const btnThirdW = (W - 100) / 3;
+            
+            // Upgrade Btn
+            const upgZone = this.add.zone(40 + btnThirdW / 2, cy + 20, btnThirdW, 40).setInteractive({ useHandCursor: true });
+            const upgBg = this.add.rectangle(40 + btnThirdW / 2, cy + 20, btnThirdW, 40, THEME.PANEL).setStrokeStyle(1, 0x10b981);
+            upgZone.on('pointerdown', () => this.showUpgradeModal());
+            this.scrollGroup.addMultiple([upgBg, upgZone, this.add.text(40 + btnThirdW / 2, cy + 20, 'UPGRADE', { fontSize: '12px', color: '#10b981', fontStyle: 'bold' }).setOrigin(0.5)]);
 
-        // Upgrade Btn
-        const upgZone = this.add.zone(120, cy + 20, btnW, 40).setInteractive({ useHandCursor: true });
-        const upgBg = this.add.rectangle(120, cy + 20, btnW, 40, THEME.PANEL).setStrokeStyle(1, 0x10b981);
-        upgZone.on('pointerdown', () => this.showUpgradeModal());
-        this.scrollGroup.addMultiple([upgBg, upgZone, this.add.text(120, cy + 20, 'UPGRADE', { fontSize: '14px', color: '#10b981', fontStyle: 'bold' }).setOrigin(0.5)]);
+            // Uncap Btn
+            if (char.limit_break_level < 2) {
+                const uncapZone = this.add.zone(CX, cy + 20, btnThirdW, 40).setInteractive({ useHandCursor: true });
+                const uncapBg = this.add.rectangle(CX, cy + 20, btnThirdW, 40, THEME.PANEL).setStrokeStyle(1, 0x3b82f6);
+                uncapZone.on('pointerdown', () => this.showLimitBreakModal());
+                this.scrollGroup.addMultiple([uncapBg, uncapZone, this.add.text(CX, cy + 20, 'UNCAP', { fontSize: '12px', color: '#3b82f6', fontStyle: 'bold' }).setOrigin(0.5)]);
+            }
 
-        // Uncap Btn
-        const uncapZone = this.add.zone(W - 120, cy + 20, btnW, 40).setInteractive({ useHandCursor: true });
-        const uncapBg = this.add.rectangle(W - 120, cy + 20, btnW, 40, THEME.PANEL).setStrokeStyle(1, 0x3b82f6);
-        uncapZone.on('pointerdown', () => this.showLimitBreakModal());
-        this.scrollGroup.addMultiple([uncapBg, uncapZone, this.add.text(W - 120, cy + 20, 'UNCAP', { fontSize: '14px', color: '#3b82f6', fontStyle: 'bold' }).setOrigin(0.5)]);
+            // Change Character Btn
+            const changeZone = this.add.zone(W - 40 - btnThirdW / 2, cy + 20, btnThirdW, 40).setInteractive({ useHandCursor: true });
+            const changeBg = this.add.rectangle(W - 40 - btnThirdW / 2, cy + 20, btnThirdW, 40, THEME.PANEL).setStrokeStyle(1, 0xf59e0b);
+            changeZone.on('pointerdown', () => {
+                this.showCharacterSelectionModal();
+            });
+            this.scrollGroup.addMultiple([changeBg, changeZone, this.add.text(W - 40 - btnThirdW / 2, cy + 20, 'CHANGE', { fontSize: '12px', color: '#f59e0b', fontStyle: 'bold' }).setOrigin(0.5)]);
+        } else {
+            const btnW = 160;
+            // Upgrade Btn
+            const upgZone = this.add.zone(120, cy + 20, btnW, 40).setInteractive({ useHandCursor: true });
+            const upgBg = this.add.rectangle(120, cy + 20, btnW, 40, THEME.PANEL).setStrokeStyle(1, 0x10b981);
+            upgZone.on('pointerdown', () => this.showUpgradeModal());
+            this.scrollGroup.addMultiple([upgBg, upgZone, this.add.text(120, cy + 20, 'UPGRADE', { fontSize: '14px', color: '#10b981', fontStyle: 'bold' }).setOrigin(0.5)]);
+
+            // Uncap Btn
+            if (char.limit_break_level < 2) {
+                const uncapZone = this.add.zone(W - 120, cy + 20, btnW, 40).setInteractive({ useHandCursor: true });
+                const uncapBg = this.add.rectangle(W - 120, cy + 20, btnW, 40, THEME.PANEL).setStrokeStyle(1, 0x3b82f6);
+                uncapZone.on('pointerdown', () => this.showLimitBreakModal());
+                this.scrollGroup.addMultiple([uncapBg, uncapZone, this.add.text(W - 120, cy + 20, 'UNCAP', { fontSize: '14px', color: '#3b82f6', fontStyle: 'bold' }).setOrigin(0.5)]);
+            }
+        }
 
         cy += 70;
 
@@ -350,10 +387,11 @@ export default class CharacterDetailScene extends Phaser.Scene {
         const overlay = this.add.rectangle(0, 0, W, H, 0x000000, 0.8).setOrigin(0).setInteractive();
         this.modalGroup.add(overlay);
 
-        const modalBg = this.add.rectangle(CX, CY, W - 40, 320, THEME.PANEL).setStrokeStyle(1, THEME.BORDER);
+        const modalBg = this.add.rectangle(CX, CY, W - 40, 320, THEME.PANEL).setStrokeStyle(1, 0x10b981);
         this.modalGroup.add(modalBg);
 
         this.modalGroup.add(this.add.text(CX, CY - 130, 'UPGRADE LEVEL', { fontSize: '18px', color: '#10b981', fontStyle: 'bold', letterSpacing: 2 }).setOrigin(0.5));
+        this.modalGroup.add(this.add.rectangle(CX, CY - 110, W - 80, 1, 0x064e3b));
 
                 // X button removed and replaced with a Cancel button below.
 
@@ -390,8 +428,9 @@ export default class CharacterDetailScene extends Phaser.Scene {
                 const plusBtn = this.add.text(CX + 50, CY + 20, '+', { fontSize: '24px', color: THEME.TEXT_PRIMARY, backgroundColor: '#334155', padding: { x: 10, y: 5 } }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
                 const targetLevelText = this.add.text(CX, CY + 50, 'Target Level: ?', { fontSize: '13px', color: '#10b981', fontStyle: 'bold' }).setOrigin(0.5);
-                const costText = this.add.text(CX, CY + 70, `Biaya: ${qty * costPerItem} Gold`, { fontSize: '12px', color: '#f59e0b' }).setOrigin(0.5);
-                const goldText = this.add.text(CX, CY + 90, `Gold Anda: ${gold}`, { fontSize: '11px', color: THEME.TEXT_MUTED }).setOrigin(0.5);
+                
+                const goldReqInit = qty * costPerItem;
+                const costText = this.add.text(CX, CY + 80, `${goldReqInit} / ${gold} Gold`, { fontSize: '12px', color: gold >= goldReqInit ? '#facc15' : THEME.DANGER, fontStyle: 'bold' }).setOrigin(0.5);
 
                 const currentExp = char.item_exp || 0;
                 const calculateTargetLvl = (q) => {
@@ -430,10 +469,13 @@ export default class CharacterDetailScene extends Phaser.Scene {
 
                     qty = tempQty;
                     qtyText.setText(`${qty}`);
-                    costText.setText(`Biaya: ${qty * costPerItem} Gold`);
-
+                    
                     const tLvl = calculateTargetLvl(qty);
                     targetLevelText.setText(`Target Level: ${tLvl}${tLvl >= maxLvl ? ' (MAX)' : ''}`);
+
+                    const goldReq = qty * costPerItem;
+                    costText.setText(`${goldReq} / ${gold} Gold`);
+                    costText.setColor(gold >= goldReq ? '#facc15' : THEME.DANGER);
                 };
                 updateQty(0); // Initialize text
 
@@ -447,13 +489,13 @@ export default class CharacterDetailScene extends Phaser.Scene {
                 const minus10Btn = this.add.text(CX - 100, CY + 20, '-10', { fontSize: '16px', color: THEME.TEXT_PRIMARY, backgroundColor: '#334155', padding: { x: 5, y: 5 } }).setOrigin(0.5).setInteractive({ useHandCursor: true });
                 minus10Btn.on('pointerdown', () => updateQty(-10));
 
-                this.modalGroup.addMultiple([qtyText, minusBtn, plusBtn, plus10Btn, minus10Btn, targetLevelText, costText, goldText]);
+                this.modalGroup.addMultiple([qtyText, minusBtn, plusBtn, plus10Btn, minus10Btn, targetLevelText, costText]);
 
                 // Cancel Button
                 const btnW = 120;
                 const cancelZone = this.add.zone(CX - 70, CY + 130, btnW, 40).setInteractive({ useHandCursor: true });
-                const cancelBg = this.add.rectangle(CX - 70, CY + 130, btnW, 40, THEME.PANEL).setStrokeStyle(1, THEME.BORDER);
-                const cancelTxt = this.add.text(CX - 70, CY + 130, 'CANCEL', { fontSize: '14px', color: THEME.TEXT_MUTED, fontStyle: 'bold' }).setOrigin(0.5);
+                const cancelBg = this.add.rectangle(CX - 70, CY + 130, btnW, 40, THEME.PANEL).setStrokeStyle(1, 0xffffff);
+                const cancelTxt = this.add.text(CX - 70, CY + 130, 'CANCEL', { fontSize: '14px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5);
 
                 cancelZone.on('pointerover', () => cancelBg.setFillStyle(0x334155));
                 cancelZone.on('pointerout', () => cancelBg.setFillStyle(THEME.PANEL));
@@ -517,7 +559,7 @@ export default class CharacterDetailScene extends Phaser.Scene {
         }
     }
 
-    showLimitBreakModal() {
+    async showLimitBreakModal() {
         const char = this.char;
         const W = this.cameras.main.width;
         const H = this.cameras.main.height;
@@ -525,39 +567,98 @@ export default class CharacterDetailScene extends Phaser.Scene {
         const CY = H / 2;
 
         this.modalGroup.clear(true, true);
-        const bg = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.9).setInteractive();
-        this.modalGroup.add(bg);
+        const overlay = this.add.rectangle(0, 0, W, H, 0x000000, 0.8).setOrigin(0).setInteractive();
+        this.modalGroup.add(overlay);
 
-        const mBox = this.add.graphics().fillStyle(THEME.PANEL, 1).lineStyle(2, 0x3b82f6).fillRoundedRect(40, 250, W - 80, 250, 12).strokeRoundedRect(40, 250, W - 80, 250, 12);
-        this.modalGroup.add(mBox);
+        const modalBg = this.add.rectangle(CX, CY, W - 40, 320, THEME.PANEL).setStrokeStyle(1, 0x3b82f6);
+        this.modalGroup.add(modalBg);
 
-        this.modalGroup.add(this.add.text(CX, 280, 'LIMIT BREAK (UNCAP)', { fontSize: '16px', color: '#3b82f6', fontStyle: 'bold' }).setOrigin(0.5));
-        this.modalGroup.add(this.add.text(CX, 305, `${char.mc_name} (LB ${char.limit_break_level} ➔ LB ${char.limit_break_level + 1})`, { fontSize: '14px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5));
+        this.modalGroup.add(this.add.text(CX, CY - 130, 'LIMIT BREAK (UNCAP)', { fontSize: '18px', color: '#3b82f6', fontStyle: 'bold', letterSpacing: 2 }).setOrigin(0.5));
+        this.modalGroup.add(this.add.text(CX, CY - 105, `${char.mc_name} (LB ${char.limit_break_level} ➔ LB ${char.limit_break_level + 1})`, { fontSize: '14px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5));
+        this.modalGroup.add(this.add.rectangle(CX, CY - 85, W - 80, 1, 0x1e293b));
 
-        this.modalGroup.add(this.add.text(CX, 340, 'Syarat Material:', { fontSize: '12px', color: THEME.TEXT_MUTED }).setOrigin(0.5));
-        this.modalGroup.add(this.add.text(CX, 360, 'Membutuhkan Gold & Orb Elemen.', { fontSize: '12px', color: THEME.TEXT_PRIMARY, align: 'center' }).setOrigin(0.5));
+        const loadingText = this.add.text(CX, CY, 'Loading data...', { fontSize: '12px', color: THEME.TEXT_MUTED }).setOrigin(0.5);
+        this.modalGroup.add(loadingText);
 
-        const closeZone = this.add.zone(140, 440, 100, 40).setInteractive({ useHandCursor: true });
-        const closeBg = this.add.graphics().fillStyle(THEME.BG, 1).lineStyle(1, THEME.BORDER).fillRoundedRect(90, 420, 100, 40, 6).strokeRoundedRect(90, 420, 100, 40, 6);
-        closeZone.on('pointerdown', () => this.modalGroup.clear(true, true));
-        this.modalGroup.addMultiple([closeBg, closeZone, this.add.text(140, 440, 'Cancel', { fontSize: '12px', color: THEME.TEXT_MUTED }).setOrigin(0.5)]);
+        try {
+            const res = await fetch(`http://localhost:3000/api/party/${this.playerId}/inventory/all`);
+            const data = await res.json();
+            
+            if (data.status === 'success') {
+                loadingText.destroy();
+                const materials = data.data.materials || [];
+                const gold = data.data.gold || 0;
 
-        const confirmZone = this.add.zone(310, 440, 100, 40).setInteractive({ useHandCursor: true });
-        const confirmBg = this.add.graphics().fillStyle(0x3b82f6, 1).fillRoundedRect(260, 420, 100, 40, 6);
-        confirmZone.on('pointerdown', async () => {
-            confirmZone.disableInteractive();
-            this.modalGroup.add(this.add.text(CX, 390, 'Processing...', { fontSize: '12px', color: THEME.GOLD }).setOrigin(0.5));
+                let orbName = char.mc_element ? `${char.mc_element} Orb` : 'Elemental Orb';
+                let orbCount = 0;
+                let goldReq = 1000 * (char.limit_break_level + 1);
+                let orbReq = 3 * (char.limit_break_level + 1);
 
-            const res = await PartyApi.limitBreak(this.playerId, char.inv_id);
-            if (res.status === 'success') {
-                this.char.limit_break_level += 1;
-                this.showLimitBreakSuccessModal();
-            } else {
-                this.modalGroup.add(this.add.text(CX, 410, res.message || 'Error', { fontSize: '12px', color: THEME.DANGER }).setOrigin(0.5));
-                setTimeout(() => confirmZone.setInteractive(), 2000);
+                try {
+                    const costRes = await fetch(`http://localhost:3000/api/party/${this.playerId}/lb-cost/${char.mc_id}/${char.limit_break_level + 1}`);
+                    const costData = await costRes.json();
+                    
+                    if (costData.status === 'success') {
+                        goldReq = costData.data.gold_cost;
+                        orbReq = costData.data.mat_qty;
+                        if (costData.data.mat_name) orbName = costData.data.mat_name;
+
+                        const orb = materials.find(m => m.mat_id === costData.data.mat_id);
+                        if (orb) orbCount = orb.quantity;
+                    }
+                } catch (e) {
+                    console.error('Failed to fetch LB cost', e);
+                }
+
+                this.modalGroup.add(this.add.text(CX, CY - 70, 'Syarat Material:', { fontSize: '12px', color: THEME.TEXT_MUTED }).setOrigin(0.5));
+
+                // Orb Card
+                const ix = CX;
+                const iy = CY - 15;
+                const boxSize = 75;
+                const itemBg = this.add.graphics().fillStyle(THEME.PANEL, 1).lineStyle(1, THEME.BORDER).fillRoundedRect(ix - boxSize/2, iy - boxSize/2, boxSize, boxSize, 8).strokeRoundedRect(ix - boxSize/2, iy - boxSize/2, boxSize, boxSize, 8);
+                this.modalGroup.add(itemBg);
+
+                this.modalGroup.add(this.add.text(ix, iy - 18, '🔮', { fontSize: "24px" }).setOrigin(0.5));
+                this.modalGroup.add(this.add.text(ix, iy + 6, orbName, { fontSize: "9px", color: "#ccc" }).setOrigin(0.5));
+                this.modalGroup.add(this.add.text(ix, iy + 22, `${orbReq} / ${orbCount}`, { fontSize: "12px", color: orbCount >= orbReq ? "#ffffff" : "#ef4444", fontStyle: "bold" }).setOrigin(0.5));
+
+                // Gold requirement
+                const goldTxt = `${goldReq} / ${gold} Gold`;
+                this.modalGroup.add(this.add.text(CX, iy + boxSize / 2 + 15, goldTxt, { fontSize: '12px', color: gold >= goldReq ? '#facc15' : '#ef4444', fontStyle: 'bold' }).setOrigin(0.5));
+
+                // Cancel Button
+                const closeZone = this.add.zone(W / 2 - 60, CY + 120, 100, 35).setInteractive({ useHandCursor: true });
+                const closeBg = this.add.rectangle(W / 2 - 60, CY + 120, 100, 35, THEME.PANEL).setStrokeStyle(1, 0xffffff);
+                closeZone.on('pointerdown', () => this.modalGroup.clear(true, true));
+                this.modalGroup.addMultiple([closeBg, closeZone, this.add.text(W / 2 - 60, CY + 120, 'CANCEL', { fontSize: '13px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)]);
+
+                const canLimitBreak = (gold >= goldReq && orbCount >= orbReq);
+
+                // Confirm Button
+                const confirmZone = this.add.zone(W / 2 + 60, CY + 120, 100, 35);
+                if (canLimitBreak) confirmZone.setInteractive({ useHandCursor: true });
+                const confirmBg = this.add.rectangle(W / 2 + 60, CY + 120, 100, 35, THEME.PANEL).setStrokeStyle(1, canLimitBreak ? 0x3b82f6 : 0x334155);
+                const confirmTxtColor = canLimitBreak ? '#3b82f6' : '#64748b';
+
+                confirmZone.on('pointerdown', async () => {
+                    confirmZone.disableInteractive();
+                    this.modalGroup.add(this.add.text(CX, CY + 80, 'Processing...', { fontSize: '12px', color: THEME.GOLD }).setOrigin(0.5));
+
+                    const lbRes = await PartyApi.limitBreak(this.playerId, char.inv_id);
+                    if (lbRes.status === 'success') {
+                        this.char.limit_break_level += 1;
+                        this.showLimitBreakSuccessModal();
+                    } else {
+                        this.modalGroup.add(this.add.text(CX, CY + 80, lbRes.message || 'Error', { fontSize: '12px', color: THEME.DANGER }).setOrigin(0.5));
+                        setTimeout(() => confirmZone.setInteractive(), 2000);
+                    }
+                });
+                this.modalGroup.addMultiple([confirmBg, confirmZone, this.add.text(W / 2 + 60, CY + 120, 'CONFIRM', { fontSize: '13px', color: confirmTxtColor, fontStyle: 'bold' }).setOrigin(0.5)]);
             }
-        });
-        this.modalGroup.addMultiple([confirmBg, confirmZone, this.add.text(310, 440, 'Confirm', { fontSize: '12px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5)]);
+        } catch (error) {
+            loadingText.setText('Failed to load data.');
+        }
     }
 
 
@@ -664,5 +765,358 @@ export default class CharacterDetailScene extends Phaser.Scene {
         });
 
         this.modalGroup.addMultiple([overlay, modalBg, title, desc, okBg, okZone, okTxt]);
+    }
+
+    async showCharacterSelectionModal(page = 1, sortBy = null, displayMode = null) {
+        sortBy = sortBy || localStorage.getItem('party_sort') || 'Level';
+        displayMode = displayMode || localStorage.getItem('party_view') || 'ATK/HP';
+
+        if (this.modalGroup.getChildren().length > 0) this.modalGroup.clear(true, true);
+        const W = this.cameras.main.width, H = this.cameras.main.height, CX = W / 2, CY = H / 2;
+        
+        const overlay = this.add.rectangle(0, 0, W, H, 0x000000, 0.85).setOrigin(0).setInteractive();
+        this.modalGroup.add(overlay);
+
+        const panelTop = 90;
+        const panelBottom = 800;
+        const panelHeight = panelBottom - panelTop;
+        const panelCenterY = panelTop + (panelHeight / 2);
+        const panelWidth = W - 30;
+
+        const panel = this.add.rectangle(CX, panelCenterY, panelWidth, panelHeight, 0x0d1b2a).setStrokeStyle(2, 0xf59e0b).setInteractive();
+        this.modalGroup.add(panel);
+
+        this.modalGroup.add(this.add.text(CX, panelTop + 25, 'SELECT CHARACTER', { fontSize: '16px', fontStyle: 'bold', color: '#f59e0b', fontFamily: 'Outfit', letterSpacing: 2 }).setOrigin(0.5));
+        this.modalGroup.add(this.add.rectangle(CX, panelTop + 50, panelWidth - 40, 1, 0x334155));
+
+        const closeBtn = this.add.circle(CX + (panelWidth / 2) - 25, panelTop + 25, 14, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
+        const closeTxt = this.add.text(CX + (panelWidth / 2) - 25, panelTop + 25, '✕', { fontSize: '12px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
+        closeBtn.on('pointerdown', () => this.modalGroup.clear(true, true));
+        this.modalGroup.addMultiple([closeBtn, closeTxt]);
+
+        const loadingTxt = this.add.text(CX, panelCenterY, 'Loading Characters...', { fontSize: '14px', color: '#fff' }).setOrigin(0.5);
+        this.modalGroup.add(loadingTxt);
+
+        if (!this.charactersData) {
+            const invRes = await PartyApi.getInventory(this.playerId);
+            if (invRes.status === 'success') {
+                this.charactersData = invRes.data.characters;
+            } else {
+                loadingTxt.setText('Failed to load characters');
+                return;
+            }
+        }
+        loadingTxt.destroy();
+
+        const preset = this.partyState.preset;
+        const equipped = [
+            preset.char_slot_2_inv_id, preset.char_slot_3_inv_id, preset.char_slot_4_inv_id
+        ].filter(id => id != null);
+
+        // Allow unequip
+        const unequipY = panelTop + 75;
+        const unequipZone = this.add.zone(CX, unequipY, 200, 32).setInteractive({ useHandCursor: true });
+        const unBg = this.add.graphics().fillStyle(THEME.DANGER, 1).fillRoundedRect(CX - 100, unequipY - 16, 200, 32, 8);
+        unequipZone.on('pointerdown', async () => {
+            this.modalGroup.clear(true, true);
+            await this.saveAndReturn(null);
+        });
+        this.modalGroup.addMultiple([unBg, unequipZone, this.add.text(CX, unequipY, 'Unequip / Clear', { fontSize: '12px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5)]);
+
+        // --- Sort & Filter Bar ---
+        const filterY = panelTop + 115;
+        const sortBtnBg = this.add.rectangle(120, filterY, 140, 26, THEME.PANEL, 1);
+        sortBtnBg.setStrokeStyle(1, THEME.BORDER);
+        const sortZone = this.add.zone(120, filterY, 140, 26).setInteractive({ useHandCursor: true });
+        const sortTxt = this.add.text(120, filterY, `SORT: ${sortBy}`, { fontSize: '11px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
+
+        sortZone.on('pointerover', () => sortBtnBg.setFillStyle(0x334155));
+        sortZone.on('pointerout', () => sortBtnBg.setFillStyle(THEME.PANEL));
+        sortZone.on('pointerdown', () => {
+            const s = ['Level', 'ATK', 'HP', 'Rarity'];
+            const nextSort = s[(s.indexOf(sortBy) + 1) % s.length];
+            localStorage.setItem('party_sort', nextSort);
+            this.showCharacterSelectionModal(1, nextSort, displayMode);
+        });
+        this.modalGroup.addMultiple([sortBtnBg, sortZone, sortTxt]);
+
+        const dispBtnBg = this.add.rectangle(W - 120, filterY, 140, 26, THEME.PANEL, 1);
+        dispBtnBg.setStrokeStyle(1, THEME.BORDER);
+        const dispZone = this.add.zone(W - 120, filterY, 140, 26).setInteractive({ useHandCursor: true });
+        const dispTxt = this.add.text(W - 120, filterY, `VIEW: ${displayMode}`, { fontSize: '11px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
+
+        dispZone.on('pointerover', () => dispBtnBg.setFillStyle(0x334155));
+        dispZone.on('pointerout', () => dispBtnBg.setFillStyle(THEME.PANEL));
+        dispZone.on('pointerdown', () => {
+            let modes = ['ATK/HP', 'Level/LB', 'Skills'];
+            const nextDisp = modes[(modes.indexOf(displayMode) + 1) % modes.length];
+            localStorage.setItem('party_view', nextDisp);
+            this.showCharacterSelectionModal(page, sortBy, nextDisp);
+        });
+        this.modalGroup.addMultiple([dispBtnBg, dispZone, dispTxt]);
+
+        // Remove MC from options and the currently viewed character
+        let list = this.charactersData.filter(c => c.mc_id !== 1 && c.inv_id !== this.char.inv_id);
+
+        // Sort logic
+        list.sort((a, b) => {
+            const rarityOrder = { 'SSR': 3, 'SR': 2, 'R': 1 };
+            if (sortBy === 'Rarity') {
+                if (rarityOrder[a.mc_rarity] !== rarityOrder[b.mc_rarity]) return rarityOrder[b.mc_rarity] - rarityOrder[a.mc_rarity];
+                return (b.item_level || 1) - (a.item_level || 1);
+            } else if (sortBy === 'ATK') {
+                const aAtk = a.mc_base_atk + (a.mc_atk_growth * ((a.item_level || 1) - 1));
+                const bAtk = b.mc_base_atk + (b.mc_atk_growth * ((b.item_level || 1) - 1));
+                if (bAtk !== aAtk) return bAtk - aAtk;
+                return (b.item_level || 1) - (a.item_level || 1);
+            } else if (sortBy === 'HP') {
+                const aHp = a.mc_base_hp + (a.mc_hp_growth * ((a.item_level || 1) - 1));
+                const bHp = b.mc_base_hp + (b.mc_hp_growth * ((b.item_level || 1) - 1));
+                if (bHp !== aHp) return bHp - aHp;
+                return (b.item_level || 1) - (a.item_level || 1);
+            } else {
+                if (b.item_level !== a.item_level) return (b.item_level || 1) - (a.item_level || 1);
+                return rarityOrder[b.mc_rarity] - rarityOrder[a.mc_rarity];
+            }
+        });
+
+        const cols = 4;
+        const boxW = 85;
+        const boxH = 135;
+        const paddingX = 15;
+        const paddingY = 15;
+        const startX = CX - ((cols - 1) * (boxW + paddingX)) / 2;
+        const startYGrid = panelTop + 170;
+
+        const itemsPerPage = 12;
+        const totalPages = Math.max(1, Math.ceil(list.length / itemsPerPage));
+        const startIndex = (page - 1) * itemsPerPage;
+        const pagedItems = list.slice(startIndex, startIndex + itemsPerPage);
+
+        pagedItems.forEach((item, index) => {
+            const col = index % cols;
+            const row = Math.floor(index / cols);
+            const ix = startX + col * (boxW + paddingX);
+            const iy = startYGrid + row * (boxH + paddingY) + (boxH / 2);
+
+            let color = THEME.BORDER;
+            const rarity = item.mc_rarity;
+            if (rarity === 'SSR') color = 0xffd700;
+            else if (rarity === 'SR') color = 0xc0c0c0;
+            else if (rarity === 'R') color = 0xcd7f32;
+
+            const cardBg = this.add.graphics();
+            cardBg.fillStyle(THEME.PANEL, 1);
+            cardBg.lineStyle(2, THEME.BORDER);
+            cardBg.fillRoundedRect(ix - boxW / 2, iy - boxH / 2, boxW, boxH, 8);
+            cardBg.strokeRoundedRect(ix - boxW / 2, iy - boxH / 2, boxW, boxH, 8);
+            this.modalGroup.add(cardBg);
+
+            const isEquipped = (
+                item.inv_id === this.partyState.preset.char_slot_2_inv_id || 
+                item.inv_id === this.partyState.preset.char_slot_3_inv_id ||
+                item.inv_id === this.partyState.preset.char_slot_4_inv_id
+            );
+
+            const zone = this.add.zone(ix, iy, boxW, boxH).setInteractive({ useHandCursor: true });
+            zone.on('pointerdown', async (p, x, y, e) => {
+                e.stopPropagation();
+                this.modalGroup.clear(true, true);
+                await this.saveAndReturn(item.inv_id);
+            });
+            this.modalGroup.add(zone);
+
+            const yTop = iy - boxH / 2;
+            const pSize = boxW - 8;
+            const artBg = this.add.graphics();
+            artBg.fillStyle(THEME.BG, 1);
+            
+            const sqKey = `char_sq_${item.mc_id}`;
+            if (this.textures.exists(sqKey)) {
+                const portrait = this.add.image(ix, yTop + 4 + pSize / 2, sqKey).setDisplaySize(pSize, pSize);
+                portrait.setAlpha(1, 1, 0.25, 0.25);
+                const maskShape = this.make.graphics();
+                maskShape.fillStyle(0xffffff);
+                maskShape.fillRoundedRect(ix - pSize / 2, yTop + 4, pSize, pSize, 4);
+                portrait.setMask(maskShape.createGeometryMask());
+                this.modalGroup.add(portrait);
+            } else {
+                artBg.fillRoundedRect(ix - pSize / 2, yTop + 4, pSize, pSize, 4);
+                this.modalGroup.add(artBg);
+            }
+
+            // Outline of 1:1 portrait
+            const border = this.add.graphics();
+            border.lineStyle(1, color);
+            border.strokeRoundedRect(ix - pSize / 2, yTop + 4, pSize, pSize, 4);
+            this.modalGroup.add(border);
+            
+            // EQUIPPED Indicator (top left)
+            if (isEquipped) {
+                const eX = ix - pSize / 2 + 8;
+                const eY = yTop + 4 + 8;
+                const eBg = this.add.circle(eX, eY, 7, 0x3b82f6).setStrokeStyle(1, THEME.PANEL);
+                const eTxt = this.add.text(eX, eY, 'E', { fontSize: '9px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5);
+                this.modalGroup.addMultiple([eBg, eTxt]);
+            }
+
+            // Name
+            this.modalGroup.add(this.add.text(ix, yTop + 4 + pSize + 10, item.mc_name.split(' ')[0], { fontSize: '10px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold' }).setOrigin(0.5));
+
+            const element = item.mc_element;
+            const elKey = element ? `element_${element.toLowerCase()}` : '';
+            if (this.textures.exists(elKey)) {
+                const iconImg = this.add.image(ix + pSize / 2 - 8, yTop + 4 + 8, elKey).setDisplaySize(14, 14);
+                const shape = this.make.graphics();
+                shape.fillCircle(ix + pSize / 2 - 8, yTop + 4 + 8, 7);
+                iconImg.setMask(shape.createGeometryMask());
+                const strokeCircle = this.add.circle(ix + pSize / 2 - 8, yTop + 4 + 8, 7).setStrokeStyle(1, THEME.PANEL);
+                this.modalGroup.addMultiple([iconImg, strokeCircle]);
+            }
+
+            if (rarity) {
+                let rColor = '#ffffff';
+                if (rarity === 'SSR') rColor = '#ffd700';
+                else if (rarity === 'SR') rColor = '#c0c0c0';
+                else if (rarity === 'R') rColor = '#cd7f32';
+                this.modalGroup.add(this.add.text(ix - pSize / 2 + 4, yTop + 4 + pSize - 2, rarity, { fontSize: '11px', color: rColor, fontStyle: 'bold', stroke: '#000000', strokeThickness: 2, fontFamily: 'Outfit' }).setOrigin(0, 1));
+            }
+
+            const stat1Y = yTop + 4 + pSize + 24;
+            const stat2Y = yTop + 4 + pSize + 38;
+
+            if (displayMode === 'Level/LB') {
+                this.modalGroup.add(this.add.text(ix, stat1Y, `Lv: ${item.item_level}`, { fontSize: '10px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5));
+                this.modalGroup.add(this.add.text(ix, stat2Y, `LB: ${item.limit_break_level}`, { fontSize: '10px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5));
+            } else if (displayMode === 'Skills') {
+                const skills = (item.skills || []).filter(s => s.ms_category === 'Special');
+                if (skills.length > 0) {
+                    const sx = ix;
+                    const sy = yTop + 4 + pSize + 30;
+                    const sBox = this.add.graphics().fillStyle(THEME.AETHER, 1).fillRoundedRect(sx - 12, sy - 12, 24, 24, 4);
+                    this.modalGroup.add(sBox);
+                    this.modalGroup.add(this.add.text(sx, sy, 'SA', { fontSize: '10px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5));
+                } else {
+                    this.modalGroup.add(this.add.text(ix, yTop + 4 + pSize + 30, 'No SA', { fontSize: '9px', color: THEME.TEXT_MUTED }).setOrigin(0.5));
+                }
+            } else {
+                const itemAtk = item.mc_base_atk + (item.mc_atk_growth * ((item.item_level || 1) - 1));
+                const itemHp = item.mc_base_hp + (item.mc_hp_growth * ((item.item_level || 1) - 1));
+                
+                this.modalGroup.add(this.add.text(ix, stat1Y, `ATK: ${itemAtk}`, { fontSize: '10px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold' }).setOrigin(0.5));
+                this.modalGroup.add(this.add.text(ix, stat2Y, `HP:  ${itemHp}`, { fontSize: '10px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold' }).setOrigin(0.5));
+            }
+        });
+
+        const pageY = panelBottom - 30;
+        const prevActive = page > 1;
+        const prevBtn = this.add.rectangle(CX - 80, pageY, 60, 25, prevActive ? 0x1e293b : 0x0f172a).setStrokeStyle(1, THEME.BORDER);
+        const prevTxt = this.add.text(CX - 80, pageY, '< PREV', { fontSize: '10px', fontStyle: 'bold', color: prevActive ? '#ffffff' : THEME.TEXT_MUTED }).setOrigin(0.5);
+        if (prevActive) {
+            prevBtn.setInteractive({ useHandCursor: true });
+            prevBtn.on('pointerdown', () => this.showCharacterSelectionModal(page - 1, sortBy, displayMode));
+        }
+        
+        const nextActive = page < totalPages;
+        const nextBtn = this.add.rectangle(CX + 80, pageY, 60, 25, nextActive ? 0x1e293b : 0x0f172a).setStrokeStyle(1, THEME.BORDER);
+        const nextTxt = this.add.text(CX + 80, pageY, 'NEXT >', { fontSize: '10px', fontStyle: 'bold', color: nextActive ? '#ffffff' : THEME.TEXT_MUTED }).setOrigin(0.5);
+        if (nextActive) {
+            nextBtn.setInteractive({ useHandCursor: true });
+            nextBtn.on('pointerdown', () => this.showCharacterSelectionModal(page + 1, sortBy, displayMode));
+        }
+
+        this.modalGroup.addMultiple([prevBtn, prevTxt, nextBtn, nextTxt]);
+        this.modalGroup.add(this.add.text(CX, pageY, `${page} / ${totalPages}`, { fontSize: '12px', fontStyle: 'bold', color: THEME.TEXT_PRIMARY }).setOrigin(0.5));
+    }
+
+    async saveAndReturn(newInvId) {
+        const W = this.cameras.main.width, H = this.cameras.main.height, CX = W / 2;
+        const loadOverlay = this.add.rectangle(0, 0, W, H, 0x000000, 0.8).setOrigin(0).setInteractive().setDepth(2000);
+        const loadTxt = this.add.text(CX, H / 2, 'Saving Preset...', { fontSize: '16px', fontStyle: 'bold', color: '#fff' }).setOrigin(0.5).setDepth(2000);
+        
+        const preset = this.partyState.preset;
+        const targetSlot = this.partyState.partySlotId;
+        const oldInvId = preset[targetSlot];
+
+        // Find if new character is already in another slot
+        const charSlots = ['char_slot_2_inv_id', 'char_slot_3_inv_id'];
+        let oldSlotId = null;
+        if (newInvId) {
+            charSlots.forEach(s => {
+                if (preset[s] === newInvId) oldSlotId = s;
+            });
+        }
+
+        // Apply swap
+        if (oldSlotId) {
+            preset[oldSlotId] = oldInvId;
+        }
+        preset[targetSlot] = newInvId;
+
+        // Recalculate stats to show: Base Char Stat -> Base Char Stat + Grid Stat
+        const gridAtk = this.partyState.weapAtk || 0;
+        const gridHp = this.partyState.weapHp || 0;
+
+        let oldAtk = 0;
+        let oldHp = 0;
+        let newAtk = 0;
+        let newHp = 0;
+
+        let newlyEquippedChar = null;
+        if (newInvId && this.charactersData) {
+            newlyEquippedChar = this.charactersData.find(c => c.inv_id === newInvId);
+            if (newlyEquippedChar) {
+                const cBaseAtk = newlyEquippedChar.mc_base_atk + (newlyEquippedChar.mc_atk_growth * ((newlyEquippedChar.item_level || 1) - 1));
+                const cBaseHp = newlyEquippedChar.mc_base_hp + (newlyEquippedChar.mc_hp_growth * ((newlyEquippedChar.item_level || 1) - 1));
+
+                oldAtk = cBaseAtk; // Character Base Stat (with level)
+                oldHp = cBaseHp;
+
+                newAtk = cBaseAtk + gridAtk; // Total Stat (Char + Grid)
+                newHp = cBaseHp + gridHp;
+            }
+        }
+
+        const mc_skills = [];
+        if (preset.mc_skills) {
+            for (let i = 0; i < 4; i++) {
+                if (preset.mc_skills[i]) mc_skills.push(preset.mc_skills[i].ms_id);
+                else mc_skills.push(null);
+            }
+        }
+
+        const payload = {
+            char_slot_1_inv_id: preset.char_slot_1_inv_id,
+            char_slot_2_inv_id: preset.char_slot_2_inv_id,
+            char_slot_3_inv_id: preset.char_slot_3_inv_id,
+            weap_grid_1_inv_id: preset.weap_grid_1_inv_id,
+            weap_grid_2_inv_id: preset.weap_grid_2_inv_id,
+            weap_grid_3_inv_id: preset.weap_grid_3_inv_id,
+            weap_grid_4_inv_id: preset.weap_grid_4_inv_id,
+            weap_grid_5_inv_id: preset.weap_grid_5_inv_id,
+            mc_skills: mc_skills
+        };
+        
+        const res = await PartyApi.savePreset(this.playerId, this.partyState.currentSlot, payload);
+        if (res.status === 'success') {
+            const targetData = { 
+                partyState: this.partyState,
+                characterChanged: {
+                    newInvId: newInvId,
+                    oldAtk: Math.floor(oldAtk),
+                    oldHp: Math.floor(oldHp),
+                    newAtk: Math.floor(newAtk),
+                    newHp: Math.floor(newHp)
+                }
+            };
+            this.scene.start('LoadingScene', { targetScene: 'PartyScene', targetData: targetData });
+        } else {
+            loadTxt.setText('Save Failed!');
+            loadTxt.setColor('#ef4444');
+            setTimeout(() => {
+                loadOverlay.destroy();
+                loadTxt.destroy();
+            }, 2000);
+        }
     }
 }

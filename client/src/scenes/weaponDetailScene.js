@@ -108,7 +108,7 @@ export default class WeaponDetailScene extends Phaser.Scene {
         backBtn.on('pointerout', () => { backBtn.setFillStyle(THEME.PANEL); homeTxt.setColor(THEME.TEXT_PRIMARY); });
         backBtn.on('pointerdown', () => this.scene.start('LoadingScene', { targetScene: 'MainMenuScene' }));
 
-        const bannerW = W - 60; // Added padding
+        const bannerW = W - 30; // Added padding
         cy += 70;
 
         // PORTRAIT PLACEHOLDER
@@ -155,7 +155,8 @@ export default class WeaponDetailScene extends Phaser.Scene {
 
         // Element Name (colored)
         const elNameStr = weap.mw_element ? weap.mw_element.toUpperCase() : '?';
-        this.scrollGroup.add(this.add.text(elX + 15, elY, elNameStr, { fontSize: '13px', color: color, fontStyle: 'bold' }).setOrigin(0, 0.5));
+        const colorHex = color === THEME.BORDER ? '#334155' : '#' + color.toString(16).padStart(6, '0');
+        this.scrollGroup.add(this.add.text(elX + 15, elY, elNameStr, { fontSize: '13px', color: colorHex, fontStyle: 'bold' }).setOrigin(0, 0.5));
 
         // Level (white)
         const maxLevel = this.calculateMaxLevel();
@@ -177,11 +178,11 @@ export default class WeaponDetailScene extends Phaser.Scene {
         const expFill = this.add.rectangle(barX, barY, barW * expPct, 6, 0x3b82f6).setOrigin(0, 0.5);
         this.scrollGroup.add(expFill);
 
-        // Stats (white)
+        // Stats
         const atk = this.calculateBaseStat('atk');
         const hp = this.calculateBaseStat('hp');
-        this.scrollGroup.add(this.add.text(CX + bannerW / 2 - 20, cy + 60, `ATK: ${atk}`, { fontSize: '14px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(1, 0.5));
-        this.scrollGroup.add(this.add.text(CX + bannerW / 2 - 20, cy + 85, `HP:  ${hp}`, { fontSize: '14px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(1, 0.5));
+        this.scrollGroup.add(this.add.text(CX + bannerW / 2 - 20, cy + 60, `ATK: ${atk}`, { fontSize: '14px', color: '#ef4444', fontStyle: 'bold' }).setOrigin(1, 0.5));
+        this.scrollGroup.add(this.add.text(CX + bannerW / 2 - 20, cy + 85, `HP:  ${hp}`, { fontSize: '14px', color: '#4ade80', fontStyle: 'bold' }).setOrigin(1, 0.5));
 
         cy += 140;
 
@@ -578,5 +579,311 @@ export default class WeaponDetailScene extends Phaser.Scene {
         });
 
         this.modalGroup.addMultiple([overlay, modalBg, title, desc, okBg, okZone, okTxt]);
+    }
+
+    async showWeaponSelectionModal(page = 1, sortBy = null, displayMode = null) {
+        sortBy = sortBy || localStorage.getItem('party_sort') || 'Level';
+        displayMode = displayMode || localStorage.getItem('party_view') || 'ATK/HP';
+
+        if (this.modalGroup.getChildren().length > 0) this.modalGroup.clear(true, true);
+        const W = this.cameras.main.width, H = this.cameras.main.height, CX = W / 2, CY = H / 2;
+        
+        const overlay = this.add.rectangle(0, 0, W, H, 0x000000, 0.85).setOrigin(0).setInteractive();
+        this.modalGroup.add(overlay);
+
+        const panelTop = 90;
+        const panelBottom = 800;
+        const panelHeight = panelBottom - panelTop;
+        const panelCenterY = panelTop + (panelHeight / 2);
+        const panelWidth = W - 30;
+
+        const panel = this.add.rectangle(CX, panelCenterY, panelWidth, panelHeight, 0x0d1b2a).setStrokeStyle(2, 0x3b82f6).setInteractive();
+        this.modalGroup.add(panel);
+
+        this.modalGroup.add(this.add.text(CX, panelTop + 25, 'SELECT WEAPON', { fontSize: '16px', fontStyle: 'bold', color: '#A5B4FC', fontFamily: 'Outfit', letterSpacing: 2 }).setOrigin(0.5));
+        this.modalGroup.add(this.add.rectangle(CX, panelTop + 50, panelWidth - 40, 1, 0x334155));
+
+        const closeBtn = this.add.circle(CX + (panelWidth / 2) - 25, panelTop + 25, 14, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
+        const closeTxt = this.add.text(CX + (panelWidth / 2) - 25, panelTop + 25, '✕', { fontSize: '12px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
+        closeBtn.on('pointerdown', () => this.modalGroup.clear(true, true));
+        this.modalGroup.addMultiple([closeBtn, closeTxt]);
+
+        const loadingTxt = this.add.text(CX, panelCenterY, 'Loading Weapons...', { fontSize: '14px', color: '#fff' }).setOrigin(0.5);
+        this.modalGroup.add(loadingTxt);
+
+        if (!this.weaponsData) {
+            const invRes = await PartyApi.getInventory(this.playerId);
+            if (invRes.status === 'success') {
+                this.weaponsData = invRes.data.weapons;
+            } else {
+                loadingTxt.setText('Failed to load weapons');
+                return;
+            }
+        }
+        loadingTxt.destroy();
+
+        const preset = this.partyState.preset;
+        const equipped = [
+            preset.weap_grid_1_inv_id, preset.weap_grid_2_inv_id, preset.weap_grid_3_inv_id, preset.weap_grid_4_inv_id, preset.weap_grid_5_inv_id
+        ].filter(id => id != null);
+
+        // Allow unequip
+        const unequipY = panelTop + 75;
+        const unequipZone = this.add.zone(CX, unequipY, 200, 32).setInteractive({ useHandCursor: true });
+        const unBg = this.add.graphics().fillStyle(THEME.DANGER, 1).fillRoundedRect(CX - 100, unequipY - 16, 200, 32, 8);
+        unequipZone.on('pointerdown', async () => {
+            this.modalGroup.clear(true, true);
+            await this.saveAndReturn(null);
+        });
+        this.modalGroup.addMultiple([unBg, unequipZone, this.add.text(CX, unequipY, 'Unequip / Clear', { fontSize: '12px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5)]);
+
+        // --- Sort & Filter Bar ---
+        const filterY = panelTop + 115;
+        const sortBtnBg = this.add.rectangle(120, filterY, 140, 26, THEME.PANEL, 1);
+        sortBtnBg.setStrokeStyle(1, THEME.BORDER);
+        const sortZone = this.add.zone(120, filterY, 140, 26).setInteractive({ useHandCursor: true });
+        const sortTxt = this.add.text(120, filterY, `SORT: ${sortBy}`, { fontSize: '11px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
+
+        sortZone.on('pointerover', () => sortBtnBg.setFillStyle(0x334155));
+        sortZone.on('pointerout', () => sortBtnBg.setFillStyle(THEME.PANEL));
+        sortZone.on('pointerdown', () => {
+            const s = ['Level', 'ATK', 'HP', 'Rarity'];
+            const nextSort = s[(s.indexOf(sortBy) + 1) % s.length];
+            localStorage.setItem('party_sort', nextSort);
+            this.showWeaponSelectionModal(1, nextSort, displayMode);
+        });
+        this.modalGroup.addMultiple([sortBtnBg, sortZone, sortTxt]);
+
+        const dispBtnBg = this.add.rectangle(W - 120, filterY, 140, 26, THEME.PANEL, 1);
+        dispBtnBg.setStrokeStyle(1, THEME.BORDER);
+        const dispZone = this.add.zone(W - 120, filterY, 140, 26).setInteractive({ useHandCursor: true });
+        const dispTxt = this.add.text(W - 120, filterY, `VIEW: ${displayMode}`, { fontSize: '11px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
+
+        dispZone.on('pointerover', () => dispBtnBg.setFillStyle(0x334155));
+        dispZone.on('pointerout', () => dispBtnBg.setFillStyle(THEME.PANEL));
+        dispZone.on('pointerdown', () => {
+            let modes = ['ATK/HP', 'Level/LB', 'Skills'];
+            const nextDisp = modes[(modes.indexOf(displayMode) + 1) % modes.length];
+            localStorage.setItem('party_view', nextDisp);
+            this.showWeaponSelectionModal(page, sortBy, nextDisp);
+        });
+        this.modalGroup.addMultiple([dispBtnBg, dispZone, dispTxt]);
+
+        let list = this.weaponsData.filter(item => !equipped.includes(item.inv_id));
+        
+        // Sorting logic
+        list.sort((a, b) => {
+            const rarityScore = { 'SSR': 3, 'SR': 2, 'R': 1 };
+            if (sortBy === 'Rarity') {
+                const rA = rarityScore[a.mw_rarity] || 0;
+                const rB = rarityScore[b.mw_rarity] || 0;
+                if (rA !== rB) return rB - rA;
+            } else if (sortBy === 'ATK') {
+                const aAtk = a.mw_base_atk + (a.mw_atk_growth * ((a.item_level || 1) - 1));
+                const bAtk = b.mw_base_atk + (b.mw_atk_growth * ((b.item_level || 1) - 1));
+                return bAtk - aAtk;
+            } else if (sortBy === 'HP') {
+                const aHp = a.mw_base_hp + (a.mw_hp_growth * ((a.item_level || 1) - 1));
+                const bHp = b.mw_base_hp + (b.mw_hp_growth * ((b.item_level || 1) - 1));
+                return bHp - aHp;
+            }
+            return (b.item_level || 1) - (a.item_level || 1);
+        });
+
+        // Grid Render
+        const cols = 4;
+        const boxW = 84;
+        const boxH = 100;
+        const paddingX = 12;
+        const paddingY = 10;
+        const gridW = (cols * boxW) + ((cols - 1) * paddingX);
+        const startX = (W - gridW) / 2 + (boxW / 2);
+        const startYGrid = panelTop + 150 + 20;
+
+        const itemsPerPage = 16;
+        const totalPages = Math.max(1, Math.ceil(list.length / itemsPerPage));
+        const pagedItems = list.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+
+        pagedItems.forEach((item, index) => {
+            const col = index % cols;
+            const row = Math.floor(index / cols);
+            const ix = startX + col * (boxW + paddingX);
+            const iy = startYGrid + row * (boxH + paddingY) + (boxH / 2);
+
+            let color = THEME.BORDER;
+            const rarity = item.mw_rarity;
+            if (rarity === 'SSR') color = 0xffd700;
+            else if (rarity === 'SR') color = 0xc0c0c0;
+            else if (rarity === 'R') color = 0xcd7f32;
+
+            const cardBg = this.add.graphics();
+            cardBg.fillStyle(THEME.PANEL, 1);
+            cardBg.lineStyle(2, THEME.BORDER);
+            cardBg.fillRoundedRect(ix - boxW / 2, iy - boxH / 2, boxW, boxH, 8);
+            cardBg.strokeRoundedRect(ix - boxW / 2, iy - boxH / 2, boxW, boxH, 8);
+            this.modalGroup.add(cardBg);
+
+            const zone = this.add.zone(ix, iy, boxW, boxH).setInteractive({ useHandCursor: true });
+            zone.on('pointerdown', async (p, x, y, e) => {
+                e.stopPropagation();
+                this.modalGroup.clear(true, true);
+                await this.saveAndReturn(item.inv_id);
+            });
+            this.modalGroup.add(zone);
+
+            const artH = boxH * 0.45;
+            const artBg = this.add.graphics();
+            artBg.fillStyle(THEME.BG, 1);
+            artBg.lineStyle(1, color);
+            artBg.fillRoundedRect(ix - boxW / 2 + 4, iy - boxH / 2 + 4, boxW - 8, artH, 6);
+            artBg.strokeRoundedRect(ix - boxW / 2 + 4, iy - boxH / 2 + 4, boxW - 8, artH, 6);
+            this.modalGroup.add(artBg);
+
+            this.modalGroup.add(this.add.text(ix, iy - boxH / 2 + 4 + artH / 2, item.mw_name.split(' ')[0], { fontSize: '10px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold' }).setOrigin(0.5));
+
+            const element = item.mw_element;
+            const elKey = element ? `element_${element.toLowerCase()}` : '';
+            if (this.textures.exists(elKey)) {
+                const iconImg = this.add.image(ix + boxW / 2 - 10, iy - boxH / 2 + 10, elKey).setDisplaySize(14, 14);
+                const shape = this.make.graphics();
+                shape.fillCircle(ix + boxW / 2 - 10, iy - boxH / 2 + 10, 7);
+                iconImg.setMask(shape.createGeometryMask());
+                const strokeCircle = this.add.circle(ix + boxW / 2 - 10, iy - boxH / 2 + 10, 7).setStrokeStyle(1, THEME.PANEL);
+                this.modalGroup.addMultiple([iconImg, strokeCircle]);
+            } else {
+                let elColor = 0xffffff;
+                if (element === 'Fire') elColor = 0xef4444;
+                if (element === 'Wind') elColor = 0x10b981;
+                if (element === 'Earth') elColor = 0xd97706;
+                const elCircle = this.add.circle(ix + boxW / 2 - 10, iy - boxH / 2 + 10, 7, elColor).setStrokeStyle(1, THEME.PANEL);
+                const elTxt = this.add.text(ix + boxW / 2 - 10, iy - boxH / 2 + 10, element ? element.charAt(0).toUpperCase() : '?', { fontSize: '9px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5);
+                this.modalGroup.addMultiple([elCircle, elTxt]);
+            }
+
+            let rColor = '#ffffff';
+            if (rarity === 'SSR') rColor = '#ffd700';
+            else if (rarity === 'SR') rColor = '#c0c0c0';
+            else if (rarity === 'R') rColor = '#cd7f32';
+
+            if (rarity) {
+                this.modalGroup.add(this.add.text(ix - boxW / 2 + 6, iy - boxH / 2 + artH + 5, rarity, { fontSize: '11px', color: rColor, fontStyle: 'bold', stroke: '#000000', strokeThickness: 2, fontFamily: 'Outfit' }).setOrigin(0, 1));
+            }
+
+            if (displayMode === 'Level/LB') {
+                this.modalGroup.add(this.add.text(ix, iy + 12, `Lv: ${item.item_level}`, { fontSize: '10px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5));
+                this.modalGroup.add(this.add.text(ix, iy + 30, `LB: ${item.limit_break_level}`, { fontSize: '10px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5));
+            } else if (displayMode === 'Skills') {
+                const skills = (item.skills || []).filter(s => s.ms_category === 'Passive');
+                skills.slice(0, 2).forEach((skill, i) => {
+                    const sx = ix + (i === 0 && skills.length > 1 ? -15 : (i === 1 ? 15 : 0));
+                    const sy = iy + 20;
+
+                    const isLocked = (item.item_level < skill.unlock_level) || (item.limit_break_level < skill.unlock_limit_break);
+                    const sBox = this.add.graphics().fillStyle(isLocked ? 0x555555 : 0x458B74, 1).fillRoundedRect(sx - 10, sy - 10, 20, 20, 4);
+                    this.modalGroup.add(sBox);
+                    this.modalGroup.add(this.add.text(sx, sy, 'P', { fontSize: '10px', color: isLocked ? '#999' : '#fff' }).setOrigin(0.5));
+                });
+                if (skills.length === 0) {
+                    this.modalGroup.add(this.add.text(ix, iy + 20, 'No Passives', { fontSize: '9px', color: THEME.TEXT_MUTED }).setOrigin(0.5));
+                }
+            } else {
+                const itemAtk = item.mw_base_atk + (item.mw_atk_growth * ((item.item_level || 1) - 1));
+                const itemHp = item.mw_base_hp + (item.mw_hp_growth * ((item.item_level || 1) - 1));
+                
+                this.modalGroup.add(this.add.text(ix, iy + 12, `ATK: ${itemAtk}`, { fontSize: '10px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold' }).setOrigin(0.5));
+                this.modalGroup.add(this.add.text(ix, iy + 30, `HP:  ${itemHp}`, { fontSize: '10px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold' }).setOrigin(0.5));
+            }
+        });
+
+        // Pagination
+        const pageY = panelBottom - 30;
+        const prevActive = page > 1;
+        const prevBtn = this.add.rectangle(CX - 80, pageY, 60, 25, prevActive ? 0x1e293b : 0x0f172a).setStrokeStyle(1, THEME.BORDER);
+        const prevTxt = this.add.text(CX - 80, pageY, '< PREV', { fontSize: '10px', fontStyle: 'bold', color: prevActive ? '#ffffff' : THEME.TEXT_MUTED }).setOrigin(0.5);
+        if (prevActive) {
+            prevBtn.setInteractive({ useHandCursor: true });
+            prevBtn.on('pointerdown', () => this.showWeaponSelectionModal(page - 1, sortBy, displayMode));
+        }
+        
+        const nextActive = page < totalPages;
+        const nextBtn = this.add.rectangle(CX + 80, pageY, 60, 25, nextActive ? 0x1e293b : 0x0f172a).setStrokeStyle(1, THEME.BORDER);
+        const nextTxt = this.add.text(CX + 80, pageY, 'NEXT >', { fontSize: '10px', fontStyle: 'bold', color: nextActive ? '#ffffff' : THEME.TEXT_MUTED }).setOrigin(0.5);
+        if (nextActive) {
+            nextBtn.setInteractive({ useHandCursor: true });
+            nextBtn.on('pointerdown', () => this.showWeaponSelectionModal(page + 1, sortBy, displayMode));
+        }
+
+        this.modalGroup.addMultiple([prevBtn, prevTxt, nextBtn, nextTxt]);
+        this.modalGroup.add(this.add.text(CX, pageY, `${page} / ${totalPages}`, { fontSize: '12px', fontStyle: 'bold', color: THEME.TEXT_PRIMARY }).setOrigin(0.5));
+    }
+
+    async saveAndReturn(newInvId) {
+        const W = this.cameras.main.width, H = this.cameras.main.height, CX = W / 2;
+        const loadOverlay = this.add.rectangle(0, 0, W, H, 0x000000, 0.8).setOrigin(0).setInteractive().setDepth(2000);
+        const loadTxt = this.add.text(CX, H / 2, 'Saving Preset...', { fontSize: '16px', fontStyle: 'bold', color: '#fff' }).setOrigin(0.5).setDepth(2000);
+        
+        const calcGridStats = (p) => {
+            let hp = 0, atk = 0;
+            const ids = [p.weap_grid_1_inv_id, p.weap_grid_2_inv_id, p.weap_grid_3_inv_id, p.weap_grid_4_inv_id, p.weap_grid_5_inv_id];
+            ids.forEach(id => {
+                if (id) {
+                    const w = this.weaponsData.find(x => x.inv_id === id);
+                    if (w) {
+                        hp += w.mw_base_hp + (w.mw_hp_growth * ((w.item_level || 1) - 1));
+                        atk += w.mw_base_atk + (w.mw_atk_growth * ((w.item_level || 1) - 1));
+                    }
+                }
+            });
+            return { hp: Math.floor(hp), atk: Math.floor(atk) };
+        };
+
+        const oldStats = calcGridStats(this.partyState.preset);
+
+        const preset = this.partyState.preset;
+        preset[this.partyState.partySlotId] = newInvId;
+        
+        const newStats = calcGridStats(preset);
+
+        const mc_skills = [];
+        if (preset.mc_skills) {
+            for (let i = 0; i < 4; i++) {
+                if (preset.mc_skills[i]) mc_skills.push(preset.mc_skills[i].ms_id);
+                else mc_skills.push(null);
+            }
+        }
+
+        const payload = {
+            char_slot_1_inv_id: preset.char_slot_1_inv_id,
+            char_slot_2_inv_id: preset.char_slot_2_inv_id,
+            char_slot_3_inv_id: preset.char_slot_3_inv_id,
+            weap_grid_1_inv_id: preset.weap_grid_1_inv_id,
+            weap_grid_2_inv_id: preset.weap_grid_2_inv_id,
+            weap_grid_3_inv_id: preset.weap_grid_3_inv_id,
+            weap_grid_4_inv_id: preset.weap_grid_4_inv_id,
+            weap_grid_5_inv_id: preset.weap_grid_5_inv_id,
+            mc_skills: mc_skills
+        };
+        
+        const res = await PartyApi.savePreset(this.playerId, this.partyState.currentSlot, payload);
+        if (res.status === 'success') {
+            const targetData = { 
+                partyState: this.partyState,
+                weaponChanged: {
+                    newInvId: newInvId,
+                    oldAtk: oldStats.atk,
+                    oldHp: oldStats.hp,
+                    newAtk: newStats.atk,
+                    newHp: newStats.hp
+                }
+            };
+            this.scene.start('LoadingScene', { targetScene: 'PartyScene', targetData: targetData });
+        } else {
+            loadTxt.setText('Save Failed!');
+            loadTxt.setColor('#ef4444');
+            setTimeout(() => {
+                loadOverlay.destroy();
+                loadTxt.destroy();
+            }, 2000);
+        }
     }
 }

@@ -398,11 +398,12 @@ exports.saveBattleResult = async (req, res) => {
                         );
                         
                         for (const char of partyRows) {
+                            const charType = char.mc_id === 1 ? 'MC' : 'Character';
                             const maxLevel = LevelingSystem.getCharMaxLevel(char.mc_id, char.mc_rarity, char.limit_break_level);
-                            const maxLevelExpCap = LevelingSystem.getExpThresholds(maxLevel, maxLevel, 'Character').current_level_base_exp;
+                            const maxLevelExpCap = LevelingSystem.getExpThresholds(maxLevel, maxLevel, charType).current_level_base_exp;
                             
                             // Self-heal dummy data: if EXP is less than what their current level dictates
-                            const dbBaseExp = LevelingSystem.getExpThresholds(char.item_level, maxLevel, 'Character').current_level_base_exp;
+                            const dbBaseExp = LevelingSystem.getExpThresholds(char.item_level, maxLevel, charType).current_level_base_exp;
                             let currentExp = char.item_exp;
                             if (currentExp < dbBaseExp) {
                                 currentExp = dbBaseExp;
@@ -414,7 +415,7 @@ exports.saveBattleResult = async (req, res) => {
                                 newExp = maxLevelExpCap;
                             }
 
-                            const realLevel = LevelingSystem.calculateCurrentLevel(newExp, maxLevel, 'Character');
+                            const realLevel = LevelingSystem.calculateCurrentLevel(newExp, maxLevel, charType);
                             
                             // Deteksi Skill Unlock
                             let newSkillsUnlocked = [];

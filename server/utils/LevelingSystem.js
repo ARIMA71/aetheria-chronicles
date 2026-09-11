@@ -1,5 +1,6 @@
 const LevelingSystem = {
     CHAR_EXP_CUMULATIVE_TABLE: [0, 0], // Index = Level (Index 1 = Lvl 1, Base EXP 0)
+    MC_EXP_CUMULATIVE_TABLE: [0, 0],   // Khusus MC
     WEAPON_EXP_CUMULATIVE_TABLE: [0, 0],
     PLAYER_RANK_CUMULATIVE_TABLE: [0, 0],
 
@@ -10,13 +11,18 @@ const LevelingSystem = {
         if (this.CHAR_EXP_CUMULATIVE_TABLE.length > 2) return;
 
         let charTotal = 0;
+        let mcTotal = 0;
         let weaponTotal = 0;
         let rankTotal = 0;
 
-        // Karakter maksimal level 50 (SSR) atau 60 jika ada ekspansi
-        for (let i = 2; i <= 60; i++) {
+        // Karakter maksimal level 100 (Support untuk LB tingkat lanjut)
+        for (let i = 2; i <= 100; i++) {
             charTotal += Math.floor(50 * Math.pow(i, 1.6));
             this.CHAR_EXP_CUMULATIVE_TABLE.push(charTotal);
+
+            // MC lebih mahal expnya
+            mcTotal += Math.floor(100 * Math.pow(i, 1.6));
+            this.MC_EXP_CUMULATIVE_TABLE.push(mcTotal);
         }
 
         // Senjata maksimal level 100
@@ -35,19 +41,11 @@ const LevelingSystem = {
     // Menentukan batas maksimal level berdasarkan rarity
     // Batas level mutlak
     getCharMaxLevel: function(mcId, rarity, limitBreakLevel = 0) {
-        if (mcId === 1) { 
-            // Main Character absolut mentok di level 20
-            return 20; 
-        }
-        if (rarity === 'SSR') {
-            // Base max 40, LB1 unlocks up to 60
-            return Math.min(60, 40 + (limitBreakLevel * 20)); 
-        }
-        if (rarity === 'SR') {
-            // Base max 30, LB1 unlocks up to 50
-            return Math.min(50, 30 + (limitBreakLevel * 20)); 
-        }
-        return 1; // Fallback
+        if (mcId === 1) return 40 + (limitBreakLevel * 20);
+        if (rarity === 'SSR') return 40 + (limitBreakLevel * 20);
+        if (rarity === 'SR') return 30 + (limitBreakLevel * 20);
+        if (rarity === 'R') return 20 + (limitBreakLevel * 20);
+        return 20 + (limitBreakLevel * 20); // Fallback
     },
 
     getWeaponMaxLevel: function(rarity) {
@@ -60,7 +58,8 @@ const LevelingSystem = {
     // Fungsi pencari Level Real-Time berdasarkan Total EXP
     calculateCurrentLevel: function(totalExp, maxLevel, type = 'Character') {
         let calculatedLevel = 1;
-        const table = type === 'Character' ? this.CHAR_EXP_CUMULATIVE_TABLE : 
+        const table = type === 'MC' ? this.MC_EXP_CUMULATIVE_TABLE :
+                      type === 'Character' ? this.CHAR_EXP_CUMULATIVE_TABLE : 
                       type === 'Weapon' ? this.WEAPON_EXP_CUMULATIVE_TABLE : 
                       this.PLAYER_RANK_CUMULATIVE_TABLE;
         
@@ -77,7 +76,8 @@ const LevelingSystem = {
 
     // Mendapatkan batas bawah (base) dan batas atas (next) EXP untuk keperluan rendering Progress Bar di Frontend
     getExpThresholds: function(currentLevel, maxLevel, type = 'Character') {
-        const table = type === 'Character' ? this.CHAR_EXP_CUMULATIVE_TABLE : 
+        const table = type === 'MC' ? this.MC_EXP_CUMULATIVE_TABLE :
+                      type === 'Character' ? this.CHAR_EXP_CUMULATIVE_TABLE : 
                       type === 'Weapon' ? this.WEAPON_EXP_CUMULATIVE_TABLE : 
                       this.PLAYER_RANK_CUMULATIVE_TABLE;
         

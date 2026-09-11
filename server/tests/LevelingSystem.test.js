@@ -18,23 +18,26 @@ beforeAll(() => {
 // SUITE 1: getCharMaxLevel
 // ─────────────────────────────────────────────────────────────────────────────
 describe('LevelingSystem.getCharMaxLevel()', () => {
-    test('Main Character (mc_id=1) selalu max level 20, tidak peduli rarity', () => {
-        expect(LevelingSystem.getCharMaxLevel(1, 'SSR', 0)).toBe(20);
-        expect(LevelingSystem.getCharMaxLevel(1, 'SR', 5)).toBe(20);
+    test('Main Character (mc_id=1) memiliki base 40, +20 per LB', () => {
+        expect(LevelingSystem.getCharMaxLevel(1, 'SSR', 0)).toBe(40);
+        expect(LevelingSystem.getCharMaxLevel(1, 'SR', 1)).toBe(60);
     });
 
-    test('Karakter SSR memiliki max level 40 pada LB0 dan 60 pada LB1', () => {
+    test('Karakter SSR memiliki max level 40 pada LB0 dan 80 pada LB2', () => {
         expect(LevelingSystem.getCharMaxLevel(10, 'SSR', 0)).toBe(40);
         expect(LevelingSystem.getCharMaxLevel(10, 'SSR', 1)).toBe(60);
+        expect(LevelingSystem.getCharMaxLevel(10, 'SSR', 2)).toBe(80);
     });
 
-    test('Karakter SR memiliki max level 30 pada LB0 dan 50 pada LB1', () => {
+    test('Karakter SR memiliki max level 30 pada LB0 dan 70 pada LB2', () => {
         expect(LevelingSystem.getCharMaxLevel(5, 'SR', 0)).toBe(30);
         expect(LevelingSystem.getCharMaxLevel(5, 'SR', 1)).toBe(50);
+        expect(LevelingSystem.getCharMaxLevel(5, 'SR', 2)).toBe(70);
     });
 
-    test('Rarity tidak dikenal (fallback) mengembalikan 1', () => {
-        expect(LevelingSystem.getCharMaxLevel(99, 'N', 0)).toBe(1);
+    test('Rarity tidak dikenal (fallback) menggunakan base 20, +20 per LB', () => {
+        expect(LevelingSystem.getCharMaxLevel(99, 'N', 0)).toBe(20);
+        expect(LevelingSystem.getCharMaxLevel(99, 'N', 1)).toBe(40);
     });
 });
 
