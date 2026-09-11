@@ -20,8 +20,8 @@ const LevelingSystem = {
             charTotal += Math.floor(50 * Math.pow(i, 1.6));
             this.CHAR_EXP_CUMULATIVE_TABLE.push(charTotal);
 
-            // MC lebih mahal expnya
-            mcTotal += Math.floor(100 * Math.pow(i, 1.6));
+            // MC sedikit lebih mahal dari karakter biasa (1.6x multiplier, 80 * i^1.6)
+            mcTotal += Math.floor(80 * Math.pow(i, 1.6));
             this.MC_EXP_CUMULATIVE_TABLE.push(mcTotal);
         }
 
@@ -41,7 +41,7 @@ const LevelingSystem = {
     // Menentukan batas maksimal level berdasarkan rarity
     // Batas level mutlak
     getCharMaxLevel: function(mcId, rarity, limitBreakLevel = 0) {
-        if (mcId === 1) return 40 + (limitBreakLevel * 20);
+        if (mcId === 1) return 30 + (limitBreakLevel * 20);
         if (rarity === 'SSR') return 40 + (limitBreakLevel * 20);
         if (rarity === 'SR') return 30 + (limitBreakLevel * 20);
         if (rarity === 'R') return 20 + (limitBreakLevel * 20);

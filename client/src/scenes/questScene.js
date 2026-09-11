@@ -26,6 +26,10 @@ const PATH_POINTS = [
 export default class QuestScene extends Phaser.Scene {
     constructor() { super('QuestScene'); }
 
+    preload() {
+        this.load.image('bg_quest', 'assets/backgrounds/questScene.jpg');
+    }
+
     create() {
         if (!checkSession(this)) return;
         saveCurrentScene(this.scene.key);
@@ -49,7 +53,9 @@ export default class QuestScene extends Phaser.Scene {
         this.musicOn = localStorage.getItem('music_on') !== 'false';
         this.sfxOn = localStorage.getItem('sfx_on') !== 'false';
 
-        this.add.rectangle(CX, H / 2, W, H, THEME.BG);
+        const bg = this.add.image(CX, H / 2, 'bg_quest').setOrigin(0.5);
+        const scale = Math.max(W / bg.width, H / bg.height);
+        bg.setScale(scale);
         this._buildTopBar();
         this.topMenu = new TopMenuComponent(this);
         this._buildMap();
@@ -475,14 +481,31 @@ export default class QuestScene extends Phaser.Scene {
 
         const charsInPreset = slotInvIds.map(invId => this.fullCharacters.find(c => c.inv_id === invId)).filter(c => c);
 
-        // Hitung total power (Simplified, di real game mungkin ada utility khusus)
-        let totalPower = 0;
+        // Hitung total power (Standardized: Math.floor((totalHp / 5) + totalAtk + totalDef))
+        let totalHp = 0;
+        let totalAtk = 0;
+        let totalDef = 0;
+
         charsInPreset.forEach(c => {
-            const hp = c.mc_base_hp + (c.mc_hp_growth * (c.item_level - 1));
-            const atk = c.mc_base_atk + (c.mc_atk_growth * (c.item_level - 1));
-            const def = c.mc_base_def + (c.mc_def_growth * (c.item_level - 1));
-            totalPower += Math.floor((hp / 10) + (atk * 1.5) + (def * 1.2));
+            const level = c.item_level || 1;
+            totalHp += c.mc_base_hp + (c.mc_hp_growth * (level - 1));
+            totalAtk += c.mc_base_atk + (c.mc_atk_growth * (level - 1));
+            totalDef += c.mc_base_def + (c.mc_def_growth * (level - 1));
         });
+
+        const weapIds = [preset.weap_grid_1_inv_id, preset.weap_grid_2_inv_id, preset.weap_grid_3_inv_id, preset.weap_grid_4_inv_id, preset.weap_grid_5_inv_id];
+        weapIds.forEach(id => {
+            if (id && this.fullWeapons) {
+                const w = this.fullWeapons.find(x => x.inv_id === id);
+                if (w) {
+                    const level = w.item_level || 1;
+                    totalHp += w.mw_base_hp + (w.mw_hp_growth * (level - 1));
+                    totalAtk += w.mw_base_atk + (w.mw_atk_growth * (level - 1));
+                }
+            }
+        });
+
+        const totalPower = Math.floor((totalHp / 5) + totalAtk + totalDef);
 
         const pwrTxt = this.add.text(CX, startY - 25, `⚡ Party Power: ${totalPower}${charsInPreset.length > 0 ? '' : ' (Empty)'}`, { fontSize: '11px', color: '#D4A017', fontStyle: 'bold', fontFamily: 'Outfit' }).setOrigin(0.5);
         this.presetCardsContainer.add(pwrTxt);

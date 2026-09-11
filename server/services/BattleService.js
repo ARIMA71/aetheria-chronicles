@@ -1119,7 +1119,8 @@ class BattleService {
                                 skillName: enemySkill.name,
                                 skillCategory: (enemySkill.category || 'basic').toLowerCase(),
                                 elementMultiplier: calcResult.elementMultiplier,
-                                sourceElement: (!enemySkill.element || enemySkill.element === 'Any' || enemySkill.element === 'Neutral') ? (enemy.element || 'Neutral') : enemySkill.element
+                                sourceElement: (!enemySkill.element || enemySkill.element === 'Any' || enemySkill.element === 'Neutral') ? (enemy.element || 'Neutral') : enemySkill.element,
+                                sourceCa: enemy.current_ca
                             });
                         } 
                         else if (sType === 'heal' || sType === 'support' || sType === 'cleanse') {

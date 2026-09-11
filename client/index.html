@@ -20,7 +20,7 @@
         html {
             overflow-y: auto;
             overflow-x: hidden;
-            background-color: #0F172A;
+            background-color: #000000;
             scrollbar-width: thin;
             scrollbar-color: #1e293b #0f141d;
         }
@@ -28,7 +28,7 @@
         body {
             margin: 0;
             padding: 0;
-            background-color: #0F172A;
+            background-color: #000000;
             color: #ffffff;
             font-family: 'Outfit', sans-serif;
             min-height: 100vh;
@@ -54,7 +54,7 @@
             /* No scrollbar here; scroll occurs at page level */
             max-width: 450px;
             position: relative;
-            background: #0F172A;
+            background: #000000;
             box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
             z-index: 10;
         }
@@ -222,6 +222,8 @@
             </div>
         </div>
     </div>
+    <!-- Stats.js for Portability & Performance Benchmarking -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stats.js/r17/Stats.min.js"></script>
     <script type="module" src="/src/main.js"></script>
 </body>
 

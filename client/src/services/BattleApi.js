@@ -97,16 +97,26 @@ export default class BattleApi {
      * @returns {Promise<object>}
      */
     static async processTurnBatch(bsId, character_actions) {
+        const t0 = performance.now();
         try {
             const res = await fetch(`${API_BASE}/process-turn`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ bsId, character_actions })
             });
+            const duration = (performance.now() - t0).toFixed(1);
+            window.__lastApiLatency = `${duration}ms`;
+            if (typeof window.logBenchmark === 'function') {
+                window.logBenchmark('POST /api/battle/process-turn', res.status + (res.ok ? ' OK' : ' FAIL'), duration);
+            }
             if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
             return await res.json();
         } catch (error) {
-            console.error("Failed to process turn batch:", error);
+            const duration = (performance.now() - t0).toFixed(1);
+            window.__lastApiLatency = `${duration}ms (Err)`;
+            if (typeof window.logBenchmark === 'function') {
+                window.logBenchmark('POST /api/battle/process-turn', 'ERROR', duration);
+            }
             throw error;
         }
     }

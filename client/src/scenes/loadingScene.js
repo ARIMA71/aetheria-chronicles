@@ -25,22 +25,34 @@ export default class LoadingScene extends Phaser.Scene {
         const CX = W / 2;
         const CY = H / 2;
 
-        // Background
-        this.add.rectangle(0, 0, W, H, THEME.BG).setOrigin(0);
+        // Solid Black Background
+        this.add.rectangle(0, 0, W, H, 0x000000).setOrigin(0);
 
-        // Center Title/Logo
+        // Center Title/Logo with breathing scale animation
         const logo = this.add.image(CX, CY - 15, 'game_logo').setOrigin(0.5);
         const targetWidth = 220; // Slightly smaller than title screen
-        if (logo.width > targetWidth) {
-            logo.setScale(targetWidth / logo.width);
-        }
+        const baseScale = logo.width > targetWidth ? (targetWidth / logo.width) : 1;
+        logo.setScale(baseScale);
 
-        // Center loading text below logo
-        const loadingText = this.add.text(CX, CY + 50, 'Loading', {
+        this.tweens.add({
+            targets: logo,
+            scaleX: baseScale * 1.06,
+            scaleY: baseScale * 1.06,
+            duration: 1000,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut'
+        });
+
+        // Center loading text below logo with White fill & Sky Blue stroke
+        const loadingText = this.add.text(CX, CY + 55, 'Loading', {
             fontSize: '14px',
-            fontStyle: 'italic',
+            fontStyle: 'bold',
             fontFamily: 'Outfit',
-            color: THEME.TEXT_MUTED
+            color: '#ffffff',
+            stroke: '#38bdf8',
+            strokeThickness: 2,
+            letterSpacing: 1
         }).setOrigin(0.5, 0.5);
 
         // Dot animation
@@ -107,6 +119,32 @@ export default class LoadingScene extends Phaser.Scene {
 
             requiredAudio.push({ key: bgmKey, url: `assets/audio/bgm/${bgmKey}.mp3` });
             keysToKeep.push(bgmKey);
+
+            // Preload Battle SFX
+            const battleSfxList = [
+                { key: 'sfx_charBasicAtk', url: 'assets/audio/sfx/charBasicAtk.mp3' },
+                { key: 'sfx_charSkillAtk', url: 'assets/audio/sfx/charSkillAtk.wav' },
+                { key: 'sfx_charSpecialAttack', url: 'assets/audio/sfx/charSpecialAttack.mp3' },
+                { key: 'sfx_heal', url: 'assets/audio/sfx/heal.mp3' },
+                { key: 'sfx_buff', url: 'assets/audio/sfx/buff.mp3' },
+                { key: 'sfx_debuff', url: 'assets/audio/sfx/debuff.mp3' },
+                { key: 'sfx_monsBasicAtk', url: 'assets/audio/sfx/monsBasicAtk.mp3' },
+                { key: 'sfx_monsChargeAttack', url: 'assets/audio/sfx/monsChargeAttack.mp3' },
+                { key: 'sfx_monsEnraged', url: 'assets/audio/sfx/monsEnraged.wav' },
+                { key: 'sfx_monsExhausted', url: 'assets/audio/sfx/monsExhausted.wav' },
+                { key: 'sfx_monsterDefeated', url: 'assets/audio/sfx/monsterDefeated.mp3' },
+                { key: 'sfx_battleReady', url: 'assets/audio/sfx/battleReady.mp3' },
+                { key: 'sfx_battleStart', url: 'assets/audio/sfx/battleStart.mp3' },
+                { key: 'sfx_revive', url: 'assets/audio/sfx/revive.mp3' },
+                { key: 'sfx_stunned', url: 'assets/audio/sfx/stunned.mp3' },
+                { key: 'sfx_aetherBurst', url: 'assets/audio/sfx/aetherBurst.wav' },
+                { key: 'sfx_chainBurst', url: 'assets/audio/sfx/chainBurst.wav' }
+            ];
+
+            battleSfxList.forEach(sfx => {
+                requiredAudio.push(sfx);
+                keysToKeep.push(sfx.key);
+            });
         }
 
         // Bersihkan memori audio yang tidak lagi diperlukan

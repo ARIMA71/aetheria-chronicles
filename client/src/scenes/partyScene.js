@@ -161,6 +161,7 @@ export default class PartyScene extends Phaser.Scene {
         } else {
             if (statType === 'hp') return item.mc_base_hp + (item.mc_hp_growth * (level - 1));
             if (statType === 'atk') return item.mc_base_atk + (item.mc_atk_growth * (level - 1));
+            if (statType === 'def') return item.mc_base_def + (item.mc_def_growth * (level - 1));
         }
         return 0;
     }
@@ -168,6 +169,7 @@ export default class PartyScene extends Phaser.Scene {
     getPartyTotalStats(preset) {
         let charHp = 0;
         let charAtk = 0;
+        let charDef = 0;
 
         const charIds = [preset.main_char_inv_id, preset.char_slot_1_inv_id, preset.char_slot_2_inv_id, preset.char_slot_3_inv_id];
         charIds.forEach(id => {
@@ -176,6 +178,7 @@ export default class PartyScene extends Phaser.Scene {
                 if (c) {
                     charHp += this.calculateBaseStat(c, 'hp', false);
                     charAtk += this.calculateBaseStat(c, 'atk', false);
+                    charDef += this.calculateBaseStat(c, 'def', false);
                 }
             }
         });
@@ -193,7 +196,11 @@ export default class PartyScene extends Phaser.Scene {
             }
         });
 
-        const partyPower = Math.floor(charHp + weapHp) + Math.floor(charAtk + weapAtk);
+        const totalHp = charHp + weapHp;
+        const totalAtk = charAtk + weapAtk;
+        const totalDef = charDef;
+
+        const partyPower = Math.floor((totalHp / 5) + totalAtk + totalDef);
 
         return {
             weapHp: Math.floor(weapHp),

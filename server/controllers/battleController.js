@@ -437,7 +437,7 @@ exports.saveBattleResult = async (req, res) => {
                             // Update EXP dan Level di DB
                             await conn.query('UPDATE player_inventories SET item_exp = ?, item_level = ? WHERE inv_id = ?', [newExp, realLevel, char.inv_id]);
                             
-                            const thresholds = LevelingSystem.getExpThresholds(realLevel, maxLevel, 'Character');
+                            const thresholds = LevelingSystem.getExpThresholds(realLevel, maxLevel, charType);
                             expData.party_exp_details.push({
                                 inv_id: char.inv_id,
                                 mc_id: char.mc_id,

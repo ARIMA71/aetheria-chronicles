@@ -12,6 +12,10 @@ export default class MainMenuScene extends Phaser.Scene {
         super('MainMenuScene');
     }
 
+    preload() {
+        this.load.image('bg_mainMenu', 'assets/backgrounds/mainMenu.jpg');
+    }
+
     create() {
         if (!checkSession(this)) return;
         saveCurrentScene(this.scene.key);
@@ -43,7 +47,18 @@ export default class MainMenuScene extends Phaser.Scene {
         this.sfxOn = localStorage.getItem('sfx_on') !== 'false';
 
         // ── Background ──
-        this.add.rectangle(CX, H / 2, W, H, THEME.BG);
+        const bg = this.add.image(CX, H / 2, 'bg_mainMenu').setOrigin(0.5);
+        const scale = Math.max(W / bg.width, H / bg.height);
+        bg.setScale(scale);
+
+        // ── Haze Effect ──
+        const haze = this.add.graphics();
+        // Extended smooth gradient fade from alpha 0 (at y=480, starting above Quest button) down to alpha 1 (at y=645)
+        haze.fillGradientStyle(0x0f172a, 0x0f172a, 0x0f172a, 0x0f172a, 0, 0, 1, 1);
+        haze.fillRect(0, 480, W, 165);
+        // Solid 100% dark navy base behind the STATS panel to the bottom
+        haze.fillStyle(0x0f172a, 1.0);
+        haze.fillRect(0, 645, W, H - 645);
 
         // Build UI Layers
         this._buildTopBar();
@@ -97,7 +112,7 @@ export default class MainMenuScene extends Phaser.Scene {
         if (this.staminaFill) {
             const maxStam = this.playerData.max_stamina || 100;
             const ratio = Math.min(1, Math.max(0, this.playerData.stamina / maxStam));
-            this.staminaFill.setSize(120 * ratio, 6);
+            this.staminaFill.setSize(155 * ratio, 6);
         }
 
         // Start or update stamina regen countdown timer (5 mins)
@@ -177,32 +192,43 @@ export default class MainMenuScene extends Phaser.Scene {
     }
 
     _buildStaminaBar() {
-        const barX = 15;
-        const textY = 80;
-        const barY = 95;
-        const barW = 120;
+        const boxX = 10;
+        const boxY = 68;
+        const boxW = 175;
+        const boxH = 42;
 
-        // Label Stamina
-        this.add.text(barX, textY, 'STAMINA', {
-            fontSize: '9px',
+        // Container Box Background with Sky Blue Border Accent
+        const stamContainer = this.add.rectangle(boxX + boxW / 2, boxY + boxH / 2, boxW, boxH, 0x0f172a, 0.95);
+        stamContainer.setStrokeStyle(1.5, 0x38bdf8);
+
+        const textY = boxY + 12;
+        const barY = boxY + 28;
+        const barW = boxW - 20;
+        const barX = boxX + 10;
+
+        // Pure White Stamina Label
+        this.add.text(barX, textY, '⚡ STAMINA', {
+            fontSize: '10px',
+            fontStyle: 'bold',
             fontFamily: 'Outfit',
-            color: THEME.TEXT_SECONDARY
+            color: '#ffffff',
+            letterSpacing: 0.5
         }).setOrigin(0, 0.5);
 
-        // Stamina Bar Background
-        const stBg = this.add.rectangle(barX + barW / 2, barY, barW, 8, 0x0F172A);
-        stBg.setStrokeStyle(1, THEME.BORDER);
+        // Pure White Stamina Value (keep reference)
+        this.staminaText = this.add.text(boxX + boxW - 10, textY, '100/100', {
+            fontSize: '10px',
+            fontStyle: 'bold',
+            fontFamily: 'Outfit',
+            color: '#ffffff'
+        }).setOrigin(1, 0.5);
+
+        // Stamina Bar Inner Background
+        const stBg = this.add.rectangle(barX + barW / 2, barY, barW, 8, 0x1e293b);
+        stBg.setStrokeStyle(1, 0x334155);
 
         // Stamina Bar Fill (keep reference)
         this.staminaFill = this.add.rectangle(barX, barY, barW, 6, THEME.HEALTH).setOrigin(0, 0.5);
-
-        // Stamina Value (keep reference)
-        this.staminaText = this.add.text(barX + barW, textY, '100/100', {
-            fontSize: '9px',
-            fontStyle: 'bold',
-            fontFamily: 'Outfit',
-            color: THEME.TEXT_PRIMARY
-        }).setOrigin(1, 0.5);
     }
 
     _buildCenterArea() {
@@ -357,7 +383,6 @@ export default class MainMenuScene extends Phaser.Scene {
         const btnLater = this.add.rectangle(CX - 75, H/2 + 50, 120, 32, THEME.PANEL).setInteractive({useHandCursor:true}).setStrokeStyle(1, THEME.BORDER);
         const txtLater = this.add.text(CX - 75, H/2 + 50, 'Nanti Saja', { fontSize: '12px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_SECONDARY }).setOrigin(0.5);
         btnLater.on('pointerdown', () => {
-            if(this.sound) this.sound.play('sfx_select');
             rContainer.destroy();
         });
 
@@ -365,9 +390,8 @@ export default class MainMenuScene extends Phaser.Scene {
         const btnBind = this.add.rectangle(CX + 75, H/2 + 50, 120, 32, 0xca8a04).setInteractive({useHandCursor:true}).setStrokeStyle(1, 0xfacc15);
         const txtBind = this.add.text(CX + 75, H/2 + 50, 'Bind Sekarang', { fontSize: '12px', fontStyle: 'bold', fontFamily: 'Outfit', color: '#ffffff' }).setOrigin(0.5);
         btnBind.on('pointerdown', () => {
-            if(this.sound) this.sound.play('sfx_select');
             rContainer.destroy();
-            if(this.topMenu) this.topMenu.showBindAccountForm();
+            if(this.topMenu) this.topMenu._showBindAccountForm(false);
         });
 
         rContainer.add([rBackdrop, rPanel, rTitle, rText, btnLater, txtLater, btnBind, txtBind]);

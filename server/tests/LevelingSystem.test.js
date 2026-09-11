@@ -18,9 +18,9 @@ beforeAll(() => {
 // SUITE 1: getCharMaxLevel
 // ─────────────────────────────────────────────────────────────────────────────
 describe('LevelingSystem.getCharMaxLevel()', () => {
-    test('Main Character (mc_id=1) memiliki base 40, +20 per LB', () => {
-        expect(LevelingSystem.getCharMaxLevel(1, 'SSR', 0)).toBe(40);
-        expect(LevelingSystem.getCharMaxLevel(1, 'SR', 1)).toBe(60);
+    test('Main Character (mc_id=1) memiliki base 30, +20 per LB', () => {
+        expect(LevelingSystem.getCharMaxLevel(1, 'SSR', 0)).toBe(30);
+        expect(LevelingSystem.getCharMaxLevel(1, 'SR', 1)).toBe(50);
     });
 
     test('Karakter SSR memiliki max level 40 pada LB0 dan 80 pada LB2', () => {

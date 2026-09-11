@@ -4,7 +4,7 @@ import { THEME } from "../main.js";
 import { checkSession, saveCurrentScene, getPlayerUsername } from "../utils/auth.js";
 import BattleApi from "../services/BattleApi.js";
 import BattleMenu from "../ui/BattleMenu.js";
-import { playGlobalBGM, stopGlobalBGM } from "../utils/audioManager.js";
+import { playGlobalBGM, stopGlobalBGM, playSFX } from "../utils/audioManager.js";
 import vfxManifest from "../data/vfxManifest.json";
 // Element icons are loaded as PNGs in preload
 
@@ -20,6 +20,7 @@ export default class BattleScene extends Phaser.Scene {
         this.load.image('element_fire', 'assets/icons/elements/fire.png');
         this.load.image('element_wind', 'assets/icons/elements/wind.png');
         this.load.image('element_earth', 'assets/icons/elements/rock.png');
+        this.load.image('bg_battle', 'assets/backgrounds/battleScene.jpg');
 
         // --- VFX Spritesheet Preload (from vfxManifest.json) ---
         // Exact VFX (single-file)
@@ -39,8 +40,33 @@ export default class BattleScene extends Phaser.Scene {
             });
         }
 
-        // Note: Character and Monster Sprites are handled dynamically or use placeholders
+        // --- Preload Battle SFX ---
+        const battleSfxList = [
+            { key: 'sfx_charBasicAtk', url: 'assets/audio/sfx/charBasicAtk.mp3' },
+            { key: 'sfx_charSkillAtk', url: 'assets/audio/sfx/charSkillAtk.wav' },
+            { key: 'sfx_charSpecialAttack', url: 'assets/audio/sfx/charSpecialAttack.mp3' },
+            { key: 'sfx_heal', url: 'assets/audio/sfx/heal.mp3' },
+            { key: 'sfx_buff', url: 'assets/audio/sfx/buff.mp3' },
+            { key: 'sfx_debuff', url: 'assets/audio/sfx/debuff.mp3' },
+            { key: 'sfx_monsBasicAtk', url: 'assets/audio/sfx/monsBasicAtk.mp3' },
+            { key: 'sfx_monsChargeAttack', url: 'assets/audio/sfx/monsChargeAttack.mp3' },
+            { key: 'sfx_monsEnraged', url: 'assets/audio/sfx/monsEnraged.wav' },
+            { key: 'sfx_monsExhausted', url: 'assets/audio/sfx/monsExhausted.wav' },
+            { key: 'sfx_monsterDefeated', url: 'assets/audio/sfx/monsterDefeated.mp3' },
+            { key: 'sfx_battleReady', url: 'assets/audio/sfx/battleReady.mp3' },
+            { key: 'sfx_battleStart', url: 'assets/audio/sfx/battleStart.mp3' },
+            { key: 'sfx_revive', url: 'assets/audio/sfx/revive.mp3' },
+            { key: 'sfx_stunned', url: 'assets/audio/sfx/stunned.mp3' },
+            { key: 'sfx_aetherBurst', url: 'assets/audio/sfx/aetherBurst.wav' },
+            { key: 'sfx_chainBurst', url: 'assets/audio/sfx/chainBurst.wav' }
+        ];
+        battleSfxList.forEach(sfx => {
+            if (!this.cache.audio.exists(sfx.key)) {
+                this.load.audio(sfx.key, sfx.url);
+            }
+        });
     }
+
     setTurn(newTurn) {
 
         this.turn = newTurn;
@@ -75,7 +101,9 @@ export default class BattleScene extends Phaser.Scene {
         this.presetSlot = this._sceneData.presetSlot || playerData.selected_preset_slot || 1;
         this.playerGender = playerData.gender || 'Male';
 
-        this.add.rectangle(CX, H / 2, W, H, THEME.BG);
+        const bg = this.add.image(CX, H / 2, 'bg_battle').setOrigin(0.5);
+        const scale = Math.max(W / bg.width, H / bg.height);
+        bg.setScale(scale);
         this.add.rectangle(CX, 26, W, 52, THEME.PANEL, THEME.PANEL_ALPHA);
         
         // Immediately add the black overlay so there is no blue flash from the background
@@ -211,11 +239,7 @@ export default class BattleScene extends Phaser.Scene {
     }
 
     playSFX(key, config = { volume: 0.8 }) {
-        const isSfxOn = localStorage.getItem('sfx_on') !== 'false';
-        if (!isSfxOn) return;
-        if (this.sound.get(key) || this.cache.audio.exists(key)) {
-            this.sound.play(key, config);
-        }
+        playSFX(this, key, config);
     }
 
     /**
@@ -354,7 +378,7 @@ export default class BattleScene extends Phaser.Scene {
 
             // Visuals handled internally by Enemy container
             if (eData.current_hp !== undefined) enemy.hp = eData.current_hp;
-            if (eData.current_ca !== undefined) enemy.chargeBar = eData.current_ca;
+            if (eData.current_ca !== undefined) enemy.caBar = eData.current_ca;
             if (eData.active_buffs && Array.isArray(eData.active_buffs)) enemy.activeEffects = [...eData.active_buffs];
             enemy.modeState = eData.mode_state || 'normal';
             enemy.modeBar = eData.mode_bar || 0;
@@ -1781,6 +1805,19 @@ export default class BattleScene extends Phaser.Scene {
                         }
 
                         if (!target) return;
+
+                        // Live update enemy source CA bar if provided in event
+                        if (ev.sourceCa !== undefined && group.sourceId) {
+                            const sIdStr = String(group.sourceId);
+                            if (sIdStr.startsWith('enemy_')) {
+                                const eIdx = parseInt(sIdStr.split('_')[1], 10);
+                                const sEnemy = this.enemies[eIdx] || this.enemies[0];
+                                if (sEnemy) {
+                                    sEnemy.caBar = ev.sourceCa;
+                                    this._refreshEnemyHUD();
+                                }
+                            }
+                        }
 
                         if (ev.type === 'damage') {
                             target.hp = Math.max(0, target.hp - ev.value);
