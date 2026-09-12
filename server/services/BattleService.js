@@ -432,6 +432,12 @@ class BattleService {
             if (mat.mat_id === 7) fullPotionCount = mat.quantity;
         });
 
+        // Ensure starter 3 Green Potions if player has 0
+        if (potionCount === 0) {
+            potionCount = 3;
+            await db.query(`INSERT INTO player_materials (player_id, mat_id, quantity) VALUES (?, 6, 3) ON DUPLICATE KEY UPDATE quantity = 3`, [playerId]).catch(e => console.error(e));
+        }
+
         // Construct Initial State
         const initialState = {
             quest_id: parseInt(questId),
@@ -557,6 +563,10 @@ class BattleService {
             clientState = await this.rehydrateStateAssets(clientState, playerId);
         } catch (e) {
             clientState = JSON.parse(session.battle_state_json);
+        }
+
+        if (clientState) {
+            clientState.is_processing = false;
         }
 
         return {
@@ -755,9 +765,12 @@ class BattleService {
             state.enemies.forEach(e => tickBuffsForPhase(e, true, 'player'));
             
             let waveCleared = false;
+            console.log(`[BattleService] ⚔️ Processing ${characterActions.length} character actions for bsId=${bsId}`);
+
             for (const actionInfo of characterActions) {
                 const { slot, action_type, skill_id, target_index } = actionInfo;
                 if (!action_type || action_type === 'none') continue;
+                console.log(`[BattleService] ▶️ Action slot=${slot}, type=${action_type}, targetIdx=${target_index}`);
 
                 const character = (state.player_party.characters || []).find(
                     c => c.slot === slot || c.id === slot || c.inv_id == slot || c.mc_id == slot
@@ -819,7 +832,9 @@ class BattleService {
 
                     if (sType === 'damage') {
                         const calcResult = DamageCalculatorService.calculateDamage(character, targetEntity, skillObj);
-                        targetEntity.current_hp = Math.max(0, (targetEntity.current_hp !== undefined ? targetEntity.current_hp : targetEntity.final_stats.hp) - calcResult.damage);
+                        const newHp = Math.max(0, (targetEntity.current_hp !== undefined ? targetEntity.current_hp : targetEntity.final_stats.hp) - calcResult.damage);
+                        targetEntity.current_hp = newHp;
+                        targetEntity.hp = newHp;
 
                         if (action_type === 'basic_attack' && !saGained) {
                             character.current_sa = Math.min(100, (character.current_sa || 0) + 20);
@@ -1081,7 +1096,7 @@ class BattleService {
                         if (!state.used_skills) state.used_skills = [];
                         if (!state.used_skills.includes(enemySkill.id)) state.used_skills.push(enemySkill.id);
 
-                        if (!enemySkill.isHpTrigger) {
+                        if (!enemySkill.isHpTrigger && !caSkill.isHpTrigger) {
                             enemy.current_ca = 0; // Reset CA
                         }
                     } else {
@@ -1352,11 +1367,14 @@ class BattleService {
      * Helper to find an entity in the battle state
      */
     _findEntity(state, entityId) {
-        if (entityId.startsWith('enemy_')) {
-            const idx = parseInt(entityId.split('_')[1], 10);
-            return state.enemies[idx];
+        if (entityId === null || entityId === undefined) return null;
+        const strId = String(entityId);
+        if (strId.startsWith('enemy_')) {
+            const idx = parseInt(strId.split('_')[1], 10);
+            return state.enemies ? state.enemies[idx] : null;
         }
-        return state.player_party.characters.find(c => c.slot === entityId || c.id === entityId || c.inv_id == entityId);
+        if (!state.player_party || !state.player_party.characters) return null;
+        return state.player_party.characters.find(c => c.slot === entityId || c.id === entityId || c.inv_id == entityId || String(c.slot) === strId || String(c.id) === strId);
     }
 
     _checkWaveClear(state, events, isTurnEnd = false) {
@@ -1435,9 +1453,8 @@ class BattleService {
 
         if (!state) throw new Error('Battle session not found or expired');
 
-        if (state.is_processing) {
-            throw new Error('RACE_CONDITION: Action is already being processed');
-        }
+        // Always clear stale processing flag from past network errors
+        state.is_processing = false;
         
         // [ANTI-CORRUPTION] Buat Snapshot aman sebelum state dimanipulasi
         const originalStateString = JSON.stringify(state);
@@ -1449,18 +1466,30 @@ class BattleService {
             const { sourceId, targetIds, actionType, skillId } = actionData;
 
             if (actionType === 'use_potion') {
-                if (state.heals_remaining <= 0) throw new Error('No Green Potions remaining in this battle.');
+                if ((state.heals_remaining !== undefined ? state.heals_remaining : 3) <= 0) throw new Error('No Green Potions remaining in this battle.');
+                if (state.heals_remaining === undefined) state.heals_remaining = 3;
                 
                 const target = this._findEntity(state, targetIds[0]);
                 if (!target) throw new Error('Target not found for potion');
-                if (target.current_hp <= 0) throw new Error('Cannot use Green Potion on a defeated character.');
+                const curHp = target.current_hp !== undefined ? target.current_hp : (target.hp || 0);
+                if (curHp <= 0) throw new Error('Cannot use Green Potion on a defeated character.');
 
-                state.heals_remaining -= 1;
+                const isStunned = (target.active_buffs || []).some(b => (b.target_stat || '').toUpperCase() === 'STUN' || (b.effect_name || '').toUpperCase().includes('STUN'));
+                if (isStunned) throw new Error(`${target.name || 'Karakter'} sedang STUN dan tidak dapat di-heal.`);
+
+                state.heals_remaining = Math.max(0, state.heals_remaining - 1);
                 state.potions_used = (state.potions_used || 0) + 1;
+
+                // Consume Green Potion in database inventory (mat_id = 6)
+                if (state.player_id) {
+                    await db.query('UPDATE player_materials SET quantity = GREATEST(0, quantity - 1) WHERE player_id = ? AND mat_id = 6', [state.player_id]).catch(e => console.error(e));
+                }
                 
-                const maxHp = target.final_stats ? target.final_stats.hp : target.max_hp;
+                const maxHp = target.final_stats ? target.final_stats.hp : (target.max_hp || 1000);
                 const healAmt = Math.floor(maxHp * 0.40);
-                target.current_hp = Math.min((target.current_hp || maxHp) + healAmt, maxHp);
+                const newHp = Math.min(curHp + healAmt, maxHp);
+                target.current_hp = newHp;
+                target.hp = newHp;
 
                 events.push({
                     type: 'heal',
@@ -1471,7 +1500,10 @@ class BattleService {
                 });
 
                 state.is_processing = false;
-                db.query(`UPDATE battle_sessions SET battle_state_json = ? WHERE bs_id = ? AND bs_status = 'ACTIVE'`, [JSON.stringify(state), bsId]).catch(e => console.error(e));
+                BattleMemoryStore.set(bsId, state);
+                const dbState = JSON.parse(JSON.stringify(state));
+                dbState.is_processing = false;
+                db.query(`UPDATE battle_sessions SET battle_state_json = ? WHERE bs_id = ? AND bs_status = 'ACTIVE'`, [JSON.stringify(dbState), bsId]).catch(e => console.error(e));
                 return { events, stateSnapshot: state };
             }
 
@@ -1509,6 +1541,7 @@ class BattleService {
                 });
 
                 state.is_processing = false;
+                BattleMemoryStore.set(bsId, state);
                 db.query(`UPDATE battle_sessions SET battle_state_json = ? WHERE bs_id = ? AND bs_status = 'ACTIVE'`, [JSON.stringify(state), bsId]).catch(e => console.error(e));
                 return { events, stateSnapshot: state };
             }
@@ -1568,6 +1601,7 @@ class BattleService {
                 this._checkWaveClear(state, events);
 
                 state.is_processing = false;
+                BattleMemoryStore.set(bsId, state);
                 db.query(`UPDATE battle_sessions SET battle_state_json = ? WHERE bs_id = ? AND bs_status = 'ACTIVE'`, [JSON.stringify(state), bsId]).catch(e => console.error(e));
                 return { events, stateSnapshot: state };
             }
@@ -1618,7 +1652,9 @@ class BattleService {
                     if (b) {
                         skill = b.skill;
                         if ((skill.category || '').toLowerCase() === 'special') {
-                            attacker.current_ca = 0; // Reset Enemy CA
+                            if (!actionData.skipCaReset && !b.isHpTrigger && !skill.isHpTrigger) {
+                                attacker.current_ca = 0; // Reset Enemy CA
+                            }
                         }
                     }
                 }
@@ -1906,6 +1942,8 @@ class BattleService {
             db.query(`UPDATE battle_sessions SET battle_state_json = ? WHERE bs_id = ? AND bs_status = 'ACTIVE'`, [JSON.stringify(state), bsId]).catch(e => console.error(e));
 
 
+            state.is_processing = false;
+            BattleMemoryStore.set(bsId, state);
             return {
                 events: events,
                 stateSnapshot: state

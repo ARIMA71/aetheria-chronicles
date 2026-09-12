@@ -91,6 +91,30 @@ export default class BattleApi {
 
 
     /**
+     * Executes a single action (Heal Potion, Aether Burst, Revive Party, etc.)
+     * @param {number|string} bsId
+     * @param {object} actionData - { sourceId, targetIds, actionType, skillId }
+     * @returns {Promise<object>} JSON response
+     */
+    static async executeAction(bsId, actionData) {
+        try {
+            const res = await fetch(`${API_BASE}/action`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ bsId, actionData })
+            });
+            if (!res.ok) {
+                const errBody = await res.json().catch(() => ({}));
+                return { status: 'error', message: errBody.message || `HTTP error ${res.status}`, error_detail: errBody.error_detail || '' };
+            }
+            return await res.json();
+        } catch (error) {
+            console.error("Failed to execute action:", error);
+            throw error;
+        }
+    }
+
+    /**
      * Executes a batch of player actions.
      * @param {number|string} bsId
      * @param {Array} character_actions - Array of { slot, action_type, skill_id, target_index }

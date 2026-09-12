@@ -179,6 +179,9 @@ class AiBehaviorService {
             });
             const selectedOverride = activeOverrides[0];
             selectedOverride.isHpTrigger = true;
+            if (selectedOverride.skill) {
+                selectedOverride.skill.isHpTrigger = true;
+            }
             return selectedOverride;
         }
 

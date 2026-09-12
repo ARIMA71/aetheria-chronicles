@@ -222,6 +222,7 @@ export default class Enemy extends Phaser.GameObjects.Container {
     // ─────────────────────────────────────────────────────────────────────────
 
     playHitAnim() {
+        if (this.hp <= 0) return;
         const ox = this.x;
         this.scene.tweens.add({
             targets: this, x: ox + 10,

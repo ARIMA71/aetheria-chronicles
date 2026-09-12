@@ -22,6 +22,20 @@ export default class BattleScene extends Phaser.Scene {
         this.load.image('element_earth', 'assets/icons/elements/rock.png');
         this.load.image('bg_battle', 'assets/backgrounds/battleScene.jpg');
 
+        // --- Player HUD UI Assets ---
+        this.load.image('progressbar_bg', 'assets/ui/progressBar/ProgressBar Background.png');
+        this.load.image('progressbar_fg', 'assets/ui/progressBar/ProgressBarForeground.png');
+
+        this.load.image('btn_a_normal', 'assets/ui/button/A/Normal.png');
+        this.load.image('btn_a_hover', 'assets/ui/button/A/Hover.png');
+        this.load.image('btn_a_active', 'assets/ui/button/A/Active.png');
+        this.load.image('btn_a_disabled', 'assets/ui/button/A/Disabled.png');
+
+        this.load.image('btn_d_normal', 'assets/ui/button/D/Button Normal.png');
+        this.load.image('btn_d_hover', 'assets/ui/button/D/Button Hover.png');
+        this.load.image('btn_d_active', 'assets/ui/button/D/Button Active.png');
+        this.load.image('btn_d_disabled', 'assets/ui/button/D/Button Disabled.png');
+
         // --- VFX Spritesheet Preload (from vfxManifest.json) ---
         // Exact VFX (single-file)
         for (const [key, data] of Object.entries(vfxManifest.exact)) {
@@ -145,11 +159,14 @@ export default class BattleScene extends Phaser.Scene {
         this.healsRemaining = Math.min(3, this.potionCount);
         this.fullPotionCount = j.data.full_potion_count !== undefined ? j.data.full_potion_count : 0;
 
-        // Initialize wave counter
+        // Initialize wave counter & victory flags
         this.totalWaves = j.data.waves ? j.data.waves.length : 1;
         this.currentWave = 1;
         this.currentTurn = 1;
         this.aetherGauge = 0;
+        this._isVictoryConfirmed = false;
+        this._isVictoryTransitionStarted = false;
+        this._victoryLaunched = false;
 
         let assetsToLoad = 0;
         const chars = j.data.player_party.characters.slice(0, 4);
@@ -279,14 +296,17 @@ export default class BattleScene extends Phaser.Scene {
 
         // Restore potion counts
         this.potionCount = state.potion_count !== undefined ? state.potion_count : 0;
-        this.healsRemaining = Math.min(3, this.potionCount);
+        this.healsRemaining = state.heals_remaining !== undefined ? state.heals_remaining : (this.potionCount > 0 ? Math.min(3, this.potionCount) : 3);
         this.fullPotionCount = state.full_potion_count !== undefined ? state.full_potion_count : 0;
         this.potionsUsed = state.potions_used || 0;
         this.fullPotionsUsed = state.full_potions_used || 0;
 
-        // Restore turn counter
+        // Restore turn counter & victory flags
         this.currentTurn = state.current_turn || 1;
         this.aetherGauge = state.aether_gauge || 0;
+        this._isVictoryConfirmed = false;
+        this._isVictoryTransitionStarted = false;
+        this._victoryLaunched = false;
 
         this.totalWaves = state.waves ? state.waves.length : 1;
         if (state.current_wave_index !== undefined) {
@@ -360,7 +380,7 @@ export default class BattleScene extends Phaser.Scene {
 
             // Inject runtime state dari resume data
             if (d.current_hp !== undefined) p.hp = d.current_hp;
-            if (d.current_sa !== undefined) p.sa = d.current_sa;
+            if (d.current_sa !== undefined) p.specialBar = d.current_sa;
             if (d.active_buffs && Array.isArray(d.active_buffs)) p.activeEffects = [...d.active_buffs];
             if (d.skills) {
                 d.skills.forEach(sk => {
@@ -438,6 +458,11 @@ export default class BattleScene extends Phaser.Scene {
         // Refresh visual semua entity setelah state di-inject
         this.players.forEach(p => p.refreshVisual());
         this._refreshEnemyHUD();
+
+        // Check if victory was already achieved before refresh/resume
+        if (this.enemies.length > 0 && this.enemies.every(e => e.hp <= 0)) {
+            this.checkVictory();
+        }
     }
     _setActive(p) {
         if (this.activePlayer && this.activePlayer !== p) this.activePlayer.setHighlight(false);
@@ -557,7 +582,7 @@ export default class BattleScene extends Phaser.Scene {
             const ec = this._elemColor(enemy.element);
 
             const icon = this.add.rectangle(56, baseY + 9, 44, 44, THEME.PANEL).setStrokeStyle(2, ec);
-            
+
             const monsId = enemy.monsterId || enemy.id;
             const iconTexKey = `mons_icon_${monsId}`;
             let elemText = null;
@@ -598,8 +623,17 @@ export default class BattleScene extends Phaser.Scene {
                 caSegments.push(f);
             }
 
-            const nameY = enemy.y + (enemy.battleSprite ? (enemy.battleSprite.displayHeight / 2) + 10 : 65);
-            const nameText = this.add.text(enemy.x, nameY, enemy.charName + " \nLv." + enemy.level, { fontSize: "11px", color: "#ffffff", fontStyle: "bold", align: "center" }).setOrigin(0.5, 0);
+            const nameY = enemy.y + (enemy.battleSprite ? (enemy.battleSprite.displayHeight * 0.42) + 2 : 32);
+            const nameText = this.add.text(enemy.x, nameY, `${enemy.charName}\nLv.${enemy.level}`, {
+                fontSize: "12px",
+                color: "#ffffff",
+                fontStyle: "bold",
+                fontFamily: "Outfit, Arial, sans-serif",
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 3,
+                lineSpacing: 1
+            }).setOrigin(0.5, 0);
 
             container.add([icon, elemText, hpPct, hpBarBg, hpFill, hpEnrage, effectIndicators, hitArea, modeBarBg, modeFill, nameText]);
             caSegmentsBg.forEach(s => container.add(s));
@@ -792,56 +826,199 @@ export default class BattleScene extends Phaser.Scene {
         this._playerHudBg.setDepth(1);
 
         // 1. AETHER GAUGE
-        this._aethBarBg = this.add.rectangle(CX, 720, 440, 10, THEME.BG).setDepth(5);
-        this._aethBarBg.setStrokeStyle(1, THEME.AETHER);
+        if (this.textures.exists('progressbar_bg')) {
+            this._aethBarBg = this.add.image(CX, 720, 'progressbar_bg').setDisplaySize(440, 14).setDepth(5);
+        } else {
+            this._aethBarBg = this.add.rectangle(CX, 720, 440, 10, THEME.BG).setDepth(5);
+            this._aethBarBg.setStrokeStyle(1, THEME.AETHER);
+        }
 
-        // Fill dimulai dari batas margin kiri (X = 20)
-        this._aethFill = this.add.rectangle(20, 720, 0, 8, THEME.AETHER).setOrigin(0, 0.5).setDepth(5);
+        if (this.textures.exists('progressbar_fg')) {
+            this._aethFill = this.add.image(20, 720, 'progressbar_fg').setOrigin(0, 0.5).setDepth(6);
+            this._aethFill.setTint(0x38bdf8); // Sky blue fill tint
+        } else {
+            this._aethFill = this.add.rectangle(20, 720, 0, 8, THEME.AETHER).setOrigin(0, 0.5).setDepth(6);
+        }
 
         // Teks disejajarkan dengan margin kiri (20) dan kanan (460)
-        this._aethPct = this.add.text(460, 700, "0%", { fontSize: "10px", color: THEME.TEXT_SECONDARY }).setOrigin(1, 0).setDepth(5);
-        this.add.text(20, 700, "AETHER", { fontSize: "10px", color: THEME.TEXT_SECONDARY }).setOrigin(0, 0).setDepth(5);
+        this._aethPct = this.add.text(460, 700, "0%", { fontSize: "10px", color: THEME.TEXT_SECONDARY, fontStyle: "bold" }).setOrigin(1, 0).setDepth(7);
+        this.add.text(20, 700, "AETHER", { fontSize: "10px", color: THEME.TEXT_SECONDARY, fontStyle: "bold" }).setOrigin(0, 0).setDepth(7);
 
-        // 2. ACTION BUTTONS (Center Y = 720, Height = 55)
+        // 2. ACTION BUTTONS (Center Y = 762, Height = 55)
         // Tombol Heal (Lebar 210, Center X = 125)
-        this._healBtn = this.add.rectangle(125, 762, 210, 55, THEME.PANEL).setDepth(5);
-        this._healBtn.setStrokeStyle(1, THEME.HEALTH);
-        this._healText = this.add.text(125, 762, "⊕ HEAL (x" + this.healsRemaining + ")", { fontSize: "14px", color: THEME.TEXT_SECONDARY }).setOrigin(0.5).setDepth(5);
-        this._healBtn.setInteractive();
+        const healTex = this.textures.exists('btn_a_normal') ? 'btn_a_normal' : null;
+        if (healTex) {
+            this._healBtn = this.add.image(125, 762, healTex).setDisplaySize(210, 55).setDepth(5);
+            this._healBtn.setTint(0x2ecc71); // Green tint
+        } else {
+            this._healBtn = this.add.rectangle(125, 762, 210, 55, THEME.PANEL).setDepth(5);
+            this._healBtn.setStrokeStyle(1, THEME.HEALTH);
+        }
+        this._healText = this.add.text(125, 762, "⊕  HEAL  (x" + this.healsRemaining + ")", { fontSize: "14px", color: "#a8e6cf", fontStyle: "bold" }).setOrigin(0.5).setDepth(6);
+
+        this._healBtn.setInteractive({ useHandCursor: true });
+        this._healBtn.on("pointerover", () => {
+            if (this.healsRemaining > 0) {
+                if (this.textures.exists('btn_a_hover')) this._healBtn.setTexture('btn_a_hover');
+                this._healBtn.setTint(0x52be80);
+            }
+        });
+        this._healBtn.on("pointerout", () => {
+            if (this.healsRemaining > 0) {
+                if (this.textures.exists('btn_a_normal')) this._healBtn.setTexture('btn_a_normal');
+                this._healBtn.setTint(0x2ecc71);
+            }
+        });
         this._healBtn.on("pointerdown", () => {
+            if (this.healsRemaining > 0 && this.textures.exists('btn_a_active')) this._healBtn.setTexture('btn_a_active');
             if (this.turn === "player") this.useHealPotion();
+        });
+        this._healBtn.on("pointerup", () => {
+            if (this.healsRemaining > 0 && this.textures.exists('btn_a_normal')) this._healBtn.setTexture('btn_a_normal');
         });
 
         // Tombol Burst (Lebar 210, Center X = 355)
-        this._abBg = this.add.rectangle(355, 762, 210, 55, THEME.PANEL).setDepth(5);
-        this._abBg.setStrokeStyle(1, THEME.BORDER);
-        this._abText = this.add.text(355, 762, "✦ AETHER BURST", { fontSize: "14px", color: THEME.TEXT_SECONDARY, align: "center" }).setOrigin(0.5).setDepth(5);
-        this._abBg.setInteractive();
+        const burstTex = this.textures.exists('btn_a_normal') ? 'btn_a_normal' : null;
+        if (burstTex) {
+            this._abBg = this.add.image(355, 762, burstTex).setDisplaySize(210, 55).setDepth(5);
+            this._abBg.setTint(0x38bdf8); // Sky blue tint
+        } else {
+            this._abBg = this.add.rectangle(355, 762, 210, 55, THEME.PANEL).setDepth(5);
+            this._abBg.setStrokeStyle(1, THEME.BORDER);
+        }
+        this._abText = this.add.text(355, 762, "✦  AETHER BURST", { fontSize: "14px", color: "#a5b4fc", fontStyle: "bold", align: "center" }).setOrigin(0.5).setDepth(6);
+
+        this._abBg.setInteractive({ useHandCursor: true });
+        this._abBg.on("pointerover", () => {
+            if (this.aetherGauge >= this.aetherGaugeMax) {
+                if (this.textures.exists('btn_a_hover')) this._abBg.setTexture('btn_a_hover');
+                this._abBg.setTint(0x60a5fa);
+            }
+        });
+        this._abBg.on("pointerout", () => {
+            if (this.aetherGauge >= this.aetherGaugeMax) {
+                if (this.textures.exists('btn_a_normal')) this._abBg.setTexture('btn_a_normal');
+                this._abBg.setTint(0x38bdf8);
+            }
+        });
         this._abBg.on("pointerdown", () => {
+            if (this.aetherGauge >= this.aetherGaugeMax && this.textures.exists('btn_a_active')) this._abBg.setTexture('btn_a_active');
             if (this.turn === "player") this.aetherBurst();
         });
+        this._abBg.on("pointerup", () => {
+            if (this.aetherGauge >= this.aetherGaugeMax && this.textures.exists('btn_a_normal')) this._abBg.setTexture('btn_a_normal');
+        });
 
-        // 3. BATTLE LOG BUTTON (Center Y = 830, Width = 440)
-        this._logBtnBg = this.add.rectangle(CX, 812, 440, 30, THEME.PANEL).setDepth(5);
-        this._logBtnBg.setStrokeStyle(1, THEME.BORDER);
-        this.add.text(CX, 812, "BATTLE LOG", { fontSize: "12px", color: THEME.TEXT_SECONDARY, fontStyle: "bold", letterSpacing: 1 }).setOrigin(0.5).setDepth(5);
-        this._logBtnBg.setInteractive();
+        // 3. BATTLE LOG BUTTON (Center Y = 812, Width = 440)
+        const logTex = this.textures.exists('btn_d_normal') ? 'btn_d_normal' : null;
+        if (logTex) {
+            this._logBtnBg = this.add.image(CX, 812, logTex).setDisplaySize(440, 30).setDepth(5);
+            this._logBtnBg.setTint(0x94a3b8); // Neutral grey tint
+        } else {
+            this._logBtnBg = this.add.rectangle(CX, 812, 440, 30, THEME.PANEL).setDepth(5);
+            this._logBtnBg.setStrokeStyle(1, THEME.BORDER);
+        }
+        this._logBtnText = this.add.text(CX, 812, "BATTLE LOG", { fontSize: "12px", color: "#f8fafc", fontStyle: "bold", letterSpacing: 1 }).setOrigin(0.5).setDepth(6);
+
+        this._logBtnBg.setInteractive({ useHandCursor: true });
+        this._logBtnBg.on("pointerover", () => {
+            if (this.textures.exists('btn_d_hover')) this._logBtnBg.setTexture('btn_d_hover');
+            this._logBtnBg.setTint(0xcbcfd5);
+        });
+        this._logBtnBg.on("pointerout", () => {
+            if (this.textures.exists('btn_d_normal')) this._logBtnBg.setTexture('btn_d_normal');
+            this._logBtnBg.setTint(0x94a3b8);
+        });
         this._logBtnBg.on("pointerdown", () => {
+            if (this.textures.exists('btn_d_active')) this._logBtnBg.setTexture('btn_d_active');
             this.logOverlay.setVisible(true);
             this.logContainer.setVisible(true);
+        });
+        this._logBtnBg.on("pointerup", () => {
+            if (this.textures.exists('btn_d_normal')) this._logBtnBg.setTexture('btn_d_normal');
         });
 
         this._refreshAetherUI();
         this._refreshHealButtonUI();
     }
+
     _refreshAetherUI() {
         if (!this._aethFill) return;
         const r = Math.min(1, this.aetherGauge / this.aetherGaugeMax);
-        this._aethFill.setSize(440 * r, 8);
+        const fillW = Math.max(0, 440 * r);
+        if (typeof this._aethFill.setDisplaySize === 'function') {
+            this._aethFill.setDisplaySize(fillW, 14);
+        } else {
+            this._aethFill.setSize(fillW, 8);
+        }
+        this._aethFill.setVisible(fillW > 0);
         this._aethPct.setText(Math.floor(r * 100) + "%");
+
         const rdy = this.aetherGauge >= this.aetherGaugeMax;
-        this._abBg.setStrokeStyle(1, rdy ? THEME.AETHER : THEME.BORDER);
-        this._abText.setColor(rdy ? "#A5B4FC" : THEME.TEXT_SECONDARY);
+        if (this._abBg) {
+            if (rdy) {
+                if (this.textures.exists('btn_a_normal')) this._abBg.setTexture('btn_a_normal');
+                this._abBg.setTint(0x38bdf8); // Sky blue
+                if (this._abBg.setStrokeStyle) this._abBg.setStrokeStyle(1, THEME.AETHER);
+            } else {
+                if (this.textures.exists('btn_a_disabled')) this._abBg.setTexture('btn_a_disabled');
+                this._abBg.setTint(0x555555); // Greyed out
+                if (this._abBg.setStrokeStyle) this._abBg.setStrokeStyle(1, THEME.BORDER);
+            }
+        }
+        if (this._abText) {
+            this._abText.setColor(rdy ? "#e0f2fe" : THEME.TEXT_SECONDARY);
+        }
+    }
+
+    async aetherBurst() {
+        if (this.aetherGauge < this.aetherGaugeMax) {
+            this.showLog("Aether Burst not ready! (Requires 100%)", 'system');
+            return;
+        }
+        if (this.turn !== 'player') return;
+
+        const sourcePlayer = this.players.find(p => p.hp > 0) || this.players[0];
+        if (!sourcePlayer) return;
+
+        const targetIdx = this.selectedTargetIndex !== -1 ? this.selectedTargetIndex : 0;
+        const targetEnemy = this.enemies[targetIdx] || this.enemies[0];
+        const targetId = targetEnemy ? (targetEnemy.monsterId || `enemy_${this.enemies.indexOf(targetEnemy)}`) : 'enemy_0';
+
+        this.setTurn("attacking");
+        this.closeActionWindow();
+
+        try {
+            const actionData = {
+                sourceId: sourcePlayer.slot || sourcePlayer.id || 'mc',
+                targetIds: [targetId],
+                actionType: 'aether_burst'
+            };
+            const res = await BattleApi.executeAction(this.bsId, actionData);
+            if (res.status === 'success') {
+                try {
+                    const eventsPromise = this._playActionEvents(res.data.events);
+                    const timeoutPromise = new Promise(resolve => setTimeout(resolve, 30000));
+                    await Promise.race([eventsPromise, timeoutPromise]);
+                } catch (eErr) {
+                    console.error("Error playing Aether Burst events:", eErr);
+                }
+                this._syncState(res.data.stateSnapshot);
+
+                if (this.enemies.length > 0 && this.enemies.every(e => e.hp <= 0)) {
+                    this.checkVictory();
+                    return;
+                }
+            } else {
+                this.showLog(res.message || "Failed to execute Aether Burst!", 'system');
+            }
+        } catch (err) {
+            console.error("Aether burst error", err);
+        } finally {
+            if (this.enemies.some(e => e.hp > 0)) {
+                this.setTurn("player");
+            }
+        }
     }
     _buildActionWindow() {
         this._backBtnContainer = this.add.container(0, 0);
@@ -1806,205 +1983,250 @@ export default class BattleScene extends Phaser.Scene {
             }
         }
 
-        for (const group of actionGroups) {
+        // console.log(`[ActionEvents] 🎬 Playing ${events ? events.length : 0} total events divided into ${actionGroups.length} action groups.`);
+
+        for (let gIdx = 0; gIdx < actionGroups.length; gIdx++) {
+            const group = actionGroups[gIdx];
             this.players.forEach(p => p._floatQueueDelay = 0);
             this.enemies.forEach(e => e._floatQueueDelay = 0);
 
-            await new Promise(async resolve => {
-                let delay = 500;
+            // console.log(`[ActionEvents] ▶️ Playing group ${gIdx + 1}/${actionGroups.length}:`, group.isGroup ? `Source: ${group.sourceId}, Skill: ${group.skillName}` : group.event);
 
-                if (group.isGroup) {
-                    let source = null;
-                    if (String(group.sourceId).startsWith('enemy_') || String(group.sourceId) === 'enemy') {
-                        const eIdx = String(group.sourceId).startsWith('enemy_') ? parseInt(String(group.sourceId).split('_')[1], 10) : 0;
-                        source = this.enemies[eIdx] || this.enemies[0];
-                    } else {
-                        source = this.players.find(p => (p.slot || p.id) === group.sourceId);
-                    }
-                    const sourceName = source ? (source.charName || source.name || 'Unknown') : 'Entity';
+            await new Promise(resolve => {
+                let isResolved = false;
+                const safeResolve = () => {
+                    if (isResolved) return;
+                    isResolved = true;
+                    clearTimeout(safetyTimer);
+                    // console.log(`[ActionEvents] ⏹️ Group ${gIdx + 1}/${actionGroups.length} resolved/completed.`);
+                    resolve();
+                };
+                // Safety timer per event group (8s max) to guarantee loop progression
+                const safetyTimer = setTimeout(() => {
+                    console.warn(`[ActionEvents] ⏰ Safety timer triggered for group ${gIdx + 1}/${actionGroups.length}! Forcing resolve.`);
+                    safeResolve();
+                }, 8000);
 
-                    const isStunnedAction = group.skillName === 'STUNNED' || group.events.some(e => e.type === 'stun_skip');
-                    if (isStunnedAction) {
-                        this.showLog(`💫 ${sourceName} is STUNNED and cannot move!`, 'popup');
-                        // VFX: Stun on stunned source
-                        if (source) {
-                            const stunSrcPos = this._getVfxTargetPos(source);
-                            this.playExactVFX('stun', stunSrcPos.x, stunSrcPos.y, { scale: 1.5 });
-                            this.playStunVibrateAnim(source);
-                        }
-                        delay = 1000;
-                        this.time.delayedCall(delay, resolve);
-                        return;
-                    }
+                (async () => {
+                    try {
+                        let delay = 500;
 
-                    // Extract the primary damage/heal event to figure out the skill info
-                    const primaryEv = group.events.find(e => e.type === 'damage' && !e.isDoT) || group.events.find(e => e.type === 'heal' || e.type === 'support' || e.type === 'effect_applied' || e.type === 'cleanse' || e.type === 'revive');
-
-                    let isSkill = false;
-                    let isSA = false;
-
-                    if (primaryEv) {
-                        console.log('DEBUG: primaryEv', primaryEv, 'events:', group.events);
-                        const skillDisplay = group.skillName || 'Basic Attack';
-                        this.showLog(`[${skillDisplay}] ${sourceName} attacks!`, 'popup');
-                        isSA = primaryEv.skillCategory === 'special' || primaryEv.skillCategory === 'chain_burst' || primaryEv.skillCategory === 'aether_burst';
-                        isSkill = primaryEv.skillCategory && primaryEv.skillCategory !== 'basic';
-
-                        const isEnemy = String(group.sourceId).startsWith('enemy');
-                        if (isEnemy) {
-                            const monsSfx = isSkill ? 'sfx_monsChargeAttack' : 'sfx_monsBasicAtk';
-                            this.playSFX(monsSfx, { volume: 0.7 });
-                        } else {
-                            const hasHealOrBuff = group.events.some(e => e.type === 'heal' || e.type === 'cleanse' || e.type === 'revive' || (e.type === 'effect_applied' && (e.effectType || '').toLowerCase() === 'buff'));
-
-                            let atkSfx = 'sfx_charBasicAtk';
-                            if (hasHealOrBuff) atkSfx = 'sfx_heal';
-                            else if (isSA) atkSfx = 'sfx_charSpecialAttack';
-                            else if (isSkill) atkSfx = 'sfx_charSkillAtk';
-                            this.playSFX(atkSfx, { volume: 0.7 });
-                        }
-                    }
-
-                    if (source && source.battleSprite) {
-                        await this.playCharacterLungeAnim(source);
-                    }
-
-                    // First pass: Process damage, heal, revive, cleanse, stun_skip
-                    group.events.forEach(ev => {
-                        if (ev.type === 'effect_applied') return; // Process later
-
-                        let target = null;
-                        if (ev.targetId !== undefined && ev.targetId !== null) {
-                            target = this.players.find(p => p.slot === ev.targetId);
-                            if (!target) {
-                                const tIdStr = String(ev.targetId);
-                                if (this.enemies.some(e => String(e.monsterId) == tIdStr) || tIdStr.startsWith('enemy_') || tIdStr === 'enemy') {
-                                    const eIdx = tIdStr.startsWith('enemy_') ? parseInt(tIdStr.split('_')[1], 10) : 0;
-                                    target = this.enemies[eIdx] || this.enemies[0];
-                                }
-                            }
-                        }
-
-                        if (!target) return;
-
-                        // Live update enemy source CA bar if provided in event
-                        if (ev.sourceCa !== undefined && group.sourceId) {
-                            const sIdStr = String(group.sourceId);
-                            if (sIdStr.startsWith('enemy_')) {
-                                const eIdx = parseInt(sIdStr.split('_')[1], 10);
-                                const sEnemy = this.enemies[eIdx] || this.enemies[0];
-                                if (sEnemy) {
-                                    sEnemy.caBar = ev.sourceCa;
-                                    this._refreshEnemyHUD();
-                                }
-                            }
-                        }
-
-                        if (ev.type === 'damage') {
-                            target.hp = Math.max(0, target.hp - ev.value);
-                            if (this.enemies.includes(target)) {
-                                if (ev.modeBar !== undefined && target) target.modeBar = ev.modeBar;
-                                if (ev.modeState !== undefined && target) target.modeState = ev.modeState;
-                                this._refreshEnemyHUD();
+                        if (group.isGroup) {
+                            let source = null;
+                            if (String(group.sourceId).startsWith('enemy_') || String(group.sourceId) === 'enemy') {
+                                const eIdx = String(group.sourceId).startsWith('enemy_') ? parseInt(String(group.sourceId).split('_')[1], 10) : 0;
+                                source = this.enemies[eIdx] || this.enemies[0];
                             } else {
-                                target.refreshVisual();
+                                source = this.players.find(p => (p.slot || p.id) === group.sourceId);
+                            }
+                            const sourceName = source ? (source.charName || source.name || 'Unknown') : 'Entity';
+
+                            const isStunnedAction = group.skillName === 'STUNNED' || group.events.some(e => e.type === 'stun_skip');
+                            if (isStunnedAction) {
+                                this.showLog(`💫 ${sourceName} is STUNNED and cannot move!`, 'popup');
+                                if (source) {
+                                    const stunSrcPos = this._getVfxTargetPos(source);
+                                    this.playExactVFX('stun', stunSrcPos.x, stunSrcPos.y, { scale: 1.5 });
+                                    this.playStunVibrateAnim(source);
+                                }
+                                delay = 1000;
+                                this.time.delayedCall(delay, safeResolve);
+                                return;
                             }
 
-                            if (ev.isDoT) {
-                                if (this.enemies.includes(target) && target && ev.skillName !== 'STUNNED') target.playHitAnim();
-                                else if (!this.enemies.includes(target)) this.playSpriteHitAnim(target);
+                            const primaryEv = group.events.find(e => e.type === 'damage' && !e.isDoT) || group.events.find(e => e.type === 'heal' || e.type === 'support' || e.type === 'effect_applied' || e.type === 'cleanse' || e.type === 'revive');
 
-                                // VFX: DoT effect (Burn/Poison)
-                                const dotPos = this._getVfxTargetPos(target);
-                                const dotKey = (ev.effectName || '').toLowerCase() === 'burn' ? 'burn' : 'poison';
-                                this.playExactVFX(dotKey, dotPos.x, dotPos.y, { scale: 1.5, useAddBlend: true });
+                            let isSkill = false;
+                            let isSA = false;
 
-                                const colorStr = ev.effectName === 'Burn' ? "#e67e22" : "#9b59b6";
-                                const emoji = ev.effectName === 'Burn' ? "🔥" : "💀";
-                                const logSource = String(target.slot || target.monsterId).startsWith('enemy') ? 'enemy' : 'player';
-                                this.showLog(`${emoji} ${ev.effectName} deals ${ev.value} damage to ${target.charName}!`, logSource);
-                                this.showFloatingDoT(target, ev.effectName, ev.value, colorStr);
-                                delay = Math.max(delay, 600);
-                            } else {
-                                if (this.enemies.includes(target) && target && ev.skillName !== 'STUNNED') target.playHitAnim();
-                                else if (!this.enemies.includes(target)) this.playSpriteHitAnim(target);
+                            if (primaryEv) {
+                                const skillDisplay = group.skillName || 'Basic Attack';
+                                this.showLog(`[${skillDisplay}] ${sourceName} attacks!`, 'popup');
+                                isSA = primaryEv.skillCategory === 'special' || primaryEv.skillCategory === 'chain_burst' || primaryEv.skillCategory === 'aether_burst';
+                                isSkill = primaryEv.skillCategory && primaryEv.skillCategory !== 'basic';
 
-                                // VFX: Damage (Skill/Special/Charge = Rolling, Basic = Exact)
-                                const dmgPos = this._getVfxTargetPos(target);
-                                const cat = ev.skillCategory || 'basic';
-                                if (cat === 'skill' || cat === 'special' || cat === 'charge') {
-                                    const actualElement = ev.sourceElement || (source ? source.element : 'Fire');
-                                    this.playRollingVFX(actualElement, dmgPos.x, dmgPos.y, 1.5);
-                                } else if (cat === 'aether_burst') {
-                                    this.playExactVFX('aetherBurst', dmgPos.x, dmgPos.y, { scale: 1.5, useAddBlend: true });
-                                } else if (cat === 'chain_burst') {
-                                    this.playExactVFX('chainBurst', dmgPos.x, dmgPos.y, { scale: 1.5, useAddBlend: true });
+                                const isEnemy = String(group.sourceId).startsWith('enemy');
+                                if (isEnemy) {
+                                    const monsSfx = isSkill ? 'sfx_monsChargeAttack' : 'sfx_monsBasicAtk';
+                                    this.playSFX(monsSfx, { volume: 0.7 });
                                 } else {
-                                    // Basic Attack: charBasicAtk (player) or monsBasicAtk (enemy)
-                                    const isEnemySource = String(group.sourceId).startsWith('enemy');
-                                    const atkKey = isEnemySource ? 'monsBasicAtk' : 'charBasicAtk';
-                                    this.playExactVFX(atkKey, dmgPos.x, dmgPos.y, { scale: 0.5, useAddBlend: true });
+                                    const hasHealOrBuff = group.events.some(e => e.type === 'heal' || e.type === 'cleanse' || e.type === 'revive' || (e.type === 'effect_applied' && (e.effectType || '').toLowerCase() === 'buff'));
+
+                                    let atkSfx = 'sfx_charBasicAtk';
+                                    if (hasHealOrBuff) atkSfx = 'sfx_heal';
+                                    else if (isSA) atkSfx = 'sfx_charSpecialAttack';
+                                    else if (isSkill) atkSfx = 'sfx_charSkillAtk';
+                                    this.playSFX(atkSfx, { volume: 0.7 });
+                                }
+                            }
+
+                            if (source && source.battleSprite) {
+                                await this.playCharacterLungeAnim(source);
+                            }
+
+                            group.events.forEach(ev => {
+                                if (ev.type === 'effect_applied') return;
+
+                                let target = null;
+                                if (ev.targetId !== undefined && ev.targetId !== null) {
+                                    target = this.players.find(p => p.slot === ev.targetId);
+                                    if (!target) {
+                                        const tIdStr = String(ev.targetId);
+                                        if (this.enemies.some(e => String(e.monsterId) == tIdStr) || tIdStr.startsWith('enemy_') || tIdStr === 'enemy') {
+                                            const eIdx = tIdStr.startsWith('enemy_') ? parseInt(tIdStr.split('_')[1], 10) : 0;
+                                            target = this.enemies[eIdx] || this.enemies[0];
+                                        }
+                                    }
                                 }
 
-                                this.showFloatingDamage(target, ev.value, ev.isCrit, ev.elementMultiplier, ev.sourceElement);
-                                delay = Math.max(delay, 250);
+                                if (!target) return;
+
+                                if (ev.sourceCa !== undefined && group.sourceId) {
+                                    const sIdStr = String(group.sourceId);
+                                    if (sIdStr.startsWith('enemy_')) {
+                                        const eIdx = parseInt(sIdStr.split('_')[1], 10);
+                                        const sEnemy = this.enemies[eIdx] || this.enemies[0];
+                                        if (sEnemy) {
+                                            sEnemy.caBar = ev.sourceCa;
+                                            this._refreshEnemyHUD();
+                                        }
+                                    }
+                                }
+
+                                if (ev.type === 'damage') {
+                                    target.hp = Math.max(0, target.hp - ev.value);
+                                    if (this.enemies.includes(target)) {
+                                        if (ev.modeBar !== undefined && target) target.modeBar = ev.modeBar;
+                                        if (ev.modeState !== undefined && target) target.modeState = ev.modeState;
+                                        this._refreshEnemyHUD();
+                                    } else {
+                                        target.refreshVisual();
+                                    }
+
+                                    if (ev.isDoT) {
+                                        if (this.enemies.includes(target) && target && ev.skillName !== 'STUNNED') target.playHitAnim();
+                                        else if (!this.enemies.includes(target)) this.playSpriteHitAnim(target);
+
+                                        const dotPos = this._getVfxTargetPos(target);
+                                        const dotKey = (ev.effectName || '').toLowerCase() === 'burn' ? 'burn' : 'poison';
+                                        this.playExactVFX(dotKey, dotPos.x, dotPos.y, { scale: 1.5, useAddBlend: true });
+
+                                        const colorStr = ev.effectName === 'Burn' ? "#e67e22" : "#9b59b6";
+                                        const emoji = ev.effectName === 'Burn' ? "🔥" : "💀";
+                                        const logSource = String(target.slot || target.monsterId).startsWith('enemy') ? 'enemy' : 'player';
+                                        this.showLog(`${emoji} ${ev.effectName} deals ${ev.value} damage to ${target.charName}!`, logSource);
+                                        this.showFloatingDoT(target, ev.effectName, ev.value, colorStr);
+                                        delay = Math.max(delay, 600);
+                                    } else {
+                                        if (this.enemies.includes(target) && target && ev.skillName !== 'STUNNED') target.playHitAnim();
+                                        else if (!this.enemies.includes(target)) this.playSpriteHitAnim(target);
+
+                                        const dmgPos = this._getVfxTargetPos(target);
+                                        const cat = ev.skillCategory || 'basic';
+                                        if (cat === 'skill' || cat === 'special' || cat === 'charge') {
+                                            const actualElement = ev.sourceElement || (source ? source.element : 'Fire');
+                                            this.playRollingVFX(actualElement, dmgPos.x, dmgPos.y, 1.5);
+                                        } else if (cat === 'aether_burst') {
+                                            this.playExactVFX('aetherBurst', dmgPos.x, dmgPos.y, { scale: 1.5, useAddBlend: true });
+                                        } else if (cat === 'chain_burst') {
+                                            this.playExactVFX('chainBurst', dmgPos.x, dmgPos.y, { scale: 1.5, useAddBlend: true });
+                                        } else {
+                                            const isEnemySource = String(group.sourceId).startsWith('enemy');
+                                            const atkKey = isEnemySource ? 'monsBasicAtk' : 'charBasicAtk';
+                                            this.playExactVFX(atkKey, dmgPos.x, dmgPos.y, { scale: 0.5, useAddBlend: true });
+                                        }
+
+                                        this.showFloatingDamage(target, ev.value, ev.isCrit, ev.elementMultiplier, ev.sourceElement);
+                                        delay = Math.max(delay, 250);
+                                    }
+                                } else if (ev.type === 'heal') {
+                                    target.hp = Math.min(target.maxHp, target.hp + ev.value);
+                                    if (this.enemies.includes(target)) this._refreshEnemyHUD();
+                                    else target.refreshVisual();
+
+                                    const healPos = this._getVfxTargetPos(target);
+                                    this.playExactVFX('heal', healPos.x, healPos.y, { scale: 1.5 });
+
+                                    this.showFloatingHeal(target, ev.value);
+                                    this.showLog(`[Heal] ${target.charName} restored HP!`, 'popup');
+                                    delay = Math.max(delay, 600);
+                                } else if (ev.type === 'revive') {
+                                    target.hp = ev.value;
+                                    if (this.enemies.includes(target)) this._refreshEnemyHUD();
+                                    else target.refreshVisual();
+
+                                    const revPos = this._getVfxTargetPos(target);
+                                    this.playExactVFX('revive', revPos.x, revPos.y, { scale: 1.5 });
+
+                                    this.showLog(`✨ ${target.charName} revived!`, 'popup');
+                                    delay = Math.max(delay, 600);
+                                } else if (ev.type === 'cleanse') {
+                                    target.activeEffects = (target.activeEffects || []).filter(e => (e.effect_type || '').toLowerCase() !== 'debuff');
+                                    target.refreshVisual();
+                                    this.showLog(`✨ ${target.charName} debuffs cleansed!`, 'popup');
+                                    delay = Math.max(delay, 500);
+                                } else if (ev.type === 'stun_skip') {
+                                    const stunPos = this._getVfxTargetPos(target);
+                                    this.playExactVFX('stun', stunPos.x, stunPos.y, { scale: 1.5 });
+
+                                    const tgtName = target.charName || (target.monsterId ? 'ENEMY' : 'Character');
+                                    this.showLog(`💫 ${tgtName} is STUNNED and cannot move!`, 'popup');
+                                    this.playStunVibrateAnim(target);
+                                    delay = Math.max(delay, 400);
+                                }
+                            });
+
+                            if (source && source.battleSprite) {
+                                await this.playCharacterReturnAnim(source);
                             }
-                        } else if (ev.type === 'heal') {
-                            target.hp = Math.min(target.maxHp, target.hp + ev.value);
-                            if (this.enemies.includes(target)) this._refreshEnemyHUD();
-                            else target.refreshVisual();
 
-                            // VFX: Heal
-                            const healPos = this._getVfxTargetPos(target);
-                            this.playExactVFX('heal', healPos.x, healPos.y, { scale: 1.5 });
+                            const effectEvents = group.events.filter(ev => ev.type === 'effect_applied');
+                            if (effectEvents.length > 0) {
+                                await new Promise(r => this.time.delayedCall(400, r));
 
-                            this.showFloatingHeal(target, ev.value);
-                            this.showLog(`[Heal] ${target.charName} restored HP!`, 'popup');
-                            delay = Math.max(delay, 600);
-                        } else if (ev.type === 'revive') {
-                            target.hp = ev.value;
-                            if (this.enemies.includes(target)) this._refreshEnemyHUD();
-                            else target.refreshVisual();
+                                let playedBuffSound = false;
+                                let playedDebuffSound = false;
 
-                            // VFX: Revive
-                            const revPos = this._getVfxTargetPos(target);
-                            this.playExactVFX('revive', revPos.x, revPos.y, { scale: 1.5 });
+                                effectEvents.forEach(ev => {
+                                    let target = null;
+                                    if (ev.targetId !== undefined && ev.targetId !== null) {
+                                        target = this.players.find(p => p.slot === ev.targetId);
+                                        if (!target) {
+                                            const tIdStr = String(ev.targetId);
+                                            if (this.enemies.some(e => String(e.monsterId) == tIdStr) || tIdStr.startsWith('enemy_') || tIdStr === 'enemy') {
+                                                const eIdx = tIdStr.startsWith('enemy_') ? parseInt(tIdStr.split('_')[1], 10) : 0;
+                                                target = this.enemies[eIdx] || this.enemies[0];
+                                            }
+                                        }
+                                    }
+                                    if (!target) return;
 
-                            this.showLog(`✨ ${target.charName} revived!`, 'popup');
-                            delay = Math.max(delay, 600);
-                        } else if (ev.type === 'cleanse') {
-                            target.activeEffects = target.activeEffects.filter(e => (e.effect_type || '').toLowerCase() !== 'debuff');
-                            target.refreshVisual();
-                            this.showLog(`✨ ${target.charName} debuffs cleansed!`, 'popup');
-                            delay = Math.max(delay, 500);
-                        } else if (ev.type === 'stun_skip') {
-                            // VFX: Stun
-                            const stunPos = this._getVfxTargetPos(target);
-                            this.playExactVFX('stun', stunPos.x, stunPos.y, { scale: 1.5 });
+                                    const effPos = this._getVfxTargetPos(target);
+                                    if ((ev.effectType || '').toLowerCase() === 'buff') {
+                                        this.playExactVFX('buff', effPos.x, effPos.y, { scale: 1.5 });
+                                        if (!playedBuffSound) {
+                                            this.playSFX('sfx_buff', { volume: 0.6 });
+                                            playedBuffSound = true;
+                                        }
+                                    } else {
+                                        this.playExactVFX('debuff', effPos.x, effPos.y, { scale: 1.5 });
+                                        if (!playedDebuffSound) {
+                                            this.playSFX('sfx_debuff', { volume: 0.6 });
+                                            playedDebuffSound = true;
+                                        }
+                                    }
 
-                            const tgtName = target.charName || (target.monsterId ? 'ENEMY' : 'Character');
-                            this.showLog(`💫 ${tgtName} is STUNNED and cannot move!`, 'popup');
-                            this.playStunVibrateAnim(target);
-                            delay = Math.max(delay, 400);
-                        }
-                    });
+                                    this.showFloatingEffect(target, ev.effectName, ev.effectType);
+                                    this.showLog(`${target.charName} got ${ev.effectName}!`, 'popup');
+                                });
 
-                    // Return character to original base position
-                    if (source && source.battleSprite) {
-                        await this.playCharacterReturnAnim(source);
-                    }
-
-                    // Second pass: Process effect_applied AFTER character returned to base position
-                    const effectEvents = group.events.filter(ev => ev.type === 'effect_applied');
-                    if (effectEvents.length > 0) {
-                        await new Promise(r => this.time.delayedCall(400, r)); // wait longer so damage text moves up
-
-                        let playedBuffSound = false;
-                        let playedDebuffSound = false;
-
-                        effectEvents.forEach(ev => {
+                                delay = Math.max(delay, 500);
+                                await new Promise(r => this.time.delayedCall(350, r));
+                            }
+                        } else {
+                            const ev = group.event;
                             let target = null;
-                            if (ev.targetId !== undefined && ev.targetId !== null) {
+                            if (ev && ev.targetId !== undefined && ev.targetId !== null) {
                                 target = this.players.find(p => p.slot === ev.targetId);
                                 if (!target) {
                                     const tIdStr = String(ev.targetId);
@@ -2014,218 +2236,177 @@ export default class BattleScene extends Phaser.Scene {
                                     }
                                 }
                             }
-                            if (!target) return;
 
-                            // VFX: Buff or Debuff
-                            const effPos = this._getVfxTargetPos(target);
-                            if ((ev.effectType || '').toLowerCase() === 'buff') {
-                                this.playExactVFX('buff', effPos.x, effPos.y, { scale: 1.5 });
-                                if (!playedBuffSound) {
-                                    this.playSFX('sfx_buff', { volume: 0.6 });
-                                    playedBuffSound = true;
+                            if (ev && ev.type === 'enrage') {
+                                if (target) {
+                                    this.playSFX('sfx_monsEnraged', { volume: 0.8 });
+                                    target.modeState = 'enraged';
+                                    this._enragedTurns = 3;
+                                    this.showLog("ENEMY ENRAGED! (3 Turns)", 'system');
+                                    this._refreshEnemyHUD();
+
+                                    const effPos = this._getVfxTargetPos(target);
+                                    const txt = this.add.text(effPos.x, effPos.y - 40, "ENRAGED", {
+                                        fontSize: "36px", fontStyle: "bold", color: "#e74c3c", stroke: "#000000", strokeThickness: 5
+                                    }).setOrigin(0.5).setDepth(200);
+                                    this.tweens.add({ targets: txt, y: effPos.y - 100, alpha: 0, duration: 2000, ease: 'Cubic.easeOut', onComplete: () => txt.destroy() });
+
+                                    delay = 800;
                                 }
-                            } else {
-                                this.playExactVFX('debuff', effPos.x, effPos.y, { scale: 1.5 });
-                                if (!playedDebuffSound) {
-                                    this.playSFX('sfx_debuff', { volume: 0.6 });
-                                    playedDebuffSound = true;
+                            } else if (ev && ev.type === 'break') {
+                                if (target) {
+                                    this.playSFX('sfx_monsExhausted', { volume: 0.8 });
+                                    target.modeState = 'exhausted';
+                                    this._exhaustedTurns = 2;
+                                    this._enragedTurns = 0;
+                                    this.showLog("ENEMY BREAK! (Exhausted)", 'system');
+                                    this._refreshEnemyHUD();
+
+                                    const effPos = this._getVfxTargetPos(target);
+                                    const txt = this.add.text(effPos.x, effPos.y - 40, "BREAK", {
+                                        fontSize: "40px", fontStyle: "bold", color: "#3498db", stroke: "#000000", strokeThickness: 5
+                                    }).setOrigin(0.5).setDepth(200);
+                                    this.tweens.add({ targets: txt, y: effPos.y - 100, alpha: 0, duration: 2000, ease: 'Cubic.easeOut', onComplete: () => txt.destroy() });
+
+                                    delay = 800;
                                 }
-                            }
-
-                            this.showFloatingEffect(target, ev.effectName, ev.effectType);
-                            this.showLog(`${target.charName} got ${ev.effectName}!`, 'popup');
-                        });
-
-                        // Extra delay to let player see the buff applying
-                        delay = Math.max(delay, 500);
-                        await new Promise(r => this.time.delayedCall(350, r));
-                    }
-                } else {
-                    const ev = group.event;
-                    let target = null;
-                    if (ev.targetId !== undefined && ev.targetId !== null) {
-                        target = this.players.find(p => p.slot === ev.targetId);
-                        if (!target) {
-                            const tIdStr = String(ev.targetId);
-                            if (this.enemies.some(e => String(e.monsterId) == tIdStr) || tIdStr.startsWith('enemy_') || tIdStr === 'enemy') {
-                                const eIdx = tIdStr.startsWith('enemy_') ? parseInt(tIdStr.split('_')[1], 10) : 0;
-                                target = this.enemies[eIdx] || this.enemies[0];
-                            }
-                        }
-                    }
-
-                    if (ev.type === 'enrage') {
-                        if (target) {
-                            this.playSFX('sfx_monsEnraged', { volume: 0.8 });
-                            target.modeState = 'enraged';
-                            this._enragedTurns = 3;
-                            this.showLog("ENEMY ENRAGED! (3 Turns)", 'system');
-                            this._refreshEnemyHUD();
-
-                            const effPos = this._getVfxTargetPos(target);
-                            const txt = this.add.text(effPos.x, effPos.y - 40, "ENRAGED", {
-                                fontSize: "36px", fontStyle: "bold", color: "#e74c3c", stroke: "#000000", strokeThickness: 5
-                            }).setOrigin(0.5).setDepth(200);
-                            this.tweens.add({ targets: txt, y: effPos.y - 100, alpha: 0, duration: 2000, ease: 'Cubic.easeOut', onComplete: () => txt.destroy() });
-
-                            delay = 800;
-                        }
-                    } else if (ev.type === 'break') {
-                        if (target) {
-                            this.playSFX('sfx_monsExhausted', { volume: 0.8 });
-                            target.modeState = 'exhausted';
-                            this._exhaustedTurns = 2;
-                            this._enragedTurns = 0;
-                            this.showLog("ENEMY BREAK! (Exhausted)", 'system');
-                            this._refreshEnemyHUD();
-
-                            const effPos = this._getVfxTargetPos(target);
-                            const txt = this.add.text(effPos.x, effPos.y - 40, "BREAK", {
-                                fontSize: "40px", fontStyle: "bold", color: "#3498db", stroke: "#000000", strokeThickness: 5
-                            }).setOrigin(0.5).setDepth(200);
-                            this.tweens.add({ targets: txt, y: effPos.y - 100, alpha: 0, duration: 2000, ease: 'Cubic.easeOut', onComplete: () => txt.destroy() });
-
-                            delay = 800;
-                        }
-                    } else if (ev.type === 'effect_removed') {
-                        if (target) {
-                            const effName = ev.effectName || '';
-                            target.activeEffects = (target.activeEffects || []).filter(
-                                e => (e.effect_name || e.target_stat || '') !== effName
-                            );
-                            if (this.enemies.includes(target)) {
-                                this._refreshEnemyHUD();
-                            } else {
-                                target.refreshVisual();
-                            }
-                            delay = 100;
-                        }
-                    } else if (ev.type === 'log') {
-                        this.showLog(ev.message, 'system');
-                        delay = 600;
-                    } else if (ev.type === 'delay') {
-                        delay = ev.delayMs || 500;
-                    } else if (ev.type === 'wave_change') {
-                        waveChanged = true;
-                        this._isWaveChanging = true;
-                        this._isVictoryConfirmed = false;
-
-                        delay = -1; // Flag for manual resolve
-
-                        // Play monster defeated roar on wave transition
-                        this.playSFX('sfx_monsterDefeated', { volume: 0.8 });
-
-                        // 1. Fade out the dying enemy
-                        if (this.enemies.length > 0) {
-                            const targetAlphas = [];
-                            this.enemies.forEach((enemy, idx) => {
-                                targetAlphas.push(enemy);
-                                if (this.enemyHUDs[idx] && this.enemyHUDs[idx].container) {
-                                    targetAlphas.push(this.enemyHUDs[idx].container);
+                            } else if (ev && ev.type === 'effect_removed') {
+                                if (target) {
+                                    const effName = ev.effectName || '';
+                                    target.activeEffects = (target.activeEffects || []).filter(
+                                        e => (e.effect_name || e.target_stat || '') !== effName
+                                    );
+                                    if (this.enemies.includes(target)) {
+                                        this._refreshEnemyHUD();
+                                    } else {
+                                        target.refreshVisual();
+                                    }
+                                    delay = 100;
                                 }
-                            });
+                            } else if (ev && ev.type === 'log') {
+                                this.showLog(ev.message, 'system');
+                                delay = 600;
+                            } else if (ev && ev.type === 'delay') {
+                                delay = ev.delayMs || 500;
+                            } else if (ev && ev.type === 'wave_change') {
+                                waveChanged = true;
+                                this._isWaveChanging = true;
+                                this._isVictoryConfirmed = false;
 
-                            this.tweens.add({
-                                targets: targetAlphas,
-                                alpha: 0,
-                                duration: 1000,
-                                onComplete: () => {
-                                    resolve(); // Allow _syncState to rebuild new enemies in background
+                                delay = -1;
 
-                                    // 2. Karakter arena (sprite pixel art) berlari ke kiri (maju)
-                                    const characterSprites = [];
-                                    this.players.forEach(p => {
-                                        if (p.battleSprite) characterSprites.push(p.battleSprite);
-                                        else if (p.spriteObj) characterSprites.push(p.spriteObj);
+                                let hasResolved = false;
+                                const safeWaveResolve = () => {
+                                    if (hasResolved) return;
+                                    hasResolved = true;
+                                    this._isWaveChanging = false;
+                                    this._refreshEnemyHUD();
+                                    safeResolve();
+                                };
+                                const waveTimeout = setTimeout(safeWaveResolve, 6000);
+
+                                this.playSFX('sfx_monsterDefeated', { volume: 0.8 });
+
+                                if (this.enemies.length > 0) {
+                                    const targetAlphas = [];
+                                    this.enemies.forEach((enemy, idx) => {
+                                        targetAlphas.push(enemy);
+                                        if (this.enemyHUDs[idx] && this.enemyHUDs[idx].container) {
+                                            targetAlphas.push(this.enemyHUDs[idx].container);
+                                        }
                                     });
 
-                                    const runTargets = characterSprites.length > 0 ? characterSprites : this.players;
-
                                     this.tweens.add({
-                                        targets: runTargets,
-                                        x: "-=600",
-                                        duration: 800,
-                                        ease: 'Power2',
+                                        targets: targetAlphas,
+                                        alpha: 0,
+                                        duration: 1000,
                                         onComplete: () => {
-                                            // 3. Buka tirai hitam pekat (transparency 100%)
-                                            if (!this._blackOverlay) {
-                                                this._blackOverlay = this.add.rectangle(CX, H / 2, W, H, 0x000000, 1).setDepth(190).setAlpha(0);
-                                            }
+                                            const characterSprites = [];
+                                            this.players.forEach(p => {
+                                                if (p.battleSprite) characterSprites.push(p.battleSprite);
+                                                else if (p.spriteObj) characterSprites.push(p.spriteObj);
+                                            });
+
+                                            const runTargets = characterSprites.length > 0 ? characterSprites : this.players;
 
                                             this.tweens.add({
-                                                targets: this._blackOverlay,
-                                                alpha: 1,
-                                                duration: 400,
+                                                targets: runTargets,
+                                                x: "-=600",
+                                                duration: 800,
+                                                ease: 'Power2',
                                                 onComplete: () => {
-                                                    // Kembalikan posisi sprite karakter ke posisi semula secara instan di balik tirai
-                                                    this.players.forEach(p => {
-                                                        if (p.battleSprite) p.battleSprite.x = p._spriteBaseX || 390;
-                                                        else if (p.spriteObj) p.spriteObj.x = p._spriteBaseX || 390;
-                                                        else p.x = p._baseX;
-                                                    });
-
-                                                    const waveTxt = this.add.text(CX, H / 2, `WAVE ${ev.waveNum}`, {
-                                                        fontSize: '48px', color: '#ffd700', fontStyle: 'bold', fontFamily: 'Outfit'
-                                                    }).setOrigin(0.5).setAlpha(0).setDepth(200);
+                                                    if (!this._blackOverlay) {
+                                                        this._blackOverlay = this.add.rectangle(CX, H / 2, W, H, 0x000000, 1).setDepth(190).setAlpha(0);
+                                                    }
 
                                                     this.tweens.add({
-                                                        targets: waveTxt,
+                                                        targets: this._blackOverlay,
                                                         alpha: 1,
-                                                        duration: 600,
-                                                        yoyo: true,
-                                                        hold: 800,
+                                                        duration: 400,
                                                         onComplete: () => {
-                                                            waveTxt.destroy();
+                                                            this.players.forEach(p => {
+                                                                if (p.battleSprite) p.battleSprite.x = p._spriteBaseX || 390;
+                                                                else if (p.spriteObj) p.spriteObj.x = p._spriteBaseX || 390;
+                                                                else p.x = p._baseX;
+                                                            });
 
-                                                            if (this._blackOverlay) {
-                                                                this.tweens.add({
-                                                                    targets: this._blackOverlay,
-                                                                    alpha: 0,
-                                                                    duration: 400,
-                                                                    ease: 'Power2',
-                                                                    onComplete: () => {
-                                                                        this._blackOverlay.destroy();
-                                                                        this._blackOverlay = null;
+                                                            const waveTxt = this.add.text(CX, H / 2, `WAVE ${ev.waveNum}`, {
+                                                                fontSize: '48px', color: '#ffd700', fontStyle: 'bold', fontFamily: 'Outfit'
+                                                            }).setOrigin(0.5).setAlpha(0).setDepth(200);
 
-                                                                        const newTargetAlphas = [];
-                                                                        this.enemies.forEach((enemy, idx) => {
-                                                                            newTargetAlphas.push(enemy);
-                                                                            if (this.enemyHUDs[idx] && this.enemyHUDs[idx].container) {
-                                                                                newTargetAlphas.push(this.enemyHUDs[idx].container);
-                                                                            }
-                                                                        });
+                                                            this.tweens.add({
+                                                                targets: waveTxt,
+                                                                alpha: 1,
+                                                                duration: 600,
+                                                                yoyo: true,
+                                                                hold: 800,
+                                                                onComplete: () => {
+                                                                    waveTxt.destroy();
 
+                                                                    if (this._blackOverlay) {
                                                                         this.tweens.add({
-                                                                            targets: newTargetAlphas,
-                                                                            alpha: 1,
-                                                                            duration: 1000,
+                                                                            targets: this._blackOverlay,
+                                                                            alpha: 0,
+                                                                            duration: 400,
+                                                                            ease: 'Power2',
                                                                             onComplete: () => {
-                                                                                this._isWaveChanging = false;
-                                                                                this._refreshEnemyHUD();
+                                                                                if (this._blackOverlay) {
+                                                                                    this._blackOverlay.destroy();
+                                                                                    this._blackOverlay = null;
+                                                                                }
+                                                                                clearTimeout(waveTimeout);
+                                                                                safeWaveResolve();
                                                                             }
                                                                         });
+                                                                    } else {
+                                                                        clearTimeout(waveTimeout);
+                                                                        safeWaveResolve();
                                                                     }
-                                                                });
-                                                            }
+                                                                }
+                                                            });
                                                         }
                                                     });
                                                 }
                                             });
                                         }
                                     });
+                                } else {
+                                    clearTimeout(waveTimeout);
+                                    safeWaveResolve();
                                 }
-                            });
-                        } else {
-                            resolve();
+                            } else {
+                                delay = 100;
+                            }
                         }
-                    } else {
-                        delay = 100;
-                    }
-                }
 
-                if (delay >= 0) {
-                    this.time.delayedCall(delay, resolve);
-                }
+                        if (delay >= 0) {
+                            this.time.delayedCall(delay, safeResolve);
+                        }
+                    } catch (err) {
+                        console.error("[_playActionEvents] Error processing event group:", err);
+                        safeResolve();
+                    }
+                })();
             });
         }
         return waveChanged;
@@ -2376,16 +2557,32 @@ export default class BattleScene extends Phaser.Scene {
         this.setTurn("attacking");
         this.closeActionWindow();
 
+        // console.log(`[TurnBatch] ⚔️ Submitting turn batch for ${character_actions.length} characters:`, JSON.parse(JSON.stringify(character_actions)));
+
         await new Promise(r => setTimeout(r, 500));
 
         try {
             const res = await BattleApi.processTurnBatch(this.bsId, character_actions);
-            if (res.status === 'success') {
-                await this._playActionEvents(res.data.events);
+            // console.log(`[TurnBatch] 📥 Server response status: ${res ? res.status : 'null'}`, res);
+
+            if (res && res.status === 'success') {
+                try {
+                    // console.log(`[TurnBatch] 🎬 Starting _playActionEvents with ${res.data.events ? res.data.events.length : 0} events...`);
+                    const eventsPromise = this._playActionEvents(res.data.events);
+                    const timeoutPromise = new Promise(resolve => setTimeout(resolve, 30000));
+                    await Promise.race([eventsPromise, timeoutPromise]);
+                    // console.log(`[TurnBatch] ✅ Finished _playActionEvents!`);
+                } catch (eErr) {
+                    console.error("[TurnBatch] ❌ Error playing action events:", eErr);
+                }
+                // console.log(`[TurnBatch] 🔄 Syncing state snapshot from server...`);
                 this._syncState(res.data.stateSnapshot);
+            } else {
+                console.warn(`[TurnBatch] ⚠️ Server returned non-success response:`, res);
+                this.showLog(res.message || "Failed to process turn batch!", 'system');
             }
         } catch (err) {
-            console.error("Action error", err);
+            console.error("[TurnBatch] 💥 Network/Action error:", err);
         }
 
         for (const p of alive) {
@@ -2393,11 +2590,23 @@ export default class BattleScene extends Phaser.Scene {
             p.updateActionBadge();
         }
 
-        if (this.enemies.every(e => e.hp <= 0)) {
+        // console.log(`[TurnBatch] 📊 Checking end of turn batch conditions. Enemy HPs:`, this.enemies.map(e => ({ id: e.monsterId, name: e.charName, hp: e.hp })));
+
+        // Always check defeat first (players could have died during enemy phase)
+        if (this.players.length > 0 && this.players.every(p => p.hp <= 0)) {
+            // console.log(`[TurnBatch] 💀 All players dead. Triggering defeat!`);
+            this.triggerDefeat(false);
+            return;
+        }
+
+        // Always check victory (enemies could have died during player/dot phase)
+        if (this.enemies.length > 0 && this.enemies.every(e => e.hp <= 0)) {
+            // console.log(`[TurnBatch] 🏆 All enemies dead. Calling checkVictory()...`);
             this.checkVictory();
             return;
         }
 
+        // console.log(`[TurnBatch] 🔄 Returning turn to player.`);
         this.setTurn("player");
     }
 
@@ -2529,10 +2738,33 @@ export default class BattleScene extends Phaser.Scene {
                 }
             });
             this._refreshEnemyHUD();
+
+            if (needsRebuild) {
+                const fadeTargets = [];
+                this.enemies.forEach((enemy, idx) => {
+                    if (enemy) fadeTargets.push(enemy);
+                    if (this.enemyHUDs && this.enemyHUDs[idx] && this.enemyHUDs[idx].container) {
+                        fadeTargets.push(this.enemyHUDs[idx].container);
+                    }
+                });
+
+                if (fadeTargets.length > 0) {
+                    this.tweens.add({
+                        targets: fadeTargets,
+                        alpha: 1,
+                        duration: 800,
+                        ease: 'Sine.easeOut'
+                    });
+                }
+            }
         }
 
         if (state.timeline && this.timelineContainer) {
             this.buildTimeline(state.timeline);
+        }
+
+        if (this.enemies.length > 0 && this.enemies.every(e => e.hp <= 0)) {
+            this.checkVictory();
         }
     }
     _randAlive() { const l = this.players.filter(p => p.hp > 0); return l.length ? l[Math.floor(Math.random() * l.length)] : null; }
@@ -2546,21 +2778,23 @@ export default class BattleScene extends Phaser.Scene {
 
         this._showCharacterSelectionModal("HEAL TARGET", true, async (targetChar) => {
             try {
-                const actionData = { sourceId: targetChar.slot, targetIds: [targetChar.slot], actionType: 'use_potion', skillId: null };
+                const targetSlot = targetChar.slot !== undefined ? targetChar.slot : targetChar.id;
+                const actionData = { sourceId: targetSlot, targetIds: [targetSlot], actionType: 'use_potion', skillId: null };
                 const res = await BattleApi.executeAction(this.bsId, actionData);
 
                 if (res.status === 'success') {
                     await this._playActionEvents(res.data.events);
                     this._syncState(res.data.stateSnapshot);
 
-                    // We increment this locally to track full count in this session (though server tracks too)
                     this.potionsUsed++;
-
                     this.showLog(`Used Green Potion on ${targetChar.charName}!`);
+                } else {
+                    this.showLog(res.message || res.error_detail || "Failed to use potion.");
                 }
             } catch (err) {
                 console.error("Potion error", err);
-                this.showLog("Failed to use potion.");
+                const detail = err && err.response && err.response.data && (err.response.data.error_detail || err.response.data.message);
+                this.showLog(detail ? `Potion error: ${detail}` : "Failed to use potion.");
             }
         });
     }
@@ -2568,12 +2802,18 @@ export default class BattleScene extends Phaser.Scene {
     _refreshHealButtonUI() {
         if (this._healText) {
             this._healText.setText("⊕  HEAL  (x" + this.healsRemaining + ")");
-            if (this.healsRemaining <= 0) {
-                this._healBtn.setStrokeStyle(2, 0x555555);
-                this._healText.setColor("#555555");
-            } else {
-                this._healBtn.setStrokeStyle(2, 0x2ecc71);
-                this._healText.setColor("#a8e6cf");
+            if (this._healBtn) {
+                if (this.healsRemaining <= 0) {
+                    if (this.textures.exists('btn_a_disabled')) this._healBtn.setTexture('btn_a_disabled');
+                    this._healBtn.setTint(0x555555);
+                    if (this._healBtn.setStrokeStyle) this._healBtn.setStrokeStyle(2, 0x555555);
+                    this._healText.setColor("#555555");
+                } else {
+                    if (this.textures.exists('btn_a_normal')) this._healBtn.setTexture('btn_a_normal');
+                    this._healBtn.setTint(0x2ecc71);
+                    if (this._healBtn.setStrokeStyle) this._healBtn.setStrokeStyle(2, 0x2ecc71);
+                    this._healText.setColor("#a8e6cf");
+                }
             }
         }
     }
@@ -2604,10 +2844,11 @@ export default class BattleScene extends Phaser.Scene {
         this.players.forEach((p, idx) => {
             const pos = positions[idx];
             const isDead = p.hp <= 0;
+            const isStunned = p.activeEffects && p.activeEffects.some(e => (e.target_stat || '').toUpperCase() === 'STUN' || (e.effect_name || '').toUpperCase().includes('STUN'));
             const isValid = requireAlive ? !isDead : isDead;
 
-            const charBox = this.add.rectangle(pos.x, pos.y, 140, 52, isValid ? (requireAlive ? 0x112b1a : 0x24152e) : 0x111111);
-            charBox.setStrokeStyle(1.5, isValid ? (requireAlive ? 0x2ecc71 : 0xb39ddb) : 0x333333);
+            const charBox = this.add.rectangle(pos.x, pos.y, 140, 52, isValid ? (requireAlive ? (isStunned ? 0x2e1f0a : 0x112b1a) : 0x24152e) : 0x111111);
+            charBox.setStrokeStyle(1.5, isValid ? (requireAlive ? (isStunned ? 0xf39c12 : 0x2ecc71) : 0xb39ddb) : 0x333333);
             modalContainer.add(charBox);
 
             const nameTxt = this.add.text(pos.x - 62, pos.y - 14, p.charName, { fontSize: "11px", color: isValid ? "#e0e0ff" : "#666", fontStyle: "bold" }).setOrigin(0, 0.5);
@@ -2629,20 +2870,25 @@ export default class BattleScene extends Phaser.Scene {
             const hpBarFill = this.add.rectangle(pos.x - barW / 2, pos.y + 4, barW * ratio, 6, barColor).setOrigin(0, 0.5);
             modalContainer.add([hpBarBg, hpBarFill]);
 
-            const statusStr = isDead ? "KO 💀" : `${p.hp}/${p.maxHp}`;
-            const statusColor = isDead ? "#ff8a80" : "#a8e6cf";
+            const statusStr = isDead ? "KO 💀" : (isStunned ? `STUN 💫 (${p.hp}/${p.maxHp})` : `${p.hp}/${p.maxHp}`);
+            const statusColor = isDead ? "#ff8a80" : (isStunned ? "#f39c12" : "#a8e6cf");
             const statusTxt = this.add.text(pos.x - 62, pos.y + 14, statusStr, { fontSize: "9px", color: statusColor }).setOrigin(0, 0.5);
             modalContainer.add(statusTxt);
 
             if (isValid) {
                 charBox.setInteractive();
                 charBox.on("pointerover", () => {
-                    charBox.setFillStyle(requireAlive ? 0x1c452a : 0x3b214c);
+                    charBox.setFillStyle(requireAlive ? (isStunned ? 0x4a3210 : 0x1c452a) : 0x3b214c);
                 });
                 charBox.on("pointerout", () => {
-                    charBox.setFillStyle(requireAlive ? 0x112b1a : 0x24152e);
+                    charBox.setFillStyle(requireAlive ? (isStunned ? 0x2e1f0a : 0x112b1a) : 0x24152e);
                 });
                 charBox.on("pointerdown", () => {
+                    if (requireAlive && isStunned) {
+                        this.showLog(`💫 ${p.charName} sedang STUN! Aksi dinonaktifkan.`);
+                        this.playStunVibrateAnim(p);
+                        return;
+                    }
                     modalContainer.destroy();
                     onSelectedCallback(p);
                 });
@@ -2667,24 +2913,54 @@ export default class BattleScene extends Phaser.Scene {
     }
 
     checkVictory() {
-        if (this._isVictoryConfirmed) return true;
-        if (this.currentWave < this.totalWaves) return false;
+        // console.log(`[VictoryCheck] 🔍 Evaluating checkVictory: currentWave=${this.currentWave}, totalWaves=${this.totalWaves}, isVictoryConfirmed=${this._isVictoryConfirmed}, isWaveChanging=${this._isWaveChanging}`);
+        // console.log(`[VictoryCheck] Enemy states:`, this.enemies.map(e => ({ id: e.monsterId, name: e.charName, hp: e.hp })));
 
-        if (this.enemies.length > 0 && this.enemies.every(e => e.hp <= 0)) {
+        if (this._isVictoryConfirmed) {
+            // console.log(`[VictoryCheck] ⏩ Victory already confirmed previously. TransitionStarted=${this._isVictoryTransitionStarted}`);
+            if (!this._isVictoryTransitionStarted) {
+                // console.log(`[VictoryCheck] ⚠️ Transition was NOT started yet! Forcing _triggerVictoryTransition() now...`);
+                this._triggerVictoryTransition();
+            }
+            return true;
+        }
+
+        const allEnemiesDead = this.enemies.length > 0 && this.enemies.every(e => e.hp <= 0);
+        if (allEnemiesDead && this.currentWave < this.totalWaves && !this._isWaveChanging) {
+            // console.log(`[VictoryCheck] 🔄 All current enemies dead. Auto-syncing currentWave (${this.currentWave}) -> totalWaves (${this.totalWaves})`);
+            this.currentWave = this.totalWaves;
+        }
+
+        if (this.currentWave < this.totalWaves) {
+            // console.log(`[VictoryCheck] ⏳ currentWave (${this.currentWave}) < totalWaves (${this.totalWaves}). Not final wave yet.`);
+            return false;
+        }
+
+        if (allEnemiesDead) {
+            // console.log(`[VictoryCheck] 🏆 VICTORY CONDITIONS PASSED! Triggering defeat SFX and fade-out...`);
             this._isVictoryConfirmed = true;
             this.turn = "none";
 
             // Play monster defeated roar while BGM is still playing
             this.playSFX('sfx_monsterDefeated', { volume: 0.8 });
 
-            // FADE OUT ENEMIES FIRST
+            // FADE OUT ENEMIES FIRST (Include monster battleSprite so sprite actually fades out!)
             const fadeTargets = [];
             this.enemies.forEach((enemy, idx) => {
-                fadeTargets.push(enemy);
-                if (this.enemyHUDs[idx] && this.enemyHUDs[idx].container) {
+                if (enemy) fadeTargets.push(enemy);
+                if (enemy && enemy.battleSprite) fadeTargets.push(enemy.battleSprite);
+                if (this.enemyHUDs && this.enemyHUDs[idx] && this.enemyHUDs[idx].container) {
                     fadeTargets.push(this.enemyHUDs[idx].container);
                 }
             });
+
+            let victoryTriggered = false;
+            const triggerOnce = () => {
+                if (victoryTriggered) return;
+                victoryTriggered = true;
+                // console.log(`[VictoryCheck] 🚀 Calling _triggerVictoryTransition()!`);
+                this._triggerVictoryTransition();
+            };
 
             if (fadeTargets.length > 0) {
                 this.tweens.add({
@@ -2692,35 +2968,79 @@ export default class BattleScene extends Phaser.Scene {
                     alpha: 0,
                     duration: 1000,
                     ease: 'Sine.easeInOut',
-                    onComplete: () => this._triggerVictoryTransition()
+                    onComplete: triggerOnce
                 });
+                // Multi-layered fail-safe triggers
+                this.time.delayedCall(1100, triggerOnce);
+                setTimeout(triggerOnce, 1200);
             } else {
-                this._triggerVictoryTransition();
+                // console.log(`[VictoryCheck] 🚀 No fadeTargets. Calling _triggerVictoryTransition() directly!`);
+                triggerOnce();
             }
 
             return true;
         }
+        // console.log(`[VictoryCheck] ❌ Not all enemies dead yet.`);
         return false;
     }
 
     _triggerVictoryTransition() {
-        // Stop Battle BGM only when fade-out finishes and VICTORY appears
-        stopGlobalBGM();
+        if (this._isVictoryTransitionStarted) {
+            // console.log("[VictoryTransition] ⏩ Transition already started, skipping duplicate invocation.");
+            return;
+        }
+        this._isVictoryTransitionStarted = true;
 
-        // Play victory BGM
-        playGlobalBGM(this, 'bgm_victory');
+        // console.log("[VictoryTransition] 🚀 Executing _triggerVictoryTransition...");
+        try {
+            stopGlobalBGM();
+            playGlobalBGM(this, 'bgm_victory');
+        } catch (err) {
+            console.warn("[VictoryTransition] Audio switch error:", err);
+        }
 
-        this._showCenterAnim("VICTORY!", "#ffeb3b");
-        this.time.delayedCall(1500, () => {
-            this.scene.pause();
-            this.scene.launch('VictoryScene', {
-                questId: this.questId,
-                playerId: this.playerId,
-                potionsUsed: this.potionsUsed,
-                fullPotionsUsed: this.fullPotionsUsed,
-                bsId: this.bsId
-            });
-        });
+        try {
+            this._showCenterAnim("VICTORY!", "#ffeb3b");
+        } catch (err) {
+            console.warn("[VictoryTransition] Banner error:", err);
+        }
+
+        const launchVictory = () => {
+            if (this._victoryLaunched) return;
+            this._victoryLaunched = true;
+
+            // console.log("[VictoryTransition] 🚀 Launching VictoryScene now! bsId=", this.bsId);
+            try {
+                this.scene.pause();
+                if (this.scene.isActive('VictoryScene')) {
+                    this.scene.stop('VictoryScene');
+                }
+                this.scene.launch('VictoryScene', {
+                    questId: this.questId,
+                    playerId: this.playerId,
+                    potionsUsed: this.potionsUsed,
+                    fullPotionsUsed: this.fullPotionsUsed,
+                    bsId: this.bsId
+                });
+            } catch (err) {
+                console.error("[VictoryTransition] 💥 Error launching VictoryScene with pause/launch, falling back to scene.start:", err);
+                try {
+                    this.scene.start('VictoryScene', {
+                        questId: this.questId,
+                        playerId: this.playerId,
+                        potionsUsed: this.potionsUsed,
+                        fullPotionsUsed: this.fullPotionsUsed,
+                        bsId: this.bsId
+                    });
+                } catch (err2) {
+                    console.error("[VictoryTransition] 💥 Hard failure launching VictoryScene:", err2);
+                }
+            }
+        };
+
+        // Extended delay (2.2s) so VICTORY banner and audio flourish finish gracefully before VictoryScene loads
+        this.time.delayedCall(2000, launchVictory);
+        setTimeout(launchVictory, 2200);
     }
 
     triggerDefeat(isRetreat = false) {
