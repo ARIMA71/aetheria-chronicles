@@ -24,7 +24,7 @@ class GlobalClickSoundPlugin extends Phaser.Plugins.ScenePlugin {
             // Abaikan jika gameObject diset disableClickSound, atau overlay / panel besar
             if (gameObject.disableClickSound) return;
             if (gameObject.width >= 400 || gameObject.height >= 400) return;
-            
+
             const isSfxOn = localStorage.getItem('sfx_on') !== 'false';
             if (!isSfxOn) return;
 
@@ -160,7 +160,7 @@ const game = new Phaser.Game(config);
 
 // ── Global Benchmark History Logger (Accessible via DevTools Console) ──
 window.__benchmarkHistory = [];
-window.logBenchmark = function(endpoint, status, durationMs) {
+window.logBenchmark = function (endpoint, status, durationMs) {
     const timeStr = new Date().toLocaleTimeString();
     const fps = window.__currentFps || 60;
     const entry = {

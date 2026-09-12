@@ -114,7 +114,7 @@ export default class CharacterDetailScene extends Phaser.Scene {
         backBtn.setStrokeStyle(1, THEME.BORDER);
         backBtn.setInteractive({ useHandCursor: true });
         const homeTxt = this.add.text(40, 30, 'HOME', { fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5).setScrollFactor(0).setDepth(1000);
-        
+
         backBtn.on('pointerover', () => { backBtn.setFillStyle(0x334155); homeTxt.setColor('#ffffff'); });
         backBtn.on('pointerout', () => { backBtn.setFillStyle(THEME.PANEL); homeTxt.setColor(THEME.TEXT_PRIMARY); });
         backBtn.on('pointerdown', () => this.scene.start('LoadingScene', { targetScene: 'MainMenuScene' }));
@@ -125,26 +125,26 @@ export default class CharacterDetailScene extends Phaser.Scene {
         // PORTRAIT PLACEHOLDER
         const portraitH = 160;
         const spKey = `char_sp_${char.mc_id}`;
-        
+
         if (this.textures.exists(spKey)) {
-            const portrait = this.add.image(CX, cy + portraitH/2, spKey);
+            const portrait = this.add.image(CX, cy + portraitH / 2, spKey);
             // Fit to banner width
             const scale = Math.max(bannerW / portrait.width, portraitH / portrait.height);
             portrait.setScale(scale);
-            
+
             // Mask it to rounded rect
             const maskShape = this.make.graphics();
             maskShape.fillStyle(0xffffff);
-            maskShape.fillRoundedRect(CX - bannerW/2, cy, bannerW, portraitH, 8);
+            maskShape.fillRoundedRect(CX - bannerW / 2, cy, bannerW, portraitH, 8);
             portrait.setMask(maskShape.createGeometryMask());
             this.scrollGroup.add(portrait);
-            
+
             // Add a subtle border overlay
             const border = this.add.graphics().lineStyle(1, THEME.BORDER);
-            border.strokeRoundedRect(CX - bannerW/2, cy, bannerW, portraitH, 8);
+            border.strokeRoundedRect(CX - bannerW / 2, cy, bannerW, portraitH, 8);
             this.scrollGroup.add(border);
         } else {
-            const portraitBox = this.add.rectangle(CX, cy + portraitH/2, bannerW, portraitH, 0x0a0f1d, 0.5).setStrokeStyle(1, THEME.BORDER);
+            const portraitBox = this.add.rectangle(CX, cy + portraitH / 2, bannerW, portraitH, 0x0a0f1d, 0.5).setStrokeStyle(1, THEME.BORDER);
             this.scrollGroup.add(portraitBox);
         }
 
@@ -155,7 +155,7 @@ export default class CharacterDetailScene extends Phaser.Scene {
         else if (rarity === 'SR') rarityColor = '#3b82f6'; // Biru
         else if (rarity === 'R') rarityColor = '#10b981'; // Hijau
 
-        this.scrollGroup.add(this.add.text(CX + bannerW/2 - 10, cy + 15, rarity, { fontSize: '16px', color: rarityColor, fontStyle: 'bold', stroke: '#000', strokeThickness: 2 }).setOrigin(1, 0.5));
+        this.scrollGroup.add(this.add.text(CX + bannerW / 2 - 10, cy + 15, rarity, { fontSize: '16px', color: rarityColor, fontStyle: 'bold', stroke: '#000', strokeThickness: 2 }).setOrigin(1, 0.5));
 
         cy += portraitH;
 
@@ -166,7 +166,7 @@ export default class CharacterDetailScene extends Phaser.Scene {
 
         // Name
         this.scrollGroup.add(this.add.text(CX - bannerW / 2 + 20, cy + 25, char.mc_name, { fontSize: '18px', color: '#fff', fontStyle: 'bold' }).setOrigin(0, 0.5));
-        
+
         // Limit Break Stars (Right aligned, above ATK)
         let stars = '';
         if (char.limit_break_level > 0) {
@@ -205,14 +205,14 @@ export default class CharacterDetailScene extends Phaser.Scene {
         const barW = bannerW / 3;
         const barX = CX - bannerW / 2 + 20;
         const barY = cy + 96;
-        
+
         // Bordered Background
         const expBg = this.add.rectangle(barX, barY, barW, 6, 0x0f172a).setOrigin(0, 0.5).setStrokeStyle(1, 0x64748b);
         this.scrollGroup.add(expBg);
 
         let expPct = char.item_level >= maxLevel ? 1 : 0.5; // Visual placeholder if max exp logic isn't on client
         if (char.item_exp !== undefined && expPct !== 1) {
-             expPct = (char.item_exp % 10000) / 10000;
+            expPct = (char.item_exp % 10000) / 10000;
         }
         const expFill = this.add.rectangle(barX, barY, barW * expPct, 6, 0x3b82f6).setOrigin(0, 0.5);
         this.scrollGroup.add(expFill);
@@ -228,7 +228,7 @@ export default class CharacterDetailScene extends Phaser.Scene {
         // ACTION BUTTONS
         if (this.fromParty && this.partyState && this.partyState.partySlotId !== 'char_slot_1') {
             const btnThirdW = (W - 100) / 3;
-            
+
             // Upgrade Btn
             const upgZone = this.add.zone(40 + btnThirdW / 2, cy + 20, btnThirdW, 40).setInteractive({ useHandCursor: true });
             const upgBg = this.add.rectangle(40 + btnThirdW / 2, cy + 20, btnThirdW, 40, THEME.PANEL).setStrokeStyle(1, 0x10b981);
@@ -317,15 +317,15 @@ export default class CharacterDetailScene extends Phaser.Scene {
                 } else {
                     this.scrollGroup.add(this.add.text(35, cy + 20, skill.ms_name, { fontSize: '14px', color: '#3b82f6', fontStyle: 'bold' }).setOrigin(0, 0.5));
                     let cdTextX = W - 35;
-                    
+
                     if (skill.status_effects && skill.status_effects.length > 0) {
-                         cdTextX = W - 55; // geser CD text sedikit ke kiri
-                         const infoZone = this.add.zone(W - 30, cy + 20, 30, 30).setInteractive({ useHandCursor: true });
-                         const infoBg = this.add.circle(W - 30, cy + 20, 10, 0x1e293b).setStrokeStyle(1, 0x3b82f6);
-                         const infoText = this.add.text(W - 30, cy + 20, '!', { fontSize: '12px', color: '#3b82f6', fontStyle: 'bold' }).setOrigin(0.5);
-                         this.scrollGroup.addMultiple([infoBg, infoText, infoZone]);
-                         
-                         infoZone.on('pointerdown', () => this.showSkillEffectModal(skill));
+                        cdTextX = W - 55; // geser CD text sedikit ke kiri
+                        const infoZone = this.add.zone(W - 30, cy + 20, 30, 30).setInteractive({ useHandCursor: true });
+                        const infoBg = this.add.circle(W - 30, cy + 20, 10, 0x1e293b).setStrokeStyle(1, 0x3b82f6);
+                        const infoText = this.add.text(W - 30, cy + 20, '!', { fontSize: '12px', color: '#3b82f6', fontStyle: 'bold' }).setOrigin(0.5);
+                        this.scrollGroup.addMultiple([infoBg, infoText, infoZone]);
+
+                        infoZone.on('pointerdown', () => this.showSkillEffectModal(skill));
                     }
 
                     this.scrollGroup.add(this.add.text(cdTextX, cy + 20, `CD: ${skill.ms_cooldown}T`, { fontSize: '11px', color: THEME.TEXT_MUTED }).setOrigin(1, 0.5));
@@ -347,11 +347,11 @@ export default class CharacterDetailScene extends Phaser.Scene {
         }
 
         cy += 20;
-        
+
         // BACK BUTTON AT BOTTOM
-        const backBg = this.add.rectangle(0, cy, W/2, 45, 0x0f172a).setOrigin(0, 0).setStrokeStyle(1, 0x475569);
-        const backTxt = this.add.text(W/2 - 20, cy + 22.5, '◀ BACK', { fontSize: '14px', fontFamily: 'Outfit', color: '#a8a29e', fontStyle: 'bold' }).setOrigin(1, 0.5);
-        const backZone = this.add.zone(0, cy, W/2, 45).setOrigin(0, 0).setInteractive({ useHandCursor: true });
+        const backBg = this.add.rectangle(0, cy, W / 2, 45, 0x0f172a).setOrigin(0, 0).setStrokeStyle(1, 0x475569);
+        const backTxt = this.add.text(W / 2 - 20, cy + 22.5, '◀ BACK', { fontSize: '14px', fontFamily: 'Outfit', color: '#a8a29e', fontStyle: 'bold' }).setOrigin(1, 0.5);
+        const backZone = this.add.zone(0, cy, W / 2, 45).setOrigin(0, 0).setInteractive({ useHandCursor: true });
 
         backZone.on('pointerover', () => { backBg.setFillStyle(0x334155); backTxt.setColor('#ffffff'); });
         backZone.on('pointerout', () => { backBg.setFillStyle(0x0f172a); backTxt.setColor('#a8a29e'); });
@@ -393,7 +393,7 @@ export default class CharacterDetailScene extends Phaser.Scene {
         this.modalGroup.add(this.add.text(CX, CY - 130, 'UPGRADE LEVEL', { fontSize: '18px', color: '#10b981', fontStyle: 'bold', letterSpacing: 2 }).setOrigin(0.5));
         this.modalGroup.add(this.add.rectangle(CX, CY - 110, W - 80, 1, 0x064e3b));
 
-                // X button removed and replaced with a Cancel button below.
+        // X button removed and replaced with a Cancel button below.
 
         // Fetch latest inventory to get Gold and Materials
         const loadingText = this.add.text(CX, CY, 'Loading data...', { fontSize: '12px', color: THEME.TEXT_MUTED }).setOrigin(0.5);
@@ -428,7 +428,7 @@ export default class CharacterDetailScene extends Phaser.Scene {
                 const plusBtn = this.add.text(CX + 50, CY + 20, '+', { fontSize: '24px', color: THEME.TEXT_PRIMARY, backgroundColor: '#334155', padding: { x: 10, y: 5 } }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
                 const targetLevelText = this.add.text(CX, CY + 50, 'Target Level: ?', { fontSize: '13px', color: '#10b981', fontStyle: 'bold' }).setOrigin(0.5);
-                
+
                 const goldReqInit = qty * costPerItem;
                 const costText = this.add.text(CX, CY + 80, `${goldReqInit} / ${gold} Gold`, { fontSize: '12px', color: gold >= goldReqInit ? '#facc15' : THEME.DANGER, fontStyle: 'bold' }).setOrigin(0.5);
 
@@ -469,7 +469,7 @@ export default class CharacterDetailScene extends Phaser.Scene {
 
                     qty = tempQty;
                     qtyText.setText(`${qty}`);
-                    
+
                     const tLvl = calculateTargetLvl(qty);
                     targetLevelText.setText(`Target Level: ${tLvl}${tLvl >= maxLvl ? ' (MAX)' : ''}`);
 
@@ -583,7 +583,7 @@ export default class CharacterDetailScene extends Phaser.Scene {
         try {
             const res = await fetch(`http://localhost:3000/api/party/${this.playerId}/inventory/all`);
             const data = await res.json();
-            
+
             if (data.status === 'success') {
                 loadingText.destroy();
                 const materials = data.data.materials || [];
@@ -597,7 +597,7 @@ export default class CharacterDetailScene extends Phaser.Scene {
                 try {
                     const costRes = await fetch(`http://localhost:3000/api/party/${this.playerId}/lb-cost/${char.mc_id}/${char.limit_break_level + 1}`);
                     const costData = await costRes.json();
-                    
+
                     if (costData.status === 'success') {
                         goldReq = costData.data.gold_cost;
                         orbReq = costData.data.mat_qty;
@@ -616,7 +616,7 @@ export default class CharacterDetailScene extends Phaser.Scene {
                 const ix = CX;
                 const iy = CY - 15;
                 const boxSize = 75;
-                const itemBg = this.add.graphics().fillStyle(THEME.PANEL, 1).lineStyle(1, THEME.BORDER).fillRoundedRect(ix - boxSize/2, iy - boxSize/2, boxSize, boxSize, 8).strokeRoundedRect(ix - boxSize/2, iy - boxSize/2, boxSize, boxSize, 8);
+                const itemBg = this.add.graphics().fillStyle(THEME.PANEL, 1).lineStyle(1, THEME.BORDER).fillRoundedRect(ix - boxSize / 2, iy - boxSize / 2, boxSize, boxSize, 8).strokeRoundedRect(ix - boxSize / 2, iy - boxSize / 2, boxSize, boxSize, 8);
                 this.modalGroup.add(itemBg);
 
                 this.modalGroup.add(this.add.text(ix, iy - 18, '🔮', { fontSize: "24px" }).setOrigin(0.5));
@@ -683,11 +683,11 @@ export default class CharacterDetailScene extends Phaser.Scene {
         const modalBg = this.add.rectangle(CX, CY, W - 40, modalH, THEME.PANEL).setStrokeStyle(1, 0x3b82f6);
         this.modalGroup.add(modalBg);
 
-        this.modalGroup.add(this.add.text(CX, CY - modalH/2 + 25, 'SKILL EFFECTS', { fontSize: '16px', color: '#3b82f6', fontStyle: 'bold', letterSpacing: 1 }).setOrigin(0.5));
+        this.modalGroup.add(this.add.text(CX, CY - modalH / 2 + 25, 'SKILL EFFECTS', { fontSize: '16px', color: '#3b82f6', fontStyle: 'bold', letterSpacing: 1 }).setOrigin(0.5));
 
         // X button removed as requested
 
-        let ey = CY - modalH/2 + 70;
+        let ey = CY - modalH / 2 + 70;
         effects.forEach((eff) => {
             const isBuff = eff.effect_type === 'Buff';
             const effColor = isBuff ? '#10b981' : '#ef4444'; // Green for Buff, Red for Debuff
@@ -696,18 +696,18 @@ export default class CharacterDetailScene extends Phaser.Scene {
             const bg = this.add.rectangle(CX, ey, W - 80, 40, 0x1e293b).setStrokeStyle(1, 0x334155);
             this.modalGroup.add(bg);
 
-            this.modalGroup.add(this.add.text(CX - (W - 80)/2 + 15, ey - 8, `${iconStr} ${eff.effect_name}`, { fontSize: '13px', color: effColor, fontStyle: 'bold' }).setOrigin(0, 0.5));
-            this.modalGroup.add(this.add.text(CX - (W - 80)/2 + 32, ey + 8, `Lasts: ${eff.duration} turns`, { fontSize: '11px', color: THEME.TEXT_PRIMARY }).setOrigin(0, 0.5));
+            this.modalGroup.add(this.add.text(CX - (W - 80) / 2 + 15, ey - 8, `${iconStr} ${eff.effect_name}`, { fontSize: '13px', color: effColor, fontStyle: 'bold' }).setOrigin(0, 0.5));
+            this.modalGroup.add(this.add.text(CX - (W - 80) / 2 + 32, ey + 8, `Lasts: ${eff.duration} turns`, { fontSize: '11px', color: THEME.TEXT_PRIMARY }).setOrigin(0, 0.5));
 
             ey += 50;
         });
-        
+
         // OK Button at bottom
-        const okBtn = this.add.rectangle(CX, CY + modalH/2 - 25, 100, 30, 0x1e293b).setStrokeStyle(1, 0x3b82f6).setInteractive({ useHandCursor: true });
+        const okBtn = this.add.rectangle(CX, CY + modalH / 2 - 25, 100, 30, 0x1e293b).setStrokeStyle(1, 0x3b82f6).setInteractive({ useHandCursor: true });
         okBtn.on('pointerdown', () => this.modalGroup.clear(true, true));
         this.modalGroup.addMultiple([
             okBtn,
-            this.add.text(CX, CY + modalH/2 - 25, 'OK', { fontSize: '14px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold' }).setOrigin(0.5)
+            this.add.text(CX, CY + modalH / 2 - 25, 'OK', { fontSize: '14px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold' }).setOrigin(0.5)
         ]);
     }
 
@@ -773,7 +773,7 @@ export default class CharacterDetailScene extends Phaser.Scene {
 
         if (this.modalGroup.getChildren().length > 0) this.modalGroup.clear(true, true);
         const W = this.cameras.main.width, H = this.cameras.main.height, CX = W / 2, CY = H / 2;
-        
+
         const overlay = this.add.rectangle(0, 0, W, H, 0x000000, 0.85).setOrigin(0).setInteractive();
         this.modalGroup.add(overlay);
 
@@ -913,7 +913,7 @@ export default class CharacterDetailScene extends Phaser.Scene {
             this.modalGroup.add(cardBg);
 
             const isEquipped = (
-                item.inv_id === this.partyState.preset.char_slot_2_inv_id || 
+                item.inv_id === this.partyState.preset.char_slot_2_inv_id ||
                 item.inv_id === this.partyState.preset.char_slot_3_inv_id ||
                 item.inv_id === this.partyState.preset.char_slot_4_inv_id
             );
@@ -930,7 +930,7 @@ export default class CharacterDetailScene extends Phaser.Scene {
             const pSize = boxW - 8;
             const artBg = this.add.graphics();
             artBg.fillStyle(THEME.BG, 1);
-            
+
             const sqKey = `char_sq_${item.mc_id}`;
             if (this.textures.exists(sqKey)) {
                 const portrait = this.add.image(ix, yTop + 4 + pSize / 2, sqKey).setDisplaySize(pSize, pSize);
@@ -950,7 +950,7 @@ export default class CharacterDetailScene extends Phaser.Scene {
             border.lineStyle(1, color);
             border.strokeRoundedRect(ix - pSize / 2, yTop + 4, pSize, pSize, 4);
             this.modalGroup.add(border);
-            
+
             // EQUIPPED Indicator (top left)
             if (isEquipped) {
                 const eX = ix - pSize / 2 + 8;
@@ -1002,7 +1002,7 @@ export default class CharacterDetailScene extends Phaser.Scene {
             } else {
                 const itemAtk = item.mc_base_atk + (item.mc_atk_growth * ((item.item_level || 1) - 1));
                 const itemHp = item.mc_base_hp + (item.mc_hp_growth * ((item.item_level || 1) - 1));
-                
+
                 this.modalGroup.add(this.add.text(ix, stat1Y, `ATK: ${itemAtk}`, { fontSize: '10px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold' }).setOrigin(0.5));
                 this.modalGroup.add(this.add.text(ix, stat2Y, `HP:  ${itemHp}`, { fontSize: '10px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold' }).setOrigin(0.5));
             }
@@ -1016,7 +1016,7 @@ export default class CharacterDetailScene extends Phaser.Scene {
             prevBtn.setInteractive({ useHandCursor: true });
             prevBtn.on('pointerdown', () => this.showCharacterSelectionModal(page - 1, sortBy, displayMode));
         }
-        
+
         const nextActive = page < totalPages;
         const nextBtn = this.add.rectangle(CX + 80, pageY, 60, 25, nextActive ? 0x1e293b : 0x0f172a).setStrokeStyle(1, THEME.BORDER);
         const nextTxt = this.add.text(CX + 80, pageY, 'NEXT >', { fontSize: '10px', fontStyle: 'bold', color: nextActive ? '#ffffff' : THEME.TEXT_MUTED }).setOrigin(0.5);
@@ -1033,7 +1033,7 @@ export default class CharacterDetailScene extends Phaser.Scene {
         const W = this.cameras.main.width, H = this.cameras.main.height, CX = W / 2;
         const loadOverlay = this.add.rectangle(0, 0, W, H, 0x000000, 0.8).setOrigin(0).setInteractive().setDepth(2000);
         const loadTxt = this.add.text(CX, H / 2, 'Saving Preset...', { fontSize: '16px', fontStyle: 'bold', color: '#fff' }).setOrigin(0.5).setDepth(2000);
-        
+
         const preset = this.partyState.preset;
         const targetSlot = this.partyState.partySlotId;
         const oldInvId = preset[targetSlot];
@@ -1096,10 +1096,10 @@ export default class CharacterDetailScene extends Phaser.Scene {
             weap_grid_5_inv_id: preset.weap_grid_5_inv_id,
             mc_skills: mc_skills
         };
-        
+
         const res = await PartyApi.savePreset(this.playerId, this.partyState.currentSlot, payload);
         if (res.status === 'success') {
-            const targetData = { 
+            const targetData = {
                 partyState: this.partyState,
                 characterChanged: {
                     newInvId: newInvId,

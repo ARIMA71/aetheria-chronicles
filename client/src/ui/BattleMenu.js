@@ -203,26 +203,68 @@ export default class BattleMenu extends Phaser.GameObjects.Container {
             });
         } else {
             const py = -95;
-            const enemy = this.scene.enemy;
+            const enemies = (this.scene && this.scene.enemies && this.scene.enemies.length > 0) ? this.scene.enemies : [];
+            if (enemies.length === 0) {
+                const noEnemyTxt = this.scene.add.text(0, py, "No enemy data available", { fontSize: "11px", color: "#8899aa", fontStyle: "italic" }).setOrigin(0.5);
+                this._menuContentContainer.add(noEnemyTxt);
+                return;
+            }
+
+            if (this._enemyIdx === undefined || this._enemyIdx >= enemies.length) {
+                this._enemyIdx = (this.scene.selectedTargetIndex >= 0 && this.scene.selectedTargetIndex < enemies.length)
+                    ? this.scene.selectedTargetIndex
+                    : 0;
+            }
+
+            const enemy = enemies[this._enemyIdx] || enemies[0];
             const elemColor = this.getElemColor(enemy.element);
 
+            // Left side Enemy Card
             const card = this.scene.add.rectangle(-118, py, 76, 114, 0x1c0a0a).setStrokeStyle(1.5, elemColor);
-            const nameTxt = this.scene.add.text(-118, py - 44, "BOSS", { fontSize: "9px", color: "#ff8a80", fontStyle: "bold" }).setOrigin(0.5);
-            let bossNameStr = enemy.charName;
+            const tagLabel = enemy.isBoss ? "BOSS" : `ENEMY ${this._enemyIdx + 1}/${enemies.length}`;
+            const nameTxt = this.scene.add.text(-118, py - 44, tagLabel, { fontSize: "8px", color: "#ff8a80", fontStyle: "bold" }).setOrigin(0.5);
+            let bossNameStr = enemy.charName || "Enemy";
             if (bossNameStr.length > 11) bossNameStr = bossNameStr.substring(0, 9) + "..";
             const bossNameTxt = this.scene.add.text(-118, py - 28, bossNameStr, { fontSize: "8px", color: "#e0e0ff", fontStyle: "bold" }).setOrigin(0.5);
-            const lvlTxt = this.scene.add.text(-118, py - 12, `Lv.${enemy.level}`, { fontSize: "8px", color: "#8899aa" }).setOrigin(0.5);
-            const elemTxt = this.scene.add.text(-118, py + 12, enemy.element.toUpperCase(), { fontSize: "7px", color: "#fff", backgroundColor: "#0a0a1a", padding: { x: 3, y: 1 } }).setOrigin(0.5);
+            const lvlTxt = this.scene.add.text(-118, py - 12, `Lv.${enemy.level || 1}`, { fontSize: "8px", color: "#8899aa" }).setOrigin(0.5);
+            const elemTxt = this.scene.add.text(-118, py + 12, (enemy.element || 'NONE').toUpperCase(), { fontSize: "7px", color: "#fff", backgroundColor: "#0a0a1a", padding: { x: 3, y: 1 } }).setOrigin(0.5);
 
             this._menuContentContainer.add([card, nameTxt, bossNameTxt, lvlTxt, elemTxt]);
 
+            // Top Right HP & CA Info
             const hpInfoBg = this.scene.add.rectangle(42, py - 38, 206, 34, 0x0d1420).setStrokeStyle(1, 0x1f2d44);
-            const maxHpStr = enemy.maxHp.toLocaleString();
-            const hpInfoTxt = this.scene.add.text(-50, py - 38, `MAX HP: ${maxHpStr}`, { fontSize: "9px", color: "#ff8a80", fontStyle: "bold" }).setOrigin(0, 0.5);
-            const caMaxTxt = this.scene.add.text(138, py - 38, `CA Bar: ${enemy.caMax}`, { fontSize: "9px", color: "#ffaa00" }).setOrigin(1, 0.5);
+            const curHp = Math.max(0, Math.ceil(enemy.hp || 0));
+            const maxHp = enemy.maxHp || 1;
+            const hpInfoTxt = this.scene.add.text(-55, py - 38, `HP: ${curHp.toLocaleString()}/${maxHp.toLocaleString()}`, { fontSize: "8px", color: "#ff8a80", fontStyle: "bold" }).setOrigin(0, 0.5);
+            const caMaxTxt = this.scene.add.text(138, py - 38, `CA: ${enemy.caBar || 0}/${enemy.caMax || 3}`, { fontSize: "8px", color: "#ffaa00" }).setOrigin(1, 0.5);
 
             this._menuContentContainer.add([hpInfoBg, hpInfoTxt, caMaxTxt]);
 
+            // Enemy Carousel Switcher (rendered ONLY if enemies.length > 1)
+            if (enemies.length > 1) {
+                const prevEnemyBtn = this.scene.add.text(-150, py - 44, "◀", { fontSize: "11px", color: "#ff8a80", fontStyle: "bold" }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+                const nextEnemyBtn = this.scene.add.text(-86, py - 44, "▶", { fontSize: "11px", color: "#ff8a80", fontStyle: "bold" }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+                prevEnemyBtn.on('pointerover', () => prevEnemyBtn.setColor('#ffffff'));
+                prevEnemyBtn.on('pointerout', () => prevEnemyBtn.setColor('#ff8a80'));
+                prevEnemyBtn.on('pointerdown', () => {
+                    this._enemyIdx = (this._enemyIdx - 1 + enemies.length) % enemies.length;
+                    this._enemyCarouselIdx = 0;
+                    this.renderMenuTabContent();
+                });
+
+                nextEnemyBtn.on('pointerover', () => nextEnemyBtn.setColor('#ffffff'));
+                nextEnemyBtn.on('pointerout', () => nextEnemyBtn.setColor('#ff8a80'));
+                nextEnemyBtn.on('pointerdown', () => {
+                    this._enemyIdx = (this._enemyIdx + 1) % enemies.length;
+                    this._enemyCarouselIdx = 0;
+                    this.renderMenuTabContent();
+                });
+
+                this._menuContentContainer.add([prevEnemyBtn, nextEnemyBtn]);
+            }
+
+            // Bottom Right Skill Info Box
             const skillBox = this.scene.add.rectangle(42, py + 18, 206, 78, 0x0d1420).setStrokeStyle(1, 0x1f2d44);
             this._menuContentContainer.add(skillBox);
 
@@ -260,7 +302,7 @@ export default class BattleMenu extends Phaser.GameObjects.Container {
 
                 if (descStr.length > 55) descStr = descStr.substring(0, 52) + "...";
 
-                const skillDescTxt = this.scene.add.text(42, py + 22, descStr, { fontSize: "8px", color: "#e0e0ff", align: "center", wordWrap: { width: 150 } }).setOrigin(0.5);
+                const skillDescTxt = this.scene.add.text(42, py + 22, descStr, { fontSize: "8px", color: "#e0e0ff", align: "center", wordWrap: { width: 180 } }).setOrigin(0.5);
                 this._menuContentContainer.add([skillNameTxt, skillMetaTxt, skillDescTxt]);
 
                 if (enemySkills.length > 1) {

@@ -340,10 +340,10 @@ export default class InventoryScene extends Phaser.Scene {
             } else {
                 const artH = isWeapon ? boxH * 0.45 : boxW - 8;
                 const yTop = iy - boxH / 2;
-                
+
                 const artBg = this.add.graphics();
                 artBg.fillStyle(THEME.BG, 1);
-                
+
                 if (isWeapon) {
                     artBg.lineStyle(1, color);
                     artBg.fillRoundedRect(ix - boxW / 2 + 4, yTop + 4, boxW - 8, artH, 6);

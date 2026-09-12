@@ -562,7 +562,7 @@ export default class GachaScene extends Phaser.Scene {
             this.sound.play('sfx_newCharacterUnlocked', { volume: 0.8 });
         }
         this.newCharName.setText(nextChar.character_name || nextChar.name);
-        
+
         // Dynamically load the character splash image
         if (nextChar.character_splash_path) {
             const textureKey = `splash_${nextChar.name}`;

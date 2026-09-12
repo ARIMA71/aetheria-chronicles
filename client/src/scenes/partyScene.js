@@ -898,7 +898,7 @@ export default class PartyScene extends Phaser.Scene {
         if (!preset.mc_skills) preset.mc_skills = [null, null, null, null];
 
         const currentSlotSkillId = preset.mc_skills[slotIndex] ? preset.mc_skills[slotIndex].ms_id : null;
-        
+
         // Exclude the skill currently equipped in THIS slot
         const availableSkills = this.mcSkills.filter(s => s.ms_id !== currentSlotSkillId);
 
@@ -999,7 +999,7 @@ export default class PartyScene extends Phaser.Scene {
 
         // Pagination Controls
         const pageY = panelBottom - 30;
-        
+
         const prevBg = this.add.rectangle(CX - 80, pageY, 80, 30, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
         this.listGroup.add(prevBg);
         this.listGroup.add(this.add.text(CX - 80, pageY, '< PREV', { fontSize: '12px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5));

@@ -361,37 +361,37 @@ export default class MainMenuScene extends Phaser.Scene {
 
     _showGuestReminderModal() {
         sessionStorage.setItem('guest_reminder_shown', 'true');
-        
+
         const rContainer = this.add.container(0, 0).setDepth(9000);
-        
+
         const sysW = this.scale.width;
         const sysH = this.scale.height;
-        const rBackdrop = this.add.rectangle(sysW/2, sysH/2, sysW, sysH, 0x000000, 0.8).setInteractive();
-        
-        const rPanel = this.add.rectangle(CX, H/2, 320, 180, 0x0B1120).setInteractive();
+        const rBackdrop = this.add.rectangle(sysW / 2, sysH / 2, sysW, sysH, 0x000000, 0.8).setInteractive();
+
+        const rPanel = this.add.rectangle(CX, H / 2, 320, 180, 0x0B1120).setInteractive();
         rPanel.setStrokeStyle(2, 0xfacc15);
 
-        const rTitle = this.add.text(CX, H/2 - 50, '⚠️ PERINGATAN KEAMANAN', {
+        const rTitle = this.add.text(CX, H / 2 - 50, '⚠️ PERINGATAN KEAMANAN', {
             fontSize: '14px', fontStyle: 'bold', fontFamily: 'Outfit', color: '#facc15'
         }).setOrigin(0.5);
 
-        const rText = this.add.text(CX, H/2 - 10, 'Anda masih bermain menggunakan Akun Guest.\nBind akun dengan password sekarang agar data Anda tidak hilang terhapus sistem!', {
+        const rText = this.add.text(CX, H / 2 - 10, 'Anda masih bermain menggunakan Akun Guest.\nBind akun dengan password sekarang agar data Anda tidak hilang terhapus sistem!', {
             fontSize: '12px', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY, align: 'center', wordWrap: { width: 280 }
         }).setOrigin(0.5);
 
         // Nanti Saja Btn
-        const btnLater = this.add.rectangle(CX - 75, H/2 + 50, 120, 32, THEME.PANEL).setInteractive({useHandCursor:true}).setStrokeStyle(1, THEME.BORDER);
-        const txtLater = this.add.text(CX - 75, H/2 + 50, 'Nanti Saja', { fontSize: '12px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_SECONDARY }).setOrigin(0.5);
+        const btnLater = this.add.rectangle(CX - 75, H / 2 + 50, 120, 32, THEME.PANEL).setInteractive({ useHandCursor: true }).setStrokeStyle(1, THEME.BORDER);
+        const txtLater = this.add.text(CX - 75, H / 2 + 50, 'Nanti Saja', { fontSize: '12px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_SECONDARY }).setOrigin(0.5);
         btnLater.on('pointerdown', () => {
             rContainer.destroy();
         });
 
         // Bind Sekarang Btn
-        const btnBind = this.add.rectangle(CX + 75, H/2 + 50, 120, 32, 0xca8a04).setInteractive({useHandCursor:true}).setStrokeStyle(1, 0xfacc15);
-        const txtBind = this.add.text(CX + 75, H/2 + 50, 'Bind Sekarang', { fontSize: '12px', fontStyle: 'bold', fontFamily: 'Outfit', color: '#ffffff' }).setOrigin(0.5);
+        const btnBind = this.add.rectangle(CX + 75, H / 2 + 50, 120, 32, 0xca8a04).setInteractive({ useHandCursor: true }).setStrokeStyle(1, 0xfacc15);
+        const txtBind = this.add.text(CX + 75, H / 2 + 50, 'Bind Sekarang', { fontSize: '12px', fontStyle: 'bold', fontFamily: 'Outfit', color: '#ffffff' }).setOrigin(0.5);
         btnBind.on('pointerdown', () => {
             rContainer.destroy();
-            if(this.topMenu) this.topMenu._showBindAccountForm(false);
+            if (this.topMenu) this.topMenu._showBindAccountForm(false);
         });
 
         rContainer.add([rBackdrop, rPanel, rTitle, rText, btnLater, txtLater, btnBind, txtBind]);

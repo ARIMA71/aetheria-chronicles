@@ -35,12 +35,6 @@ if (typeof window !== 'undefined' && Phaser && Phaser.Sound) {
             if (typeof soundKey === 'string' && soundKey.startsWith('sfx_')) {
                 const isSfxOn = localStorage.getItem('sfx_on') !== 'false';
                 if (!isSfxOn) return false;
-
-                const now = performance.now();
-                if (lastSFXTimeMap[soundKey] && (now - lastSFXTimeMap[soundKey] < 80)) {
-                    return false;
-                }
-                lastSFXTimeMap[soundKey] = now;
             }
             return originalSoundPlay.call(this, marker, config);
         };

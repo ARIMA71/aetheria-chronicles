@@ -18,6 +18,42 @@ function formatStatusEffect(row, prefix = '') {
     };
 }
 
+function formatMonsterIconPath(iconPath) {
+    if (!iconPath) return null;
+    let clean = iconPath.trim();
+    if (clean.endsWith('.png')) {
+        return clean;
+    }
+    return clean + '.png';
+}
+
+function formatMonsterSpritePath(spritePath, monId, element) {
+    if (!spritePath) return null;
+    let clean = spritePath.trim();
+    
+    // Strip existing extension .png if present
+    if (clean.endsWith('.png')) {
+        clean = clean.slice(0, -4);
+    }
+    
+    // Strip existing element suffix if already present at the end (e.g. -fire, -wind, -earth)
+    const elements = ['fire', 'wind', 'earth', 'water', 'dark', 'light'];
+    for (const el of elements) {
+        if (clean.toLowerCase().endsWith(`-${el}`)) {
+            clean = clean.slice(0, -(el.length + 1));
+            break;
+        }
+    }
+
+    // Monster ID 12 (Slime) or multi-element
+    const isMultiElement = Number(monId) === 12;
+    if (isMultiElement && element && element.toLowerCase() !== 'none' && element.toLowerCase() !== 'any') {
+        return `${clean}-${element.toLowerCase()}.png`;
+    }
+    
+    return `${clean}.png`;
+}
+
 class BattleService {
     async initializeBattle(playerId, questId, presetSlot) {
         // [Query Logic extracted from BattleController]
@@ -313,20 +349,9 @@ class BattleService {
                 // Override element if provided
                 const element = row.override_element || row.mon_element;
                 
-                // Suffix Element for Monster Sprite (e.g. -fire, -wind, -earth)
-                let monsterSprite = row.mon_sprite_path;
-                if (monsterSprite) {
-                    if (element && element.toLowerCase() !== 'none' && element.toLowerCase() !== 'any') {
-                        const elSuffix = element.toLowerCase();
-                        if (monsterSprite.endsWith('.png')) {
-                            monsterSprite = monsterSprite.replace('.png', `-${elSuffix}.png`);
-                        } else {
-                            monsterSprite = monsterSprite + `-${elSuffix}.png`;
-                        }
-                    } else if (!monsterSprite.endsWith('.png')) {
-                        monsterSprite += '.png';
-                    }
-                }
+                // Suffix Element for Monster Sprite (e.g. -fire, -wind, -earth for ID 12 / Slime)
+                const monsterSprite = formatMonsterSpritePath(row.mon_sprite_path, row.mon_id, element);
+                const monsterIcon = formatMonsterIconPath(row.mon_icon_path);
 
                 monsterMap[row.mon_id] = {
                     id: row.mon_id, name: row.mon_name, element: element, level: row.monster_level || 1,
@@ -341,7 +366,7 @@ class BattleService {
                     mode_state: 'normal',
                     mode_bar: 0,
                     active_buffs: [],
-                    caMax: Number(row.mon_max_ca) || 5, icon_path: row.mon_icon_path, sprite_path: monsterSprite,
+                    caMax: Number(row.mon_max_ca) || 5, icon_path: monsterIcon, sprite_path: monsterSprite,
                     ai_behaviors: []
                 };
             }
@@ -602,7 +627,7 @@ class BattleService {
                 const monIds = state.enemies.map(e => e.id || e.monster_id).filter(Boolean);
                 if (monIds.length > 0) {
                     const [monMaster] = await db.query(
-                        'SELECT mon_id, mon_sprite_path, mon_element FROM master_monsters WHERE mon_id IN (?)',
+                        'SELECT mon_id, mon_sprite_path, mon_icon_path, mon_element FROM master_monsters WHERE mon_id IN (?)',
                         [monIds]
                     );
                     const monMap = new Map();
@@ -613,20 +638,8 @@ class BattleService {
                         const master = monMap.get(monId);
                         if (master) {
                             const element = e.element || master.mon_element;
-                            let mSprite = master.mon_sprite_path;
-                            if (mSprite) {
-                                if (element && element.toLowerCase() !== 'none' && element.toLowerCase() !== 'any') {
-                                    const elSuffix = element.toLowerCase();
-                                    if (mSprite.endsWith('.png')) {
-                                        mSprite = mSprite.replace('.png', `-${elSuffix}.png`);
-                                    } else {
-                                        mSprite = mSprite + `-${elSuffix}.png`;
-                                    }
-                                } else if (!mSprite.endsWith('.png')) {
-                                    mSprite += '.png';
-                                }
-                            }
-                            e.sprite_path = mSprite;
+                            e.sprite_path = formatMonsterSpritePath(master.mon_sprite_path, monId, element);
+                            e.icon_path = formatMonsterIconPath(master.mon_icon_path);
                         }
                     });
                 }
@@ -779,7 +792,7 @@ class BattleService {
                 } else if (action_type === 'special_attack') {
                     if ((character.current_sa || 0) < 100) continue; 
                     character.current_sa = 0; // Consume SA
-                    state.aether_gauge = Math.min(100, (state.aether_gauge || 0) + 20); // +20% Aether
+                    state.aether_gauge = Math.min(100, (state.aether_gauge || 0) + 10); // +10% Aether per SA cast
                     skillObj = (character.skills || []).find(s => (s.category || '').toLowerCase() === 'special') || {
                         name: 'Special Attack', type: 'Damage', target_type: 'Single_Enemy', modifier: 3.5, element: character.element, status_effects: []
                     };

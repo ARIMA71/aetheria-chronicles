@@ -103,7 +103,7 @@ export default class WeaponDetailScene extends Phaser.Scene {
         backBtn.setStrokeStyle(1, THEME.BORDER);
         backBtn.setInteractive({ useHandCursor: true });
         const homeTxt = this.add.text(40, 30, 'HOME', { fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5).setScrollFactor(0).setDepth(1000);
-        
+
         backBtn.on('pointerover', () => { backBtn.setFillStyle(0x334155); homeTxt.setColor('#ffffff'); });
         backBtn.on('pointerout', () => { backBtn.setFillStyle(THEME.PANEL); homeTxt.setColor(THEME.TEXT_PRIMARY); });
         backBtn.on('pointerdown', () => this.scene.start('LoadingScene', { targetScene: 'MainMenuScene' }));
@@ -113,7 +113,7 @@ export default class WeaponDetailScene extends Phaser.Scene {
 
         // PORTRAIT PLACEHOLDER
         const portraitH = 160;
-        const portraitBox = this.add.rectangle(CX, cy + portraitH/2, bannerW, portraitH, 0x0a0f1d, 0.5).setStrokeStyle(1, THEME.BORDER);
+        const portraitBox = this.add.rectangle(CX, cy + portraitH / 2, bannerW, portraitH, 0x0a0f1d, 0.5).setStrokeStyle(1, THEME.BORDER);
         this.scrollGroup.add(portraitBox);
 
         // Rarity at top right of portrait container
@@ -123,7 +123,7 @@ export default class WeaponDetailScene extends Phaser.Scene {
         else if (rarity === 'SR') rarityColor = '#3b82f6'; // Biru
         else if (rarity === 'R') rarityColor = '#10b981'; // Hijau
 
-        this.scrollGroup.add(this.add.text(CX + bannerW/2 - 10, cy + 15, rarity, { fontSize: '16px', color: rarityColor, fontStyle: 'bold', stroke: '#000', strokeThickness: 2 }).setOrigin(1, 0.5));
+        this.scrollGroup.add(this.add.text(CX + bannerW / 2 - 10, cy + 15, rarity, { fontSize: '16px', color: rarityColor, fontStyle: 'bold', stroke: '#000', strokeThickness: 2 }).setOrigin(1, 0.5));
 
         cy += portraitH;
 
@@ -173,7 +173,7 @@ export default class WeaponDetailScene extends Phaser.Scene {
 
         let expPct = weap.item_level >= maxLevel ? 1 : 0.5; // Visual placeholder if max exp logic isn't on client
         if (weap.item_exp !== undefined && expPct !== 1) {
-             expPct = (weap.item_exp % 10000) / 10000;
+            expPct = (weap.item_exp % 10000) / 10000;
         }
         const expFill = this.add.rectangle(barX, barY, barW * expPct, 6, 0x3b82f6).setOrigin(0, 0.5);
         this.scrollGroup.add(expFill);
@@ -189,7 +189,7 @@ export default class WeaponDetailScene extends Phaser.Scene {
         // ACTION BUTTONS
         if (this.fromParty) {
             const btnHalfW = (W - 80) / 2; // Split space with a gap of 20
-            
+
             // Upgrade Btn (Left)
             const upgZone = this.add.zone(CX - 10 - btnHalfW / 2, cy + 20, btnHalfW, 40).setInteractive({ useHandCursor: true });
             const upgBg = this.add.rectangle(CX - 10 - btnHalfW / 2, cy + 20, btnHalfW, 40, THEME.PANEL).setStrokeStyle(1, 0x10b981);
@@ -279,11 +279,11 @@ export default class WeaponDetailScene extends Phaser.Scene {
         }
 
         cy += 20;
-        
+
         // BACK BUTTON AT BOTTOM
-        const backBg = this.add.rectangle(0, cy, W/2, 45, 0x0f172a).setOrigin(0, 0).setStrokeStyle(1, 0x475569);
-        const backTxt = this.add.text(W/2 - 20, cy + 22.5, '◀ BACK', { fontSize: '14px', fontFamily: 'Outfit', color: '#a8a29e', fontStyle: 'bold' }).setOrigin(1, 0.5);
-        const backZone = this.add.zone(0, cy, W/2, 45).setOrigin(0, 0).setInteractive({ useHandCursor: true });
+        const backBg = this.add.rectangle(0, cy, W / 2, 45, 0x0f172a).setOrigin(0, 0).setStrokeStyle(1, 0x475569);
+        const backTxt = this.add.text(W / 2 - 20, cy + 22.5, '◀ BACK', { fontSize: '14px', fontFamily: 'Outfit', color: '#a8a29e', fontStyle: 'bold' }).setOrigin(1, 0.5);
+        const backZone = this.add.zone(0, cy, W / 2, 45).setOrigin(0, 0).setInteractive({ useHandCursor: true });
 
         backZone.on('pointerover', () => { backBg.setFillStyle(0x334155); backTxt.setColor('#ffffff'); });
         backZone.on('pointerout', () => { backBg.setFillStyle(0x0f172a); backTxt.setColor('#a8a29e'); });
@@ -324,7 +324,7 @@ export default class WeaponDetailScene extends Phaser.Scene {
 
         this.modalGroup.add(this.add.text(CX, CY - 130, 'UPGRADE LEVEL', { fontSize: '18px', color: '#10b981', fontStyle: 'bold', letterSpacing: 2 }).setOrigin(0.5));
 
-                // X button removed and replaced with a Cancel button below.
+        // X button removed and replaced with a Cancel button below.
 
         // Fetch latest inventory to get Gold and Materials
         const loadingText = this.add.text(CX, CY, 'Loading data...', { fontSize: '12px', color: THEME.TEXT_MUTED }).setOrigin(0.5);
@@ -587,7 +587,7 @@ export default class WeaponDetailScene extends Phaser.Scene {
 
         if (this.modalGroup.getChildren().length > 0) this.modalGroup.clear(true, true);
         const W = this.cameras.main.width, H = this.cameras.main.height, CX = W / 2, CY = H / 2;
-        
+
         const overlay = this.add.rectangle(0, 0, W, H, 0x000000, 0.85).setOrigin(0).setInteractive();
         this.modalGroup.add(overlay);
 
@@ -670,7 +670,7 @@ export default class WeaponDetailScene extends Phaser.Scene {
         this.modalGroup.addMultiple([dispBtnBg, dispZone, dispTxt]);
 
         let list = this.weaponsData.filter(item => !equipped.includes(item.inv_id));
-        
+
         // Sorting logic
         list.sort((a, b) => {
             const rarityScore = { 'SSR': 3, 'SR': 2, 'R': 1 };
@@ -789,7 +789,7 @@ export default class WeaponDetailScene extends Phaser.Scene {
             } else {
                 const itemAtk = item.mw_base_atk + (item.mw_atk_growth * ((item.item_level || 1) - 1));
                 const itemHp = item.mw_base_hp + (item.mw_hp_growth * ((item.item_level || 1) - 1));
-                
+
                 this.modalGroup.add(this.add.text(ix, iy + 12, `ATK: ${itemAtk}`, { fontSize: '10px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold' }).setOrigin(0.5));
                 this.modalGroup.add(this.add.text(ix, iy + 30, `HP:  ${itemHp}`, { fontSize: '10px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold' }).setOrigin(0.5));
             }
@@ -804,7 +804,7 @@ export default class WeaponDetailScene extends Phaser.Scene {
             prevBtn.setInteractive({ useHandCursor: true });
             prevBtn.on('pointerdown', () => this.showWeaponSelectionModal(page - 1, sortBy, displayMode));
         }
-        
+
         const nextActive = page < totalPages;
         const nextBtn = this.add.rectangle(CX + 80, pageY, 60, 25, nextActive ? 0x1e293b : 0x0f172a).setStrokeStyle(1, THEME.BORDER);
         const nextTxt = this.add.text(CX + 80, pageY, 'NEXT >', { fontSize: '10px', fontStyle: 'bold', color: nextActive ? '#ffffff' : THEME.TEXT_MUTED }).setOrigin(0.5);
@@ -821,7 +821,7 @@ export default class WeaponDetailScene extends Phaser.Scene {
         const W = this.cameras.main.width, H = this.cameras.main.height, CX = W / 2;
         const loadOverlay = this.add.rectangle(0, 0, W, H, 0x000000, 0.8).setOrigin(0).setInteractive().setDepth(2000);
         const loadTxt = this.add.text(CX, H / 2, 'Saving Preset...', { fontSize: '16px', fontStyle: 'bold', color: '#fff' }).setOrigin(0.5).setDepth(2000);
-        
+
         const calcGridStats = (p) => {
             let hp = 0, atk = 0;
             const ids = [p.weap_grid_1_inv_id, p.weap_grid_2_inv_id, p.weap_grid_3_inv_id, p.weap_grid_4_inv_id, p.weap_grid_5_inv_id];
@@ -841,7 +841,7 @@ export default class WeaponDetailScene extends Phaser.Scene {
 
         const preset = this.partyState.preset;
         preset[this.partyState.partySlotId] = newInvId;
-        
+
         const newStats = calcGridStats(preset);
 
         const mc_skills = [];
@@ -863,10 +863,10 @@ export default class WeaponDetailScene extends Phaser.Scene {
             weap_grid_5_inv_id: preset.weap_grid_5_inv_id,
             mc_skills: mc_skills
         };
-        
+
         const res = await PartyApi.savePreset(this.playerId, this.partyState.currentSlot, payload);
         if (res.status === 'success') {
-            const targetData = { 
+            const targetData = {
                 partyState: this.partyState,
                 weaponChanged: {
                     newInvId: newInvId,

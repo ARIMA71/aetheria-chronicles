@@ -78,7 +78,13 @@ export default class Enemy extends Phaser.GameObjects.Container {
         const elemColor = this._getElementColor(this.element);
 
         this._spritePath = data.sprite_path;
-        let texKey = `mons_${data.id || data.monster_id}`;
+        this.iconPath = data.icon_path;
+        const monsId = data.id || data.monster_id;
+        const elemKey = data.element ? data.element.toLowerCase() : 'def';
+        let texKey = `mons_${monsId}_${elemKey}`;
+        if (!scene.textures.exists(texKey)) {
+            texKey = `mons_${monsId}`;
+        }
 
         this._glow = scene.add.rectangle(0, 0, 138, 138, 0xffffff).setAlpha(0); // Glow Background
         if (!this._spritePath || !scene.textures.exists(texKey)) {
@@ -95,7 +101,7 @@ export default class Enemy extends Phaser.GameObjects.Container {
             this.add([shadow, this._glow, this._body, inner, h, v]);
         } else {
             this.battleSprite = scene.add.sprite(0, 0, texKey);
-            const baseScale = this.isBoss ? 1.5 : 0.75;
+            const baseScale = this.isBoss ? 1.2 : 0.75;
             this.battleSprite.setScale(baseScale);
 
             scene.tweens.add({
@@ -106,7 +112,7 @@ export default class Enemy extends Phaser.GameObjects.Container {
                 repeat: -1,
                 ease: 'Sine.easeInOut'
             });
-            // NO black box shadow added for real sprites!
+            // Glow behind real sprite is kept clean (alpha 0), tint applied via updateEnrageVisual
             this.add([this._glow, this.battleSprite]);
         }
     }
@@ -229,18 +235,30 @@ export default class Enemy extends Phaser.GameObjects.Container {
         if (!this.isBoss) {
             if (this._body) this._body.setStrokeStyle(3, this._getElementColor(this.element));
             if (this._glow) this._glow.setAlpha(0);
+            if (this.battleSprite) this.battleSprite.clearTint();
             return;
         }
 
-        const ratio = this.modeBar / this.modeMax;
-
         if (this.modeState === 'enraged') {
-            if (this._body) this._body.setStrokeStyle(3, 0xe74c3c);
-            if (this._glow) this._glow.setFillStyle(0xe74c3c).setAlpha(0.6);
+            if (this.battleSprite) {
+                this.battleSprite.setTint(0xff8888);
+                if (this._glow) this._glow.setAlpha(0);
+            } else if (this._glow) {
+                if (this._body) this._body.setStrokeStyle(3, 0xe74c3c);
+                this._glow.setFillStyle(0xe74c3c).setAlpha(0.6);
+            }
         } else if (this.modeState === 'exhausted') {
-            if (this._body) this._body.setStrokeStyle(3, 0x3498db);
-            if (this._glow) this._glow.setFillStyle(0x3498db).setAlpha(0.6);
+            if (this.battleSprite) {
+                this.battleSprite.setTint(0x77ccff);
+                if (this._glow) this._glow.setAlpha(0);
+            } else if (this._glow) {
+                if (this._body) this._body.setStrokeStyle(3, 0x3498db);
+                this._glow.setFillStyle(0x3498db).setAlpha(0.6);
+            }
         } else {
+            if (this.battleSprite) {
+                this.battleSprite.clearTint();
+            }
             if (this._body) this._body.setStrokeStyle(3, this._getElementColor(this.element));
             if (this._glow) this._glow.setAlpha(0);
         }

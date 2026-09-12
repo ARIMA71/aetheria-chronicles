@@ -76,7 +76,7 @@ export default class VictoryScene extends Phaser.Scene {
             potionsUsed: this.potionsUsed,
             fullPotionsUsed: this.fullPotionsUsed
         };
-        
+
         const raw = localStorage.getItem('aetheria_player');
         const playerData = raw ? JSON.parse(raw) : {};
         this.selectedPresetSlot = playerData.selected_preset_slot || 1;
@@ -86,21 +86,21 @@ export default class VictoryScene extends Phaser.Scene {
             PartyApi.getPresets(this.playerId),
             PartyApi.getInventory(this.playerId)
         ])
-        .then(([res, presetsRes, invRes]) => {
-            this.loadingText.destroy();
-            this.spinCircle.destroy();
+            .then(([res, presetsRes, invRes]) => {
+                this.loadingText.destroy();
+                this.spinCircle.destroy();
 
-            if (res.status === "success") {
-                this.renderVictoryData(res.data, presetsRes.data, invRes.data);
-            } else {
-                this.showError(res.message || "Failed to process battle results.");
-            }
-        })
-        .catch(err => {
-            this.loadingText.destroy();
-            this.spinCircle.destroy();
-            this.showError("Connection Error: " + err.message);
-        });
+                if (res.status === "success") {
+                    this.renderVictoryData(res.data, presetsRes.data, invRes.data);
+                } else {
+                    this.showError(res.message || "Failed to process battle results.");
+                }
+            })
+            .catch(err => {
+                this.loadingText.destroy();
+                this.spinCircle.destroy();
+                this.showError("Connection Error: " + err.message);
+            });
 
         // Setup Drag to Scroll
         let isDragging = false;
@@ -128,7 +128,7 @@ export default class VictoryScene extends Phaser.Scene {
     renderVictoryData(data, presets, inventory) {
         const expData = data.exp_data || {};
         const rewards = data.obtained_rewards || [];
-        
+
         let mcElement = 'Any';
         if (presets && inventory && inventory.weapons) {
             const preset = presets.find(p => p.preset_slot === this.selectedPresetSlot);
@@ -139,7 +139,7 @@ export default class VictoryScene extends Phaser.Scene {
                 }
             }
         }
-        
+
         let cursorY = 160;
 
         // 1. SEGMENT ATAS (PLAYER RANK)
@@ -169,7 +169,7 @@ export default class VictoryScene extends Phaser.Scene {
         const pGained = expData.base_exp || 0;
         const pOldTotal = Math.max(0, pTotal - pGained);
         const isPlayerMax = expData.player_rank >= 100;
-        
+
         this.animateProgressBar(rankBarFill, rankText, rankBarW, pOldTotal, pTotal, pBase, pNext, expData.player_rank, 'Rank', isPlayerMax);
 
         cursorY += 60;
@@ -178,7 +178,7 @@ export default class VictoryScene extends Phaser.Scene {
         this.add.text(CX, cursorY, "PARTY EXPERIENCE", {
             fontSize: "12px", color: THEME.TEXT_SECONDARY, letterSpacing: 2
         }).setOrigin(0.5);
-        
+
         cursorY += 80;
 
         const party = expData.party_exp_details || [];
@@ -189,7 +189,7 @@ export default class VictoryScene extends Phaser.Scene {
         party.forEach((char, i) => {
             const px = startX + i * (cW + gap);
             const cardY = cursorY + 30; // center Y of the portrait card
-            
+
             // Border color by rarity
             let rColorInt = THEME.BORDER;
             let rColorHex = '#ffffff';
@@ -200,7 +200,7 @@ export default class VictoryScene extends Phaser.Scene {
             // Portrait Background (85x145 like battleScene)
             const portBg = this.add.rectangle(px, cardY, 85, 145, THEME.PANEL, 0.7);
             portBg.setStrokeStyle(2, rColorInt);
-            
+
             // Character Portrait Image
             const portTex = `portrait_${char.mc_id}`;
             if (this.textures.exists(portTex)) {
@@ -208,7 +208,7 @@ export default class VictoryScene extends Phaser.Scene {
                 const imgW = img.width || 1;
                 img.setScale(85 / imgW);
             }
-            
+
             // Element Icon (Top Right)
             let elementStr = char.element;
             if (char.mc_id === 1 && mcElement) {
@@ -224,11 +224,11 @@ export default class VictoryScene extends Phaser.Scene {
                 elImg.setMask(elShape.createGeometryMask());
                 this.add.circle(ex, ey, 9).setStrokeStyle(1, THEME.PANEL);
             }
-            
+
             // Rarity Text (Bottom Left)
             if (char.rarity) {
-                this.add.text(px - 42.5 + 6, cardY + 72.5 - 5, char.rarity, { 
-                    fontSize: '11px', color: rColorHex, fontStyle: 'bold', stroke: '#000000', strokeThickness: 2, fontFamily: 'Outfit' 
+                this.add.text(px - 42.5 + 6, cardY + 72.5 - 5, char.rarity, {
+                    fontSize: '11px', color: rColorHex, fontStyle: 'bold', stroke: '#000000', strokeThickness: 2, fontFamily: 'Outfit'
                 }).setOrigin(0, 1);
             }
 
@@ -241,7 +241,7 @@ export default class VictoryScene extends Phaser.Scene {
             // Mini EXP Bar
             const barW = 75;
             const barBg = this.add.rectangle(px, cardY + 100, barW, 6, 0x334155).setOrigin(0.5);
-            const barFill = this.add.rectangle(px - barW/2, cardY + 100, 0, 6, 0x06B6D4).setOrigin(0, 0.5);
+            const barFill = this.add.rectangle(px - barW / 2, cardY + 100, 0, 6, 0x06B6D4).setOrigin(0, 0.5);
 
             // Animate Char Bar
             const cTotal = char.total_exp;
@@ -282,17 +282,17 @@ export default class VictoryScene extends Phaser.Scene {
             rewards.forEach((item, index) => {
                 const row = Math.floor(index / maxCols);
                 const colInRow = index % maxCols;
-                
+
                 // Calculate centering specifically for this row
                 const itemsInThisRow = Math.min(maxCols, rewards.length - row * maxCols);
                 const rowW = (itemsInThisRow * boxSize) + ((itemsInThisRow - 1) * padding);
                 const rowStartX = (W - rowW) / 2 + (boxSize / 2);
-                
+
                 const ix = rowStartX + colInRow * (boxSize + padding);
                 const iy = cursorY + row * (boxSize + padding) + (boxSize / 2);
 
                 const itemBg = this.add.rectangle(ix, iy, boxSize, boxSize, THEME.PANEL, 0.8);
-                
+
                 let borderColor = THEME.BORDER;
                 if (item.reward_type === 'Currency') borderColor = 0xD4A017;
                 else if (item.reward_type === 'Weapon') borderColor = 0x94A3B8;
@@ -307,7 +307,7 @@ export default class VictoryScene extends Phaser.Scene {
                 else if (item.reward_type === 'Character') iconTxt = "👤";
 
                 this.add.text(ix, iy - 14, iconTxt, { fontSize: "24px" }).setOrigin(0.5);
-                
+
                 // Short name
                 const itemName = item.name ? item.name.substring(0, 10) : "";
                 this.add.text(ix, iy + 8, itemName, { fontSize: "9px", color: "#ccc" }).setOrigin(0.5);
@@ -346,15 +346,15 @@ export default class VictoryScene extends Phaser.Scene {
         // Update Camera Bounds dynamically based on total height
         const totalHeight = Math.max(H, cursorY);
         this.cameras.main.setBounds(0, 0, W, totalHeight);
-        
+
         // Setup newly unlocked characters and skills queue
         this.unlockQueue = [];
-        
+
         // Priority 1: Characters
         rewards.filter(r => r.is_new_unlock).forEach(char => {
             this.unlockQueue.push({ type: 'character', data: char });
         });
-        
+
         // Priority 2: Skills
         if (expData && expData.party_exp_details) {
             expData.party_exp_details.forEach(detail => {
@@ -417,7 +417,7 @@ export default class VictoryScene extends Phaser.Scene {
             }).setOrigin(0.5));
         } else if (item.type === 'skill') {
             const skillData = item.data;
-            
+
             // Clean Flat Vector aesthetics
             bg.setSize(300, 220); // Smaller modal for skill
             bg.setStrokeStyle(2, 0x3b82f6); // Blue border for skill unlock
@@ -433,13 +433,13 @@ export default class VictoryScene extends Phaser.Scene {
             modal.add(this.add.text(CX, H / 2 + 20, skillData.skillName, {
                 fontSize: "22px", color: THEME.TEXT_PRIMARY, fontStyle: "bold"
             }).setOrigin(0.5));
-            
+
             // Adjust button position
         }
 
         // OK Button
         const btnY = item.type === 'character' ? (H / 2 + 175) : (H / 2 + 75);
-        const btnBg = this.add.rectangle(CX, btnY, 120, 36, THEME.PANEL).setInteractive({useHandCursor:true});
+        const btnBg = this.add.rectangle(CX, btnY, 120, 36, THEME.PANEL).setInteractive({ useHandCursor: true });
         btnBg.setStrokeStyle(1, THEME.BORDER);
         modal.add(btnBg);
 
@@ -505,7 +505,7 @@ export default class VictoryScene extends Phaser.Scene {
                     if (this.sound.get('sfx_levelUp') || this.cache.audio.exists('sfx_levelUp')) {
                         this.sound.play('sfx_levelUp', { volume: 0.8 });
                     }
-                    
+
                     this.tweens.add({
                         targets: textObj,
                         scaleX: 1.2, scaleY: 1.2,
@@ -558,7 +558,7 @@ export default class VictoryScene extends Phaser.Scene {
             } else {
                 const oldRatio = Math.min(1, Math.max(0, (oldExp - baseExp) / (nextExp - baseExp)));
                 const newRatio = Math.min(1, Math.max(0, (newExp - baseExp) / (nextExp - baseExp)));
-                
+
                 fillRect.width = fullWidth * oldRatio;
                 this.tweens.add({
                     targets: fillRect,
