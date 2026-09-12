@@ -24,7 +24,7 @@ exports.getPartyPresets = async (req, res) => {
         // Inisialisasi Pemain Baru: Generate 1 Preset di Slot 1 jika kosong
         if (presets.length === 0) {
             const [mcRows] = await conn.query("SELECT inv_id FROM player_inventories WHERE player_id = ? AND master_item_id = 1 AND item_type = 'Character' LIMIT 1", [playerId]);
-            const [weapRows] = await conn.query("SELECT inv_id FROM player_inventories WHERE player_id = ? AND item_type = 'Weapon' LIMIT 1", [playerId]);
+            const [weapRows] = await conn.query("SELECT inv_id FROM player_inventories WHERE player_id = ? AND item_type = 'Weapon' ORDER BY (master_item_id = 7) DESC, inv_id ASC LIMIT 1", [playerId]);
 
             if (mcRows.length > 0 && weapRows.length > 0) {
                 const mcInvId = mcRows[0].inv_id;
@@ -296,12 +296,12 @@ exports.savePartyPreset = async (req, res) => {
         const invIds = [
             char_slot_1_inv_id, char_slot_2_inv_id, char_slot_3_inv_id,
             weap_grid_1_inv_id, weap_grid_2_inv_id, weap_grid_3_inv_id, weap_grid_4_inv_id, weap_grid_5_inv_id
-        ].filter(id => id != null);
+        ].filter(id => id != null && !isNaN(Number(id))).map(id => Number(id));
 
         if (invIds.length > 0) {
             const [owned] = await conn.query(`SELECT inv_id FROM player_inventories WHERE player_id = ? AND inv_id IN (?)`, [playerId, invIds]);
-            const ownedIds = owned.map(o => o.inv_id);
-            const unowned = invIds.filter(id => !ownedIds.includes(Number(id)));
+            const ownedSet = new Set(owned.map(o => Number(o.inv_id)));
+            const unowned = invIds.filter(id => !ownedSet.has(Number(id)));
 
             if (unowned.length > 0) {
                 await conn.rollback();

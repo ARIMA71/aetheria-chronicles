@@ -78,11 +78,16 @@ export default class PartyScene extends Phaser.Scene {
         const mcChar = this.characters.find(c => c.mc_id === 1);
         const actualMcInvId = mcChar ? mcChar.inv_id : null;
 
+        const agrisWeap = (this.weapons || []).find(w => w.mw_id === 7 || w.master_item_id === 7);
+        const defaultWeapInvId = agrisWeap ? agrisWeap.inv_id : ((this.weapons && this.weapons.length > 0) ? this.weapons[0].inv_id : null);
+        const defaultSkills = (this.mcSkills && this.mcSkills.length > 0) ? this.mcSkills.slice(0, 4).map((s, idx) => ({ slot_number: idx + 1, ms_id: s.ms_id })) : [];
+
         for (let i = 1; i <= 5; i++) {
             const existing = this.presets.find(p => p.preset_slot === i);
             if (existing) {
                 const presetCopy = JSON.parse(JSON.stringify(existing));
                 if (actualMcInvId) presetCopy.main_char_inv_id = actualMcInvId;
+                if (!presetCopy.weap_grid_1_inv_id) presetCopy.weap_grid_1_inv_id = defaultWeapInvId;
                 this.localPresets.push(presetCopy);
             } else {
                 this.localPresets.push({
@@ -91,12 +96,12 @@ export default class PartyScene extends Phaser.Scene {
                     char_slot_1_inv_id: null,
                     char_slot_2_inv_id: null,
                     char_slot_3_inv_id: null,
-                    weap_grid_1_inv_id: null,
+                    weap_grid_1_inv_id: defaultWeapInvId,
                     weap_grid_2_inv_id: null,
                     weap_grid_3_inv_id: null,
                     weap_grid_4_inv_id: null,
                     weap_grid_5_inv_id: null,
-                    mc_skills: []
+                    mc_skills: [...defaultSkills]
                 });
             }
         }

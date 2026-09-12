@@ -3,6 +3,7 @@ import { THEME } from '../main.js';
 import { checkSession, getPlayerUsername } from '../utils/auth.js';
 import BattleApi from '../services/BattleApi.js';
 import PartyApi from '../services/PartyApi.js';
+import { playGlobalBGM } from '../utils/audioManager.js';
 
 const W = 480, H = 800, CX = 240, CY = 400;
 
@@ -22,26 +23,27 @@ export default class VictoryScene extends Phaser.Scene {
     create() {
         if (!checkSession(this)) return;
 
-        // Reset camera bounds just in case
+        // Reset camera bounds and position (Full static view)
         this.cameras.main.setBounds(0, 0, W, H);
         this.cameras.main.setScroll(0, 0);
 
-        // Victory BGM is already playing from BattleScene via playGlobalBGM('bgm_victory')
+        // Victory BGM looping continuously
+        playGlobalBGM(this, 'bgm_victory');
 
         // Solid background since we transition completely from BattleScene
         const sysW = this.scale.width;
         const sysH = this.scale.height;
-        this.add.rectangle(sysW / 2, sysH / 2, sysW, 4000, THEME.BG, 1.0).setInteractive();
+        this.add.rectangle(sysW / 2, sysH / 2, sysW, sysH, THEME.BG, 1.0).setInteractive();
 
         // Title text
-        this.add.text(CX, 60, "QUEST CLEARED", {
-            fontSize: "26px",
+        this.add.text(CX, 50, "QUEST CLEARED", {
+            fontSize: "24px",
             color: "#D4A017",
             fontStyle: "bold",
             fontFamily: "Outfit, Inter, sans-serif"
         }).setOrigin(0.5);
 
-        this.add.text(CX, 90, "★ VICTORY ★", {
+        this.add.text(CX, 78, "★ VICTORY ★", {
             fontSize: "12px",
             color: "#D4A017",
             fontStyle: "bold",
@@ -50,7 +52,7 @@ export default class VictoryScene extends Phaser.Scene {
 
         const divider = this.add.graphics();
         divider.lineStyle(1, THEME.BORDER, 1);
-        divider.lineBetween(CX - 150, 115, CX + 150, 115);
+        divider.lineBetween(CX - 150, 98, CX + 150, 98);
 
         // Loading message
         this.loadingText = this.add.text(CX, 200, "Menghitung hasil...", {
@@ -101,28 +103,6 @@ export default class VictoryScene extends Phaser.Scene {
                 this.spinCircle.destroy();
                 this.showError("Connection Error: " + err.message);
             });
-
-        // Setup Drag to Scroll
-        let isDragging = false;
-        let startY = 0;
-        let startCamY = 0;
-
-        this.input.on('pointerdown', (pointer) => {
-            isDragging = true;
-            startY = pointer.y;
-            startCamY = this.cameras.main.scrollY;
-        });
-
-        this.input.on('pointermove', (pointer) => {
-            if (isDragging) {
-                const dy = pointer.y - startY;
-                this.cameras.main.scrollY = startCamY - dy;
-            }
-        });
-
-        this.input.on('pointerup', () => {
-            isDragging = false;
-        });
     }
 
     renderVictoryData(data, presets, inventory) {
@@ -140,27 +120,26 @@ export default class VictoryScene extends Phaser.Scene {
             }
         }
 
-        let cursorY = 160;
-
         // 1. SEGMENT ATAS (PLAYER RANK)
+        let cursorY = 120;
         const username = getPlayerUsername();
 
         // Username (Left)
         this.add.text(35, cursorY, username, {
-            fontSize: "14px", color: "#ffffff", fontStyle: "bold"
+            fontSize: "13px", color: "#ffffff", fontStyle: "bold"
         }).setOrigin(0, 0.5);
 
         // Rank (Right)
         const rankText = this.add.text(W - 35, cursorY, `Rank ${expData.player_rank}`, {
-            fontSize: "14px", color: "#D4A017", fontStyle: "bold"
+            fontSize: "13px", color: "#D4A017", fontStyle: "bold"
         }).setOrigin(1, 0.5);
 
-        cursorY += 25;
+        cursorY += 20;
 
         // Player Rank Progress Bar (Wide)
         const rankBarW = W - 70;
-        const rankBarBg = this.add.rectangle(35, cursorY, rankBarW, 14, 0x334155).setOrigin(0, 0.5);
-        const rankBarFill = this.add.rectangle(35, cursorY, 0, 14, 0x10B981).setOrigin(0, 0.5);
+        const rankBarBg = this.add.rectangle(35, cursorY, rankBarW, 12, 0x334155).setOrigin(0, 0.5);
+        const rankBarFill = this.add.rectangle(35, cursorY, 0, 12, 0x10B981).setOrigin(0, 0.5);
 
         // Rank Animation Logic
         const pTotal = expData.player_total_exp || 0;
@@ -172,23 +151,20 @@ export default class VictoryScene extends Phaser.Scene {
 
         this.animateProgressBar(rankBarFill, rankText, rankBarW, pOldTotal, pTotal, pBase, pNext, expData.player_rank, 'Rank', isPlayerMax);
 
-        cursorY += 60;
-
         // 2. SEGMENT TENGAH (PARTY EXP)
+        cursorY += 35;
         this.add.text(CX, cursorY, "PARTY EXPERIENCE", {
-            fontSize: "12px", color: THEME.TEXT_SECONDARY, letterSpacing: 2
+            fontSize: "11px", color: THEME.TEXT_SECONDARY, letterSpacing: 2
         }).setOrigin(0.5);
-
-        cursorY += 80;
 
         const party = expData.party_exp_details || [];
         const cW = 85, gap = 15, total = party.length;
         const totalW = (total * cW) + ((total - 1) * gap);
         const startX = (W - totalW) / 2 + (cW / 2);
+        const cardCenterY = cursorY + 80;
 
         party.forEach((char, i) => {
             const px = startX + i * (cW + gap);
-            const cardY = cursorY + 30; // center Y of the portrait card
 
             // Border color by rarity
             let rColorInt = THEME.BORDER;
@@ -197,14 +173,14 @@ export default class VictoryScene extends Phaser.Scene {
             else if (char.rarity === 'SR') { rColorInt = 0xc0c0c0; rColorHex = '#c0c0c0'; }
             else if (char.rarity === 'R') { rColorInt = 0xcd7f32; rColorHex = '#cd7f32'; }
 
-            // Portrait Background (85x145 like battleScene)
-            const portBg = this.add.rectangle(px, cardY, 85, 145, THEME.PANEL, 0.7);
+            // Portrait Background (85x145)
+            const portBg = this.add.rectangle(px, cardCenterY, 85, 145, THEME.PANEL, 0.7);
             portBg.setStrokeStyle(2, rColorInt);
 
             // Character Portrait Image
             const portTex = `portrait_${char.mc_id}`;
             if (this.textures.exists(portTex)) {
-                const img = this.add.image(px, cardY, portTex);
+                const img = this.add.image(px, cardCenterY, portTex);
                 const imgW = img.width || 1;
                 img.setScale(85 / imgW);
             }
@@ -217,7 +193,7 @@ export default class VictoryScene extends Phaser.Scene {
             const elKey = elementStr ? `element_${elementStr.toLowerCase()}` : '';
             if (this.textures.exists(elKey)) {
                 const ex = px + 42.5 - 12;
-                const ey = cardY - 72.5 + 12;
+                const ey = cardCenterY - 72.5 + 12;
                 const elImg = this.add.image(ex, ey, elKey).setDisplaySize(18, 18);
                 const elShape = this.make.graphics();
                 elShape.fillCircle(ex, ey, 9);
@@ -227,21 +203,20 @@ export default class VictoryScene extends Phaser.Scene {
 
             // Rarity Text (Bottom Left)
             if (char.rarity) {
-                this.add.text(px - 42.5 + 6, cardY + 72.5 - 5, char.rarity, {
+                this.add.text(px - 42.5 + 6, cardCenterY + 72.5 - 5, char.rarity, {
                     fontSize: '11px', color: rColorHex, fontStyle: 'bold', stroke: '#000000', strokeThickness: 2, fontFamily: 'Outfit'
                 }).setOrigin(0, 1);
             }
 
-
             // Level Text (below card)
-            const lvlTxt = this.add.text(px, cardY + 85, `Lv ${char.current_level}`, {
-                fontSize: "12px", color: "#FFFFFF", fontStyle: "bold"
+            const lvlTxt = this.add.text(px, cardCenterY + 87, `Lv ${char.current_level}`, {
+                fontSize: "11px", color: "#FFFFFF", fontStyle: "bold"
             }).setOrigin(0.5);
 
             // Mini EXP Bar
             const barW = 75;
-            const barBg = this.add.rectangle(px, cardY + 100, barW, 6, 0x334155).setOrigin(0.5);
-            const barFill = this.add.rectangle(px - barW / 2, cardY + 100, 0, 6, 0x06B6D4).setOrigin(0, 0.5);
+            const barBg = this.add.rectangle(px, cardCenterY + 100, barW, 5, 0x334155).setOrigin(0.5);
+            const barFill = this.add.rectangle(px - barW / 2, cardCenterY + 100, 0, 5, 0x06B6D4).setOrigin(0, 0.5);
 
             // Animate Char Bar
             const cTotal = char.total_exp;
@@ -254,27 +229,39 @@ export default class VictoryScene extends Phaser.Scene {
             this.animateProgressBar(barFill, lvlTxt, barW, cOld, cTotal, cBase, cNext, char.current_level, 'Lv', isCharMax, wasAlreadyMax);
         });
 
-        cursorY += 160;
-
         // Divider
+        const divY = cardCenterY + 116;
         const div2 = this.add.graphics();
         div2.lineStyle(1, THEME.BORDER, 1);
-        div2.lineBetween(CX - 150, cursorY, CX + 150, cursorY);
-        cursorY += 40;
+        div2.lineBetween(CX - 150, divY, CX + 150, divY);
 
-        // 3. SEGMENT BAWAH (LOOT GRID)
-        this.add.text(CX, cursorY, "OBTAINED LOOT", {
-            fontSize: "12px", color: THEME.TEXT_SECONDARY, letterSpacing: 2
+        // 3. SEGMENT BAWAH (LOOT GRID CONTAINER WITH GEOMETRY MASK)
+        const lootTitleY = divY + 22;
+        this.add.text(CX, lootTitleY, "OBTAINED LOOT", {
+            fontSize: "11px", color: THEME.TEXT_SECONDARY, letterSpacing: 2
         }).setOrigin(0.5);
-        cursorY += 40;
+
+        const lootBoxY = lootTitleY + 18;
+        const lootBoxW = 430;
+        const lootBoxH = 245;
+
+        // Loot Panel Frame / Background
+        const lootPanelBg = this.add.rectangle(CX, lootBoxY + lootBoxH / 2, lootBoxW, lootBoxH, 0x0F172A, 0.7);
+        lootPanelBg.setStrokeStyle(1.5, 0x1E293B);
 
         if (rewards.length === 0) {
-            this.add.text(CX, cursorY + 20, "No rewards dropped.", {
+            this.add.text(CX, lootBoxY + lootBoxH / 2, "No rewards dropped.", {
                 fontSize: "14px", color: THEME.TEXT_MUTED, fontStyle: "italic"
             }).setOrigin(0.5);
-            cursorY += 80;
         } else {
-            // Grid config: max 4 columns
+            // Mask for Loot Container
+            const shape = this.make.graphics();
+            shape.fillRect(CX - lootBoxW / 2, lootBoxY + 2, lootBoxW, lootBoxH - 4);
+            const mask = shape.createGeometryMask();
+
+            this.lootContainer = this.add.container(0, 0);
+            this.lootContainer.setMask(mask);
+
             const maxCols = 4;
             const boxSize = 75;
             const padding = 15;
@@ -283,15 +270,14 @@ export default class VictoryScene extends Phaser.Scene {
                 const row = Math.floor(index / maxCols);
                 const colInRow = index % maxCols;
 
-                // Calculate centering specifically for this row
                 const itemsInThisRow = Math.min(maxCols, rewards.length - row * maxCols);
                 const rowW = (itemsInThisRow * boxSize) + ((itemsInThisRow - 1) * padding);
                 const rowStartX = (W - rowW) / 2 + (boxSize / 2);
 
                 const ix = rowStartX + colInRow * (boxSize + padding);
-                const iy = cursorY + row * (boxSize + padding) + (boxSize / 2);
+                const iy = lootBoxY + 15 + row * (boxSize + padding) + (boxSize / 2);
 
-                const itemBg = this.add.rectangle(ix, iy, boxSize, boxSize, THEME.PANEL, 0.8);
+                const itemBg = this.add.rectangle(ix, iy, boxSize, boxSize, THEME.PANEL, 0.9);
 
                 let borderColor = THEME.BORDER;
                 if (item.reward_type === 'Currency') borderColor = 0xD4A017;
@@ -300,52 +286,86 @@ export default class VictoryScene extends Phaser.Scene {
 
                 itemBg.setStrokeStyle(1, borderColor);
 
-                // Placeholder icon text
                 let iconTxt = "📦";
                 if (item.reward_type === 'Currency') iconTxt = "🪙";
                 else if (item.reward_type === 'Weapon') iconTxt = "⚔️";
                 else if (item.reward_type === 'Character') iconTxt = "👤";
 
-                this.add.text(ix, iy - 14, iconTxt, { fontSize: "24px" }).setOrigin(0.5);
-
-                // Short name
+                const tIcon = this.add.text(ix, iy - 14, iconTxt, { fontSize: "24px" }).setOrigin(0.5);
                 const itemName = item.name ? item.name.substring(0, 10) : "";
-                this.add.text(ix, iy + 8, itemName, { fontSize: "9px", color: "#ccc" }).setOrigin(0.5);
-
-                // Quantity
-                this.add.text(ix, iy + 22, `x${item.quantity}`, {
+                const tName = this.add.text(ix, iy + 8, itemName, { fontSize: "9px", color: "#ccc" }).setOrigin(0.5);
+                const tQty = this.add.text(ix, iy + 22, `x${item.quantity}`, {
                     fontSize: "12px", color: "#fff", fontStyle: "bold"
                 }).setOrigin(0.5);
+
+                this.lootContainer.add([itemBg, tIcon, tName, tQty]);
             });
 
             const rows = Math.ceil(rewards.length / maxCols);
-            cursorY += rows * (boxSize + padding) + 20;
+            const totalContentH = 30 + rows * (boxSize + padding);
+            this.maxLootScroll = Math.max(0, totalContentH - lootBoxH);
+
+            // Drag & Scroll Events inside Loot Box
+            let isDraggingLoot = false;
+            let startLootPointerY = 0;
+            let startContainerY = 0;
+
+            this.input.on('pointerdown', (pointer) => {
+                if (this.unlockQueue && this.unlockQueue.length > 0) return;
+                if (pointer.x >= (CX - lootBoxW / 2) && pointer.x <= (CX + lootBoxW / 2) &&
+                    pointer.y >= lootBoxY && pointer.y <= (lootBoxY + lootBoxH)) {
+                    isDraggingLoot = true;
+                    startLootPointerY = pointer.y;
+                    startContainerY = this.lootContainer.y;
+                }
+            });
+
+            this.input.on('pointermove', (pointer) => {
+                if (isDraggingLoot && this.lootContainer) {
+                    const dy = pointer.y - startLootPointerY;
+                    this.lootContainer.y = Phaser.Math.Clamp(startContainerY + dy, -this.maxLootScroll, 0);
+                }
+            });
+
+            const endLootDrag = () => { isDraggingLoot = false; };
+            this.input.on('pointerup', endLootDrag);
+            this.input.on('pointerupoutside', endLootDrag);
+
+            this.input.on('wheel', (pointer, gameObjects, deltaX, deltaY) => {
+                if (this.unlockQueue && this.unlockQueue.length > 0) return;
+                if (this.lootContainer && pointer.x >= (CX - lootBoxW / 2) && pointer.x <= (CX + lootBoxW / 2) &&
+                    pointer.y >= lootBoxY && pointer.y <= (lootBoxY + lootBoxH)) {
+                    this.lootContainer.y = Phaser.Math.Clamp(this.lootContainer.y - (deltaY * 0.5), -this.maxLootScroll, 0);
+                }
+            });
         }
 
-        cursorY += 30;
+        // 4. FIXED CONTINUE BUTTON AT THE BOTTOM
+        const btnY = 745;
+        const btn = this.add.rectangle(CX, btnY, 240, 42, THEME.PANEL)
+            .setInteractive({ useHandCursor: true })
+            .setDepth(10);
+        btn.setStrokeStyle(1.5, 0x38BDF8);
 
-        // CONTINUE BUTTON
-        const btn = this.add.rectangle(CX, cursorY, 240, 44, THEME.PANEL).setInteractive();
-        btn.setStrokeStyle(1, THEME.BORDER);
-        this.add.text(CX, cursorY, "CONTINUE", {
+        const btnText = this.add.text(CX, btnY, "CONTINUE", {
             fontSize: "14px", color: THEME.TEXT_PRIMARY, fontStyle: "bold", letterSpacing: 1
-        }).setOrigin(0.5);
+        }).setOrigin(0.5).setDepth(11);
 
-        btn.on('pointerover', () => btn.setFillStyle(0x334155));
-        btn.on('pointerout', () => btn.setFillStyle(THEME.PANEL));
+        btn.on('pointerover', () => {
+            btn.setFillStyle(0x334155);
+            btnText.setColor("#38BDF8");
+        });
+        btn.on('pointerout', () => {
+            btn.setFillStyle(THEME.PANEL);
+            btnText.setColor(THEME.TEXT_PRIMARY);
+        });
         btn.on('pointerdown', (pointer, x, y, event) => {
-            event.stopPropagation(); // Prevent drag from firing
+            if (event && event.stopPropagation) event.stopPropagation();
             this.scene.stop('BattleScene');
             this.scene.stop('VictoryScene');
             this.sound.stopAll();
             this.scene.start('LoadingScene', { targetScene: 'QuestScene' });
         });
-
-        cursorY += 80; // Add some bottom padding
-
-        // Update Camera Bounds dynamically based on total height
-        const totalHeight = Math.max(H, cursorY);
-        this.cameras.main.setBounds(0, 0, W, totalHeight);
 
         // Setup newly unlocked characters and skills queue
         this.unlockQueue = [];

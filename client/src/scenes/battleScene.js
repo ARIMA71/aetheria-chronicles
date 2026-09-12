@@ -23,6 +23,11 @@ export default class BattleScene extends Phaser.Scene {
         this.load.image('bg_battle', 'assets/backgrounds/battleScene.jpg');
 
         // --- Player HUD UI Assets ---
+        this.load.image('bg_card_x5', 'assets/ui/card/Card X5.png');
+        this.load.image('bg_card_x10', 'assets/ui/card/Card X10.png');
+        this.load.image('bg_card_x12', 'assets/ui/card/Card X12.png');
+        this.load.image('bg_card_x100', 'assets/ui/card/Card X100.png');
+        this.load.image('bg_card_x101', 'assets/ui/card/Card X101.png');
         this.load.image('progressbar_bg', 'assets/ui/progressBar/ProgressBar Background.png');
         this.load.image('progressbar_fg', 'assets/ui/progressBar/ProgressBarForeground.png');
 
@@ -30,6 +35,16 @@ export default class BattleScene extends Phaser.Scene {
         this.load.image('btn_a_hover', 'assets/ui/button/A/Hover.png');
         this.load.image('btn_a_active', 'assets/ui/button/A/Active.png');
         this.load.image('btn_a_disabled', 'assets/ui/button/A/Disabled.png');
+
+        this.load.image('btn_b_normal', 'assets/ui/button/B/Button Normal 1.png');
+        this.load.image('btn_b_hover', 'assets/ui/button/B/Button Hover 1.png');
+        this.load.image('btn_b_active', 'assets/ui/button/B/Button Active 1.png');
+        this.load.image('btn_b_disabled', 'assets/ui/button/B/Button Disabled 1.png');
+
+        this.load.image('btn_c_normal', 'assets/ui/button/C/Icon Button.png');
+        this.load.image('btn_c_hover', 'assets/ui/button/C/Icon Button Hover.png');
+        this.load.image('btn_close_normal', 'assets/ui/button/C/Icon Button Close.png');
+        this.load.image('btn_close_hover', 'assets/ui/button/C/Icon Button Close Hover.png');
 
         this.load.image('btn_d_normal', 'assets/ui/button/D/Button Normal.png');
         this.load.image('btn_d_hover', 'assets/ui/button/D/Button Hover.png');
@@ -118,8 +133,8 @@ export default class BattleScene extends Phaser.Scene {
         const bg = this.add.image(CX, H / 2, 'bg_battle').setOrigin(0.5);
         const scale = Math.max(W / bg.width, H / bg.height);
         bg.setScale(scale);
-        this.topHudBg = this.add.rectangle(CX, 26, W, 52, 0x0F192E, 1.0).setDepth(10);
-        this.topHudBg.setStrokeStyle(1.5, 0x38BDF8);
+        this.topHudBg = this.add.rectangle(CX, 26, W + 40, 52, 0x0F192E, 1.0).setDepth(10);
+        this.topHudLine = this.add.rectangle(CX, 52, W + 40, 3, 0x38BDF8).setDepth(10);
 
         // Immediately add the black overlay so there is no blue flash from the background
         // Using 0.95 transparency so the player can faintly see the arena, as requested
@@ -206,9 +221,17 @@ export default class BattleScene extends Phaser.Scene {
         }
 
         if (assetsToLoad > 0) {
-            this.load.once('complete', () => {
+            let loaded = false;
+            const finishLoad = () => {
+                if (loaded) return;
+                loaded = true;
+                this.load.off('complete', finishLoad);
+                this.load.off('loaderror', finishLoad);
                 this._renderProcessBattleData(j, chars);
-            });
+            };
+            this.load.once('complete', finishLoad);
+            this.load.once('loaderror', finishLoad);
+            this.time.delayedCall(2000, finishLoad);
             this.load.start();
         } else {
             this._renderProcessBattleData(j, chars);
@@ -270,6 +293,8 @@ export default class BattleScene extends Phaser.Scene {
             const ey = startY + (i * 80);
             const enemy = new Enemy(this, ex, ey, eData);
             enemy.index = i;
+            enemy._baseX = ex;
+            enemy._baseY = ey;
             enemy.setDepth(5 + i);
             this.enemies.push(enemy);
         });
@@ -355,9 +380,17 @@ export default class BattleScene extends Phaser.Scene {
         }
 
         if (assetsToLoad > 0) {
-            this.load.once('complete', () => {
+            let loaded = false;
+            const finishLoad = () => {
+                if (loaded) return;
+                loaded = true;
+                this.load.off('complete', finishLoad);
+                this.load.off('loaderror', finishLoad);
                 this._renderResumeBattle(state, chars);
-            });
+            };
+            this.load.once('complete', finishLoad);
+            this.load.once('loaderror', finishLoad);
+            this.time.delayedCall(2000, finishLoad);
             this.load.start();
         } else {
             this._renderResumeBattle(state, chars);
@@ -437,6 +470,8 @@ export default class BattleScene extends Phaser.Scene {
             const ey = startY + (i * 80);
             const enemy = new Enemy(this, ex, ey, eData);
             enemy.index = i;
+            enemy._baseX = ex;
+            enemy._baseY = ey;
             enemy.setDepth(5 + i);
 
             // Visuals handled internally by Enemy container
@@ -578,35 +613,35 @@ export default class BattleScene extends Phaser.Scene {
         this.enemyHUDs = [];
         this.enemies.forEach((enemy, index) => {
             const container = this.add.container(0, 0);
-            const baseY = 88 + (index * 45);
+            const hudBaseY = 88 + (index * 45);
             const ec = this._elemColor(enemy.element);
 
-            const icon = this.add.rectangle(56, baseY + 9, 44, 44, THEME.PANEL).setStrokeStyle(2, ec);
+            const icon = this.add.rectangle(56, hudBaseY + 9, 44, 44, THEME.PANEL).setStrokeStyle(2, ec);
 
             const monsId = enemy.monsterId || enemy.id;
             const iconTexKey = `mons_icon_${monsId}`;
             let elemText = null;
 
             if (this.textures.exists(iconTexKey)) {
-                elemText = this.add.image(56, baseY + 9, iconTexKey).setDisplaySize(40, 40);
+                elemText = this.add.image(56, hudBaseY + 9, iconTexKey).setDisplaySize(40, 40);
             } else {
-                elemText = this.add.text(56, baseY + 9, enemy.element ? enemy.element.substring(0, 2).toUpperCase() : '??', { fontSize: "16px", fontStyle: "bold", color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
+                elemText = this.add.text(56, hudBaseY + 9, enemy.element ? enemy.element.substring(0, 2).toUpperCase() : '??', { fontSize: "16px", fontStyle: "bold", color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
             }
-            const hpPct = this.add.text(83, baseY - 2, "100%", { fontSize: "14px", color: "#ffffff", fontStyle: "bold" }).setOrigin(0, 1);
+            const hpPct = this.add.text(83, hudBaseY - 2, "100%", { fontSize: "14px", color: "#ffffff", fontStyle: "bold" }).setOrigin(0, 1);
 
-            const hpBarBg = this.add.rectangle(83, baseY + 4, 360, 12, THEME.BG).setOrigin(0, 0.5).setStrokeStyle(2, THEME.BORDER);
-            const hpFill = this.add.rectangle(83, baseY + 4, 356, 10, THEME.DAMAGE).setOrigin(0, 0.5);
-            const hpEnrage = this.add.rectangle(83, baseY + 4, 360, 12, 0, 0).setOrigin(0, 0.5).setAlpha(0);
+            const hpBarBg = this.add.rectangle(83, hudBaseY + 4, 360, 12, THEME.BG).setOrigin(0, 0.5).setStrokeStyle(2, THEME.BORDER);
+            const hpFill = this.add.rectangle(83, hudBaseY + 4, 356, 10, THEME.DAMAGE).setOrigin(0, 0.5);
+            const hpEnrage = this.add.rectangle(83, hudBaseY + 4, 360, 12, 0, 0).setOrigin(0, 0.5).setAlpha(0);
 
-            const effectIndicators = this.add.container(123, baseY - 10);
+            const effectIndicators = this.add.container(123, hudBaseY - 10);
 
-            const hitArea = this.add.rectangle(83, baseY + 4, 360, 24, 0x000000, 0).setOrigin(0, 0.5);
+            const hitArea = this.add.rectangle(83, hudBaseY + 4, 360, 24, 0x000000, 0).setOrigin(0, 0.5);
             hitArea.setInteractive({ useHandCursor: true });
             hitArea.on('pointerdown', () => this._showStatusModal(enemy));
 
 
-            const modeBarBg = this.add.rectangle(83, baseY + 14, 360, 4, THEME.BG).setOrigin(0, 0.5).setStrokeStyle(1, THEME.BORDER);
-            const modeFill = this.add.rectangle(83, baseY + 14, 0, 4, 0xffffff).setOrigin(0, 0.5);
+            const modeBarBg = this.add.rectangle(83, hudBaseY + 14, 360, 4, THEME.BG).setOrigin(0, 0.5).setStrokeStyle(1, THEME.BORDER);
+            const modeFill = this.add.rectangle(83, hudBaseY + 14, 0, 4, 0xffffff).setOrigin(0, 0.5);
 
             if (!enemy.isBoss) {
                 hpEnrage.setVisible(false);
@@ -617,14 +652,24 @@ export default class BattleScene extends Phaser.Scene {
             const caSegmentsBg = [];
             const caSegments = [];
             for (let i = 0; i < enemy.caMax; i++) {
-                const bg = this.add.rectangle(83 + i * 14, baseY + 26, 10, 10, THEME.BG).setOrigin(0, 0.5).setStrokeStyle(1, THEME.BORDER);
-                const f = this.add.rectangle(83 + i * 14, baseY + 26, 8, 8, THEME.GOLD).setOrigin(0, 0.5).setAlpha(0);
+                const bg = this.add.rectangle(83 + i * 14, hudBaseY + 26, 10, 10, THEME.BG).setOrigin(0, 0.5).setStrokeStyle(1, THEME.BORDER);
+                const f = this.add.rectangle(83 + i * 14, hudBaseY + 26, 8, 8, THEME.GOLD).setOrigin(0, 0.5).setAlpha(0);
                 caSegmentsBg.push(bg);
                 caSegments.push(f);
             }
 
-            const nameY = enemy.y + (enemy.battleSprite ? (enemy.battleSprite.displayHeight * 0.42) + 2 : 32);
-            const nameText = this.add.text(enemy.x, nameY, `${enemy.charName}\nLv.${enemy.level}`, {
+            const baseX = enemy._baseX !== undefined ? enemy._baseX : enemy.x;
+            const enemyBaseY = enemy._baseY !== undefined ? enemy._baseY : enemy.y;
+
+            let spriteH = 130;
+            if (enemy.battleSprite && enemy.battleSprite.displayHeight) {
+                spriteH = enemy.battleSprite.displayHeight;
+            } else if (enemy._body && enemy._body.displayHeight) {
+                spriteH = enemy._body.displayHeight;
+            }
+
+            const nameY = enemyBaseY + (spriteH / 2) + 12;
+            const nameText = this.add.text(baseX, nameY, `${enemy.charName}\nLv.${enemy.level}`, {
                 fontSize: "12px",
                 color: "#ffffff",
                 fontStyle: "bold",
@@ -688,7 +733,7 @@ export default class BattleScene extends Phaser.Scene {
                 const sups = { 0: '', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹' };
                 visibleEffects.forEach((e, idx) => {
                     const isBuff = (e.effect_type || '').toLowerCase() === 'buff';
-                    const color = isBuff ? '#f1c40f' : '#7ec8e3';
+                    const color = isBuff ? '#ef4444' : '#38bdf8';
 
                     let emoji = '❓';
                     const stat = (e.target_stat || '').toUpperCase();
@@ -715,8 +760,18 @@ export default class BattleScene extends Phaser.Scene {
 
             if (hud.nameText) {
                 hud.nameText.setText(enemy.charName + " \nLv." + enemy.level);
-                const nameY = enemy.y + (enemy.battleSprite ? (enemy.battleSprite.displayHeight / 2) + 10 : 65);
-                hud.nameText.setPosition(enemy.x, nameY);
+                const baseX = enemy._baseX !== undefined ? enemy._baseX : enemy.x;
+                const baseY = enemy._baseY !== undefined ? enemy._baseY : enemy.y;
+
+                let spriteH = 130;
+                if (enemy.battleSprite && enemy.battleSprite.displayHeight) {
+                    spriteH = enemy.battleSprite.displayHeight;
+                } else if (enemy._body && enemy._body.displayHeight) {
+                    spriteH = enemy._body.displayHeight;
+                }
+
+                const nameY = baseY + (spriteH / 2) + 12;
+                hud.nameText.setPosition(baseX, nameY);
                 if (enemy.hp <= 0) hud.nameText.setAlpha(0.3);
             }
             if (hud.icon) {
@@ -775,30 +830,125 @@ export default class BattleScene extends Phaser.Scene {
         this._refreshEnemyHUD();
         enemy.playHitAnim();
     }
+    _createBtnCanvasTexture(key, w, h, r, topCol, botCol, borderCol) {
+        if (this.textures.exists(key)) this.textures.remove(key);
+        const canvas = this.textures.createCanvas(key, w, h);
+        const ctx = canvas.context;
+
+        const grad = ctx.createLinearGradient(0, 0, 0, h);
+        grad.addColorStop(0, topCol);
+        grad.addColorStop(1, botCol);
+
+        ctx.beginPath();
+        ctx.moveTo(r, 0);
+        ctx.lineTo(w - r, 0);
+        ctx.quadraticCurveTo(w, 0, w, r);
+        ctx.lineTo(w, h - r);
+        ctx.quadraticCurveTo(w, h, w - r, h);
+        ctx.lineTo(r, h);
+        ctx.quadraticCurveTo(0, h, 0, h - r);
+        ctx.lineTo(0, r);
+        ctx.quadraticCurveTo(0, 0, r, 0);
+        ctx.closePath();
+
+        ctx.fillStyle = grad;
+        ctx.fill();
+
+        if (borderCol) {
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = borderCol;
+            ctx.stroke();
+        }
+
+        canvas.refresh();
+    }
+
     _buildArenaButtons() {
         this._attackBtnContainer = this.add.container(0, 0);
-        const ab = this.add.rectangle(410, 505, 100, 40, THEME.DAMAGE).setDepth(10);
-        ab.setStrokeStyle(1, THEME.BORDER);
-        const text = this.add.text(410, 505, "ATTACK ⚔", { fontSize: "14px", color: THEME.TEXT_PRIMARY, fontStyle: "bold", align: "center" }).setOrigin(0.5).setDepth(10);
-        this._attackBtnContainer.add([ab, text]);
-        ab.setInteractive(); ab.on("pointerdown", () => {
+
+        const atkW = 124;
+        const atkH = 44;
+        const atkX = 405;
+        const atkY = 495;
+
+        // Generate seamless 2D Canvas gradient textures (avoids Phaser WebGL diagonal triangle seam)
+        this._createBtnCanvasTexture('gen_btn_atk_norm', atkW, atkH, 8, '#ef4444', '#991b1b', '#fca5a5');
+        this._createBtnCanvasTexture('gen_btn_atk_hover', atkW, atkH, 8, '#f87171', '#b91c1c', '#ffedd5');
+        this._createBtnCanvasTexture('gen_btn_atk_down', atkW, atkH, 8, '#991b1b', '#7f1d1d', '#fca5a5');
+
+        const atkImg = this.add.image(atkX, atkY, 'gen_btn_atk_norm').setDepth(10);
+        const atkHitZone = this.add.rectangle(atkX, atkY, atkW, atkH, 0x000000, 0).setDepth(10).setInteractive({ useHandCursor: true });
+        const text = this.add.text(atkX, atkY, "ATTACK ⚔", {
+            fontSize: "15px",
+            color: "#ffffff",
+            fontStyle: "bold",
+            fontFamily: "Outfit, Inter, sans-serif",
+            stroke: "#000000",
+            strokeThickness: 3,
+            align: "center"
+        }).setOrigin(0.5).setDepth(11);
+
+        this._attackBtnContainer.add([atkImg, atkHitZone, text]);
+
+        atkHitZone.on("pointerover", () => atkImg.setTexture('gen_btn_atk_hover'));
+        atkHitZone.on("pointerout", () => atkImg.setTexture('gen_btn_atk_norm'));
+        atkHitZone.on("pointerdown", () => {
+            atkImg.setTexture('gen_btn_atk_down');
             if (this.turn === "player" && !this.attackBtnLocked) this.playerAttack();
         });
+        atkHitZone.on("pointerup", () => atkImg.setTexture('gen_btn_atk_norm'));
+
         this._attackBtnContainer.setVisible(this.turn === "player");
 
-        // GLOBAL AUTO BUTTON
+        // GLOBAL AUTO BUTTON (Same Button A texture model as BACK button in action window)
         this.globalAutoState = false;
         this._globalAutoBtnContainer = this.add.container(0, 0);
-        const gab = this.add.rectangle(70, 505, 100, 40, THEME.BG).setDepth(10);
-        gab.setStrokeStyle(1, THEME.BORDER);
-        const gat = this.add.text(70, 505, "AUTO: OFF", { fontSize: "12px", color: THEME.TEXT_SECONDARY, fontStyle: "bold", align: "center" }).setOrigin(0.5).setDepth(10);
-        this._globalAutoBtnContainer.add([gab, gat]);
-        gab.setInteractive(); gab.on("pointerdown", () => {
+
+        const autoW = 92;
+        const autoH = 34;
+        const autoX = 65;
+        const autoY = 495;
+
+        let autoImg;
+        if (this.textures.exists('btn_a_normal')) {
+            autoImg = this.add.image(autoX, autoY, 'btn_a_normal').setDisplaySize(autoW, autoH).setDepth(10);
+            autoImg.setTint(0x38bdf8); // Sky blue tint matching back button
+        } else {
+            autoImg = this.add.rectangle(autoX, autoY, autoW, autoH, THEME.BG).setStrokeStyle(1, THEME.AETHER).setDepth(10);
+        }
+
+        const autoHitZone = this.add.rectangle(autoX, autoY, autoW, autoH, 0x000000, 0).setDepth(10).setInteractive({ useHandCursor: true });
+        const gat = this.add.text(autoX, autoY, "AUTO: OFF", {
+            fontSize: "11px",
+            color: "#e0f2fe",
+            fontStyle: "bold",
+            fontFamily: "Outfit, Inter, sans-serif",
+            stroke: "#000000",
+            strokeThickness: 3,
+            align: "center"
+        }).setOrigin(0.5).setDepth(11);
+
+        this._globalAutoBtnContainer.add([autoImg, autoHitZone, gat]);
+
+        const updateAutoBtnVisual = (state = 'norm') => {
+            if (this.textures.exists('btn_a_normal')) {
+                if (state === 'hover' && this.textures.exists('btn_a_hover')) autoImg.setTexture('btn_a_hover');
+                else if ((state === 'down' || this.globalAutoState) && this.textures.exists('btn_a_active')) autoImg.setTexture('btn_a_active');
+                else autoImg.setTexture('btn_a_normal');
+            }
+
+            autoImg.setTint(0x38bdf8); // Sky Blue tint
+        };
+
+        autoHitZone.on("pointerover", () => updateAutoBtnVisual('hover'));
+        autoHitZone.on("pointerout", () => updateAutoBtnVisual('norm'));
+        autoHitZone.on("pointerdown", () => {
+            updateAutoBtnVisual('down');
             if (this.turn === "player") {
                 this.globalAutoState = !this.globalAutoState;
                 gat.setText("AUTO: " + (this.globalAutoState ? "ON" : "OFF"));
-                gat.setColor(this.globalAutoState ? THEME.TEXT_PRIMARY : THEME.TEXT_SECONDARY);
-                gab.setStrokeStyle(1, this.globalAutoState ? THEME.AETHER : THEME.BORDER);
+                gat.setColor(this.globalAutoState ? "#ffffff" : "#e0f2fe");
+                updateAutoBtnVisual('norm');
 
                 // Toggle all players
                 this.players.forEach(p => {
@@ -812,6 +962,8 @@ export default class BattleScene extends Phaser.Scene {
                 }
             }
         });
+        autoHitZone.on("pointerup", () => updateAutoBtnVisual('norm'));
+
         this._globalAutoBtnContainer.setVisible(this.turn === "player");
     }
 
@@ -819,11 +971,10 @@ export default class BattleScene extends Phaser.Scene {
         const W = 480;
         const CX = 240;
 
-        // Container Area Player HUD (dibawah tombol attack) — Dark Blue Fill + Sky Blue Stroke
+        // Container Area Player HUD (dibawah tombol attack) — Full-Bleed Dark Blue Fill + Sky Blue Top Stroke
         if (this._playerHudBg) this._playerHudBg.destroy();
-        this._playerHudBg = this.add.rectangle(CX, 705, W, 340, 0x0F192E, 0.95);
-        this._playerHudBg.setStrokeStyle(2, 0x38BDF8);
-        this._playerHudBg.setDepth(1);
+        this._playerHudBg = this.add.rectangle(CX, 705, W + 40, 350, 0x0F192E, 0.95).setDepth(1);
+        this._playerHudBg.setStrokeStyle(3, 0x38BDF8);
 
         // 1. AETHER GAUGE
         if (this.textures.exists('progressbar_bg')) {
@@ -1022,80 +1173,268 @@ export default class BattleScene extends Phaser.Scene {
     }
     _buildActionWindow() {
         this._backBtnContainer = this.add.container(0, 0);
-        const bb = this.add.rectangle(70, 505, 100, 40, THEME.BG).setStrokeStyle(1, THEME.BORDER).setDepth(30);
-        const bt = this.add.text(70, 505, "◄ BACK", { fontSize: "14px", color: THEME.TEXT_PRIMARY, fontStyle: "bold", align: "center" }).setOrigin(0.5).setDepth(30);
+
+        let bb;
+        if (this.textures.exists('btn_a_normal')) {
+            bb = this.add.image(65, 495, 'btn_a_normal').setDisplaySize(92, 34).setDepth(30);
+            bb.setTint(0x38bdf8); // Sky blue tint matching action window card_x5
+        } else {
+            bb = this.add.rectangle(65, 495, 92, 34, THEME.BG).setStrokeStyle(1, THEME.AETHER).setDepth(30);
+        }
+
+        const bt = this.add.text(65, 495, "◄ BACK", {
+            fontSize: "11px",
+            color: "#e0f2fe",
+            fontStyle: "bold",
+            fontFamily: "Outfit, Inter, sans-serif",
+            stroke: "#000000",
+            strokeThickness: 3,
+            align: "center"
+        }).setOrigin(0.5).setDepth(31);
+
         this._backBtnContainer.add([bb, bt]);
-        bb.setInteractive(); bb.on('pointerdown', () => this.closeActionWindow());
+
+        bb.setInteractive({ useHandCursor: true });
+        bb.on('pointerover', () => {
+            if (this.textures.exists('btn_a_hover')) bb.setTexture('btn_a_hover');
+            bb.setTint(0x38bdf8);
+        });
+        bb.on('pointerout', () => {
+            if (this.textures.exists('btn_a_normal')) bb.setTexture('btn_a_normal');
+            bb.setTint(0x38bdf8);
+        });
+        bb.on('pointerdown', () => {
+            if (this.textures.exists('btn_a_active')) bb.setTexture('btn_a_active');
+            bb.setTint(0x38bdf8);
+            this.closeActionWindow();
+        });
+        bb.on('pointerup', () => {
+            if (this.textures.exists('btn_a_normal')) bb.setTexture('btn_a_normal');
+            bb.setTint(0x38bdf8);
+        });
+
         this._backBtnContainer.setVisible(false);
 
-        // Center at Y=690, width 480, height 310 to cover the HUD but stay below ATTACK btn
+        // Center at X=240, offscreen Y=1200 (slides up from bottom to Y=698)
         // Depth 30 is below MainMenu (which is 40)
-        this.actionWindowContainer = this.add.container(750, 690).setDepth(30);
+        this.actionWindowContainer = this.add.container(240, 1200).setDepth(30);
 
-        const bg = this.add.rectangle(0, 0, 480, 310, 0x111827, 1);
-        bg.setStrokeStyle(2, THEME.BORDER);
+        let bg;
+        if (this.textures.exists('bg_card_x5')) {
+            bg = this.add.image(0, 0, 'bg_card_x5').setDisplaySize(480, 360);
+            bg.setTint(0x38bdf8); // Sky blue tint
+        } else {
+            bg = this.add.rectangle(0, 0, 480, 360, 0x111827, 1);
+            bg.setStrokeStyle(2, THEME.BORDER);
+        }
         bg.setInteractive();
 
-        const portraitX = -182;
+        const portraitX = -168;
         const portraitY = -65;
-        this._awCardBg = this.add.rectangle(portraitX, portraitY, 85, 145, 0x12192b).setStrokeStyle(1, 0x334155);
+        if (this.textures.exists('bg_card_x10')) {
+            this._awCardBg = this.add.image(portraitX, portraitY, 'bg_card_x10').setDisplaySize(92, 152);
+            this._awCardBg.setTint(0x38bdf8); // Sky blue tint matching action window card_x5
+        } else {
+            this._awCardBg = this.add.rectangle(portraitX, portraitY, 83, 143, 0x12192b).setStrokeStyle(1, 0x334155);
+        }
         this._awPortrait = this.add.image(portraitX, portraitY, '');
 
-        this._awAutoBtn = this.add.rectangle(portraitX, 35, 85, 30, THEME.BG).setStrokeStyle(1, THEME.BORDER).setInteractive();
-        this._awAutoText = this.add.text(portraitX, 35, "AUTO: OFF", { fontSize: "11px", fontStyle: 'bold', color: THEME.TEXT_SECONDARY }).setOrigin(0.5);
+        if (this.textures.exists('btn_a_normal')) {
+            this._awAutoBtn = this.add.image(portraitX, 35, 'btn_a_normal').setDisplaySize(83, 28);
+            this._awAutoBtn.setTint(0x38bdf8);
+        } else {
+            this._awAutoBtn = this.add.rectangle(portraitX, 35, 83, 28, THEME.BG).setStrokeStyle(1, THEME.BORDER);
+        }
+        this._awAutoText = this.add.text(portraitX, 35, "AUTO: OFF", {
+            fontSize: "11px",
+            fontStyle: 'bold',
+            color: "#e0f2fe",
+            fontFamily: "Outfit, Inter, sans-serif",
+            stroke: "#000000",
+            strokeThickness: 3
+        }).setOrigin(0.5);
+        this._awAutoBtn.setInteractive({ useHandCursor: true });
+        this._awAutoBtn.on('pointerover', () => {
+            if (this.textures.exists('btn_a_hover')) this._awAutoBtn.setTexture('btn_a_hover');
+            this._awAutoBtn.setTint(0x38bdf8);
+        });
+        this._awAutoBtn.on('pointerout', () => {
+            const isAuto = this.activePlayer && this.activePlayer.isAuto;
+            if (this.textures.exists('btn_a_normal')) {
+                this._awAutoBtn.setTexture(isAuto ? (this.textures.exists('btn_a_active') ? 'btn_a_active' : 'btn_a_normal') : 'btn_a_normal');
+            }
+            this._awAutoBtn.setTint(0x38bdf8);
+        });
         this._awAutoBtn.on('pointerdown', () => {
             if (this.activePlayer) {
+                if (this.textures.exists('btn_a_active')) this._awAutoBtn.setTexture('btn_a_active');
+                this._awAutoBtn.setTint(0x38bdf8);
                 this.activePlayer.isAuto = !this.activePlayer.isAuto;
                 this._renderActionWindow();
                 this.activePlayer.updateActionBadge();
             }
         });
+        this._awAutoBtn.on('pointerup', () => {
+            const isAuto = this.activePlayer && this.activePlayer.isAuto;
+            if (this.textures.exists('btn_a_normal')) {
+                this._awAutoBtn.setTexture(isAuto ? (this.textures.exists('btn_a_active') ? 'btn_a_active' : 'btn_a_normal') : 'btn_a_normal');
+            }
+            this._awAutoBtn.setTint(0x38bdf8);
+        });
 
-        const secX = 50;
-        const secW = 350;
+        const secX = 48;
+        const secW = 316;
+        const leftLabelX = -100;
 
         // IN EFFECT
-        const effY = -120; // Top is -137.5
-        this._awEffectsSection = this.add.rectangle(secX, effY, secW, 35, 0x12192b).setStrokeStyle(1, 0x334155).setInteractive({ useHandCursor: true });
+        const effY = -120; // Top is -136.5
+        if (this.textures.exists('bg_card_x12')) {
+            this._awEffectsSection = this.add.image(secX, effY, 'bg_card_x12').setDisplaySize(secW, 33);
+            this._awEffectsSection.setTint(0x38bdf8);
+        } else {
+            this._awEffectsSection = this.add.rectangle(secX, effY, secW, 33, 0x12192b).setStrokeStyle(1, 0x334155);
+        }
+        this._awEffectsSection.setInteractive({ useHandCursor: true });
         this._awEffectsSection.on('pointerdown', () => {
             if (this.activePlayer) this._showStatusModal(this.activePlayer);
         });
-        this._awLabelEffect = this.add.text(-115, effY - 17.5, " STATUS EFFECT ", { fontSize: "10px", fontStyle: "bold", color: THEME.TEXT_MUTED, backgroundColor: "#111827" }).setOrigin(0, 0.5);
-        this._awEffectsContainer = this.add.container(-115, effY); // Icons rendered horizontally here
+        this._awLabelEffect = this.add.text(leftLabelX, effY - 16.5, " STATUS EFFECT ", {
+            fontSize: "10px",
+            fontStyle: "bold",
+            fontFamily: "Outfit, Inter, sans-serif",
+            color: "#38bdf8",
+            backgroundColor: "#070d19"
+        }).setOrigin(0, 0.5);
+        this._awEffectsContainer = this.add.container(leftLabelX, effY); // Icons rendered horizontally here
 
         // SKILL
-        const skillY = -60; // Top is -97.5, Bottom is -22.5
-        this._awSkillsSection = this.add.rectangle(secX, skillY, secW, 75, 0x12192b).setStrokeStyle(1, 0x334155);
-        this._awLabelSkill = this.add.text(-115, skillY - 37.5, " SKILL ", { fontSize: "10px", fontStyle: "bold", color: THEME.TEXT_MUTED, backgroundColor: "#111827" }).setOrigin(0, 0.5);
-        this._awSkillsContainer = this.add.container(-125, skillY);
+        const skillY = -60; // Top is -96.5
+        if (this.textures.exists('bg_card_x12')) {
+            this._awSkillsSection = this.add.image(secX, skillY, 'bg_card_x12').setDisplaySize(secW, 73);
+            this._awSkillsSection.setTint(0x38bdf8);
+        } else {
+            this._awSkillsSection = this.add.rectangle(secX, skillY, secW, 73, 0x12192b).setStrokeStyle(1, 0x334155);
+        }
+        this._awLabelSkill = this.add.text(leftLabelX, skillY - 36.5, " SKILL ", {
+            fontSize: "10px",
+            fontStyle: "bold",
+            fontFamily: "Outfit, Inter, sans-serif",
+            color: "#38bdf8",
+            backgroundColor: "#070d19"
+        }).setOrigin(0, 0.5);
+        this._awSkillsContainer = this.add.container(0, skillY);
 
         // MAIN ACTION
-        const atkY = 17; // Top is -16, Bottom is 50
-        this._awAtkSection = this.add.rectangle(secX, atkY, secW, 66, 0x12192b).setStrokeStyle(1, 0x334155);
-        this._awLabelAction = this.add.text(-115, atkY - 33, " MAIN ACTION ", { fontSize: "10px", fontStyle: "bold", color: THEME.TEXT_MUTED, backgroundColor: "#111827" }).setOrigin(0, 0.5);
+        const atkY = 17; // Top is -15
+        if (this.textures.exists('bg_card_x12')) {
+            this._awAtkSection = this.add.image(secX, atkY, 'bg_card_x12').setDisplaySize(secW, 64);
+            this._awAtkSection.setTint(0x38bdf8);
+        } else {
+            this._awAtkSection = this.add.rectangle(secX, atkY, secW, 64, 0x12192b).setStrokeStyle(1, 0x334155);
+        }
+        this._awLabelAction = this.add.text(leftLabelX, atkY - 32, " MAIN ACTION ", {
+            fontSize: "10px",
+            fontStyle: "bold",
+            fontFamily: "Outfit, Inter, sans-serif",
+            color: "#38bdf8",
+            backgroundColor: "#070d19"
+        }).setOrigin(0, 0.5);
 
-        this._awBasicBtn = this.add.rectangle(-35, atkY, 140, 40, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive();
-        this._awBasicText = this.add.text(-35, atkY, "BASIC ATTACK ⚔", { fontSize: "12px", fontStyle: "bold", color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
-        this._awBasicOverlay = this.add.rectangle(-35, atkY, 140, 40, 0x000000, 0.5).setVisible(false);
-        this._awBasicBtn.on('pointerdown', () => this._selectAction('basic_attack'));
+        if (this.textures.exists('btn_a_normal')) {
+            this._awBasicBtn = this.add.image(-32, atkY, 'btn_a_normal').setDisplaySize(134, 38);
+            this._awBasicBtn.setTint(0x38bdf8); // Sky Blue tint for Basic Attack
+        } else {
+            this._awBasicBtn = this.add.rectangle(-32, atkY, 134, 38, THEME.PANEL).setStrokeStyle(1, THEME.BORDER);
+        }
+        this._awBasicText = this.add.text(-32, atkY, "BASIC ATTACK ⚔", {
+            fontSize: "12px",
+            fontStyle: "bold",
+            fontFamily: "Outfit, Inter, sans-serif",
+            color: "#ffffff",
+            stroke: "#000000",
+            strokeThickness: 3
+        }).setOrigin(0.5);
 
-        this._awSpecialBtn = this.add.rectangle(135, atkY, 140, 40, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive();
-        this._awSpecialText = this.add.text(135, atkY, "SPECIAL ATTACK ✦", { fontSize: "12px", fontStyle: "bold", color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
-        this._awSpecialOverlay = this.add.rectangle(135, atkY, 140, 40, 0x000000, 0.5).setVisible(false);
+        this._awBasicBtn.setInteractive({ useHandCursor: true });
+        this._awBasicBtn.on('pointerover', () => {
+            if (this._awBasicBtnDisabled) return;
+            if (this.textures.exists('btn_a_hover')) this._awBasicBtn.setTexture('btn_a_hover');
+            this._awBasicBtn.setTint(0x38bdf8);
+        });
+        this._awBasicBtn.on('pointerout', () => {
+            if (this._awBasicBtnDisabled) return;
+            if (this.textures.exists('btn_a_normal')) {
+                this._awBasicBtn.setTexture(this._awBasicQueued ? (this.textures.exists('btn_a_active') ? 'btn_a_active' : 'btn_a_normal') : 'btn_a_normal');
+            }
+            this._awBasicBtn.setTint(0x38bdf8);
+        });
+        this._awBasicBtn.on('pointerdown', () => {
+            if (this._awBasicBtnDisabled) return;
+            if (this.textures.exists('btn_a_active')) this._awBasicBtn.setTexture('btn_a_active');
+            this._awBasicBtn.setTint(0x38bdf8);
+            this._selectAction('basic_attack');
+        });
+        this._awBasicBtn.on('pointerup', () => {
+            if (this._awBasicBtnDisabled) return;
+            if (this.textures.exists('btn_a_normal')) {
+                this._awBasicBtn.setTexture(this._awBasicQueued ? (this.textures.exists('btn_a_active') ? 'btn_a_active' : 'btn_a_normal') : 'btn_a_normal');
+            }
+            this._awBasicBtn.setTint(0x38bdf8);
+        });
+
+        if (this.textures.exists('btn_a_normal')) {
+            this._awSpecialBtn = this.add.image(128, atkY, 'btn_a_normal').setDisplaySize(134, 38);
+            this._awSpecialBtn.setTint(0x38bdf8); // Sky Blue tint
+        } else {
+            this._awSpecialBtn = this.add.rectangle(128, atkY, 134, 38, THEME.PANEL).setStrokeStyle(1, THEME.BORDER);
+        }
+        this._awSpecialText = this.add.text(128, atkY, "SPECIAL ATTACK ✦", {
+            fontSize: "12px",
+            fontStyle: "bold",
+            fontFamily: "Outfit, Inter, sans-serif",
+            color: "#ffffff",
+            stroke: "#000000",
+            strokeThickness: 3
+        }).setOrigin(0.5);
+
+        this._awSpecialBtn.setInteractive({ useHandCursor: true });
+        this._awSpecialBtn.on('pointerover', () => {
+            if (this._awSpecialBtnDisabled) return;
+            if (this.textures.exists('btn_a_hover')) this._awSpecialBtn.setTexture('btn_a_hover');
+            this._awSpecialBtn.setTint(0x38bdf8);
+        });
+        this._awSpecialBtn.on('pointerout', () => {
+            if (this._awSpecialBtnDisabled) return;
+            if (this.textures.exists('btn_a_normal')) {
+                this._awSpecialBtn.setTexture(this._awSpecialQueued ? (this.textures.exists('btn_a_active') ? 'btn_a_active' : 'btn_a_normal') : 'btn_a_normal');
+            }
+            this._awSpecialBtn.setTint(0x38bdf8);
+        });
         this._awSpecialBtn.on('pointerdown', () => {
+            if (this._awSpecialBtnDisabled) return;
+            if (this.textures.exists('btn_a_active')) this._awSpecialBtn.setTexture('btn_a_active');
+            this._awSpecialBtn.setTint(0x38bdf8);
             if (this.activePlayer && this.activePlayer.specialBar >= this.activePlayer.specialMax) {
                 this._selectAction('special_attack');
             }
+        });
+        this._awSpecialBtn.on('pointerup', () => {
+            if (this._awSpecialBtnDisabled) return;
+            if (this.textures.exists('btn_a_normal')) {
+                this._awSpecialBtn.setTexture(this._awSpecialQueued ? (this.textures.exists('btn_a_active') ? 'btn_a_active' : 'btn_a_normal') : 'btn_a_normal');
+            }
+            this._awSpecialBtn.setTint(0x38bdf8);
         });
 
         this.actionWindowContainer.add([
             bg,
             this._awCardBg, this._awPortrait,
             this._awAutoBtn, this._awAutoText,
-            this._awEffectsSection, this._awLabelEffect, this._awEffectsContainer,
-            this._awSkillsSection, this._awLabelSkill, this._awSkillsContainer,
-            this._awAtkSection, this._awLabelAction, this._awBasicBtn, this._awBasicText, this._awBasicOverlay,
-            this._awSpecialBtn, this._awSpecialText, this._awSpecialOverlay
+            this._awEffectsSection, this._awSkillsSection, this._awAtkSection,
+            this._awLabelEffect, this._awLabelSkill, this._awLabelAction,
+            this._awEffectsContainer, this._awSkillsContainer,
+            this._awBasicBtn, this._awBasicText,
+            this._awSpecialBtn, this._awSpecialText
         ]);
     }
 
@@ -1105,13 +1444,14 @@ export default class BattleScene extends Phaser.Scene {
         this._actionWindowOpen = true;
         this._backBtnContainer.setVisible(true);
         this._renderActionWindow();
-        this.tweens.add({ targets: this.actionWindowContainer, x: 240, duration: 250, ease: 'Cubic.easeOut' });
+        this.actionWindowContainer.setPosition(240, 1200);
+        this.tweens.add({ targets: this.actionWindowContainer, y: 697, duration: 300, ease: 'Cubic.easeOut' });
     }
 
     closeActionWindow() {
         this._actionWindowOpen = false;
         this._backBtnContainer.setVisible(false);
-        this.tweens.add({ targets: this.actionWindowContainer, x: 750, duration: 250, ease: 'Cubic.easeIn' });
+        this.tweens.add({ targets: this.actionWindowContainer, y: 1200, duration: 300, ease: 'Cubic.easeIn' });
         this._setActive(null);
     }
 
@@ -1145,33 +1485,56 @@ export default class BattleScene extends Phaser.Scene {
         let portTex = `portrait_${keyId}`;
         if (this.textures.exists(portTex)) {
             this._awPortrait.setTexture(portTex);
-            const imgW = this._awPortrait.width || 1;
-            this._awPortrait.setScale(85 / imgW);
+            const imgW = this.textures.get(portTex).getSourceImage().width;
+            if (imgW > 0) this._awPortrait.setScale(83 / imgW);
         } else {
             this._awPortrait.setTexture('');
         }
 
         this._awAutoText.setText(p.isAuto ? "AUTO: ON" : "AUTO: OFF");
-        this._awAutoText.setColor(p.isAuto ? "#3b82f6" : THEME.TEXT_SECONDARY);
-        this._awAutoBtn.setStrokeStyle(1, p.isAuto ? 0x3b82f6 : THEME.BORDER);
+        this._awAutoText.setColor(p.isAuto ? "#ffffff" : "#e0f2fe");
+        if (this.textures.exists('btn_a_normal')) {
+            this._awAutoBtn.setTexture(p.isAuto ? (this.textures.exists('btn_a_active') ? 'btn_a_active' : 'btn_a_normal') : 'btn_a_normal');
+        }
+        if (this._awAutoBtn.setTint) {
+            this._awAutoBtn.setTint(0x38bdf8);
+        }
 
         const isAnyQueued = p.queuedAction.type !== 'none';
 
         const isBasic = p.queuedAction.type === 'basic_attack';
         const basicDisabled = isStunned || (isAnyQueued && !isBasic);
-        this._awBasicBtn.setAlpha(1);
-        this._awBasicText.setAlpha(1);
-        this._awBasicOverlay.setVisible(basicDisabled);
-        this._awBasicBtn.setStrokeStyle(1, isBasic ? THEME.HEALTH : THEME.BORDER);
+        this._awBasicBtnDisabled = basicDisabled;
+        this._awBasicQueued = isBasic;
+
+        this._awBasicBtn.setAlpha(basicDisabled ? 0.4 : 1);
+        this._awBasicText.setAlpha(basicDisabled ? 0.4 : 1);
+        if (this.textures.exists('btn_a_disabled') && basicDisabled) {
+            this._awBasicBtn.setTexture('btn_a_disabled');
+        } else if (this.textures.exists('btn_a_normal')) {
+            this._awBasicBtn.setTexture(isBasic ? (this.textures.exists('btn_a_active') ? 'btn_a_active' : 'btn_a_normal') : 'btn_a_normal');
+        }
+        if (this._awBasicBtn.setTint) {
+            this._awBasicBtn.setTint(basicDisabled ? 0x475569 : 0x38bdf8);
+        }
 
         const saRdy = p.specialBar >= p.specialMax;
         const isSpecial = p.queuedAction.type === 'special_attack';
         const specialDisabled = isStunned || !saRdy || (isAnyQueued && !isSpecial);
-        this._awSpecialBtn.setAlpha(1);
-        this._awSpecialText.setAlpha(1);
-        this._awSpecialText.setColor(saRdy ? (isSpecial ? "#fff" : "#f1c40f") : THEME.TEXT_MUTED);
-        this._awSpecialOverlay.setVisible(specialDisabled);
-        this._awSpecialBtn.setStrokeStyle(1, isSpecial ? 0xf1c40f : THEME.BORDER);
+        this._awSpecialBtnDisabled = specialDisabled;
+        this._awSpecialQueued = isSpecial;
+
+        this._awSpecialBtn.setAlpha(specialDisabled ? 0.4 : 1);
+        this._awSpecialText.setAlpha(specialDisabled ? 0.4 : 1);
+        this._awSpecialText.setColor(saRdy ? "#ffffff" : "#94a3b8");
+        if (this.textures.exists('btn_a_disabled') && specialDisabled) {
+            this._awSpecialBtn.setTexture('btn_a_disabled');
+        } else if (this.textures.exists('btn_a_normal')) {
+            this._awSpecialBtn.setTexture(isSpecial ? (this.textures.exists('btn_a_active') ? 'btn_a_active' : 'btn_a_normal') : 'btn_a_normal');
+        }
+        if (this._awSpecialBtn.setTint) {
+            this._awSpecialBtn.setTint(specialDisabled ? 0x475569 : 0x38bdf8);
+        }
 
         this._awSkillsContainer.removeAll(true);
         const skills = [...p.skills].sort((a, b) => {
@@ -1191,10 +1554,13 @@ export default class BattleScene extends Phaser.Scene {
             const canUse = (cd === 0) && !isStunned;
             const isQueued = p.queuedAction.type === 'skill' && p.queuedAction.skill_id === sk.id;
 
-            const sx = 55 + (skillIndex * 80);
+            const cardW = 48;
+            const cardH = 48;
+            const radius = 2;
+            const sx = -60 + (skillIndex * 66);
             skillIndex++;
 
-            let strokeColor = THEME.BORDER;
+            let strokeColor = 0x334155;
             const sType = (sk.type || '').toLowerCase();
 
             if (sType.includes('damage')) strokeColor = 0xe74c3c;
@@ -1202,37 +1568,46 @@ export default class BattleScene extends Phaser.Scene {
             else if (sType.includes('buff') || sType.includes('support')) strokeColor = 0xf1c40f;
             else if (sType.includes('heal') || sType.includes('revive') || sType.includes('cleanse')) strokeColor = 0x2ecc71;
 
-            if (isQueued) strokeColor = THEME.AETHER;
+            if (isQueued) strokeColor = 0x38bdf8;
 
-            const bgR = this.add.rectangle(sx, 0, 60, 60, THEME.PANEL).setStrokeStyle(1, strokeColor);
-            bgR.setAlpha(1);
+            const skG = this.add.graphics();
+            skG.fillStyle(0x070d19, 1.0);
+            skG.fillRoundedRect(sx - cardW / 2, -cardH / 2, cardW, cardH, radius);
+            skG.lineStyle(1.5, strokeColor, 1.0);
+            skG.strokeRoundedRect(sx - cardW / 2, -cardH / 2, cardW, cardH, radius);
 
-            const displayName = sk.name.length > 10 ? sk.name.substring(0, 8) + "..." : sk.name;
-            const nm = this.add.text(sx, -5, displayName, { fontSize: "10px", color: THEME.TEXT_PRIMARY, fontStyle: "bold", wordWrap: { width: 55 }, align: 'center' }).setOrigin(0.5);
-            nm.setAlpha(1);
+            const displayName = sk.name.length > 9 ? sk.name.substring(0, 7) + "..." : sk.name;
+            const nm = this.add.text(sx, -3, displayName, { fontSize: "9px", color: "#ffffff", fontStyle: "bold", wordWrap: { width: 41 }, align: 'center' }).setOrigin(0.5);
 
-            const elements = [bgR, nm];
+            const elements = [skG, nm];
 
             if (cd > 0) {
-                const cdOverlay = this.add.rectangle(sx, 0, 60, 60, 0x000000, 0.6);
-                const cdText = this.add.text(sx, 0, cd.toString(), { fontSize: "24px", color: "#ffffff", fontStyle: "bold" }).setOrigin(0.5);
-                elements.push(cdOverlay, cdText);
+                const cdOverlayG = this.add.graphics();
+                cdOverlayG.fillStyle(0x000000, 0.65);
+                cdOverlayG.fillRoundedRect(sx - cardW / 2, -cardH / 2, cardW, cardH, radius);
+                const cdText = this.add.text(sx, 0, cd.toString(), { fontSize: "20px", color: "#ffffff", fontStyle: "bold" }).setOrigin(0.5);
+                elements.push(cdOverlayG, cdText);
             } else {
-                const cdT = this.add.text(sx, 15, "READY", { fontSize: "9px", color: THEME.TEXT_MUTED }).setOrigin(0.5);
+                const cdT = this.add.text(sx, 13, "READY", { fontSize: "8px", color: "#94a3b8" }).setOrigin(0.5);
                 elements.push(cdT);
 
                 const skillDisabled = isStunned || (isAnyQueued && !isQueued);
                 if (skillDisabled) {
-                    const disabledOverlay = this.add.rectangle(sx, 0, 60, 60, 0x000000, 0.5);
-                    elements.push(disabledOverlay);
+                    const disabledOverlayG = this.add.graphics();
+                    disabledOverlayG.fillStyle(0x000000, 0.5);
+                    disabledOverlayG.fillRoundedRect(sx - cardW / 2, -cardH / 2, cardW, cardH, radius);
+                    elements.push(disabledOverlayG);
                 }
             }
+
+            const hitZone = this.add.rectangle(sx, 0, cardW, cardH, 0x000000, 0);
+            elements.push(hitZone);
 
             this._awSkillsContainer.add(elements);
 
             if (canUse) {
-                bgR.setInteractive();
-                bgR.on("pointerdown", () => this._selectAction('skill', sk.id, sk.name));
+                hitZone.setInteractive({ useHandCursor: true });
+                hitZone.on("pointerdown", () => this._selectAction('skill', sk.id, sk.name));
             }
         });
 
@@ -1242,7 +1617,7 @@ export default class BattleScene extends Phaser.Scene {
             const sups = { 0: '', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹' };
             visibleEffects.forEach((e, idx) => {
                 const isBuff = (e.effect_type || '').toLowerCase() === 'buff';
-                const color = isBuff ? '#f1c40f' : '#7ec8e3';
+                const color = isBuff ? '#38bdf8' : '#ef4444';
 
                 let emoji = '🔮';
                 const stat = (e.target_stat || '').toUpperCase();
@@ -1422,20 +1797,53 @@ export default class BattleScene extends Phaser.Scene {
     _showCenterAnim(textStr, colorStr = "#ffffff") {
         const cx = this.cameras.main.width / 2;
         const cy = this.cameras.main.height / 2;
-        const animText = this.add.text(cx, cy, textStr, {
-            fontSize: "36px", fontStyle: "bold", fontFamily: "Outfit", align: "center",
-            color: colorStr, letterSpacing: 4, stroke: "#000", strokeThickness: 4,
-            wordWrap: { width: this.cameras.main.width - 60 }
-        }).setOrigin(0.5).setDepth(250).setScale(0.5).setAlpha(0);
 
+        const isVictory = textStr.includes("VICTORY");
+        const fontSize = isVictory ? "56px" : "44px";
+
+        const animText = this.add.text(cx, cy, textStr, {
+            fontSize: fontSize,
+            fontStyle: "bold",
+            fontFamily: "Outfit, Inter, sans-serif",
+            align: "center",
+            color: colorStr,
+            letterSpacing: isVictory ? 6 : 4,
+            stroke: "#000000",
+            strokeThickness: 8,
+            shadow: { offsetX: 0, offsetY: 4, color: '#000000', blur: 12, stroke: true, fill: true },
+            wordWrap: { width: this.cameras.main.width - 40 }
+        }).setOrigin(0.5).setDepth(250).setScale(2.5).setAlpha(0);
+
+        // Micro camera impact shake on victory
+        if (isVictory && this.cameras && this.cameras.main) {
+            this.cameras.main.shake(200, 0.006);
+        }
+
+        // Phase 1: Heavy impact slam from 2.5x scale down to 1.0x scale
         this.tweens.add({
-            targets: animText, scale: 1.2, alpha: 1, duration: 400, ease: 'Back.out',
+            targets: animText,
+            scale: 1.0,
+            alpha: 1,
+            duration: 300,
+            ease: 'Back.easeOut',
             onComplete: () => {
-                this.time.delayedCall(1200, () => {
-                    this.tweens.add({
-                        targets: animText, alpha: 0, scale: 1.5, duration: 300,
-                        onComplete: () => animText.destroy()
-                    });
+                // Phase 2: Slow dramatic expansion creep during display hold
+                this.tweens.add({
+                    targets: animText,
+                    scale: 1.15,
+                    duration: 1200,
+                    ease: 'Sine.easeInOut',
+                    onComplete: () => {
+                        // Phase 3: Explosive exit zoom and fade out
+                        this.tweens.add({
+                            targets: animText,
+                            alpha: 0,
+                            scale: 1.7,
+                            duration: 300,
+                            ease: 'Power2.easeIn',
+                            onComplete: () => animText.destroy()
+                        });
+                    }
                 });
             }
         });
@@ -1635,65 +2043,95 @@ export default class BattleScene extends Phaser.Scene {
             this._blackOverlay = this.add.rectangle(cx, cy, W, H, 0x000000, 0.95).setDepth(190);
         }
 
-        const startText = this.add.text(cx, cy, "START!", {
-            fontSize: "48px",
-            fontStyle: "bold",
-            fontFamily: "Outfit",
-            color: THEME.TEXT_PRIMARY,
-            letterSpacing: 8
-        }).setOrigin(0.5).setDepth(200).setScale(0.5).setAlpha(0);
+        const finishStartAnim = () => {
+            if (this._blackOverlay) {
+                this._blackOverlay.destroy();
+                this._blackOverlay = null;
+            }
 
+            // FADE IN ENEMIES (Sprite + HUD)
+            const fadeTargets = [];
+            this.enemies.forEach((enemy, idx) => {
+                fadeTargets.push(enemy);
+                if (this.enemyHUDs[idx] && this.enemyHUDs[idx].container) {
+                    fadeTargets.push(this.enemyHUDs[idx].container);
+                }
+            });
+
+            if (fadeTargets.length > 0) {
+                this.tweens.add({
+                    targets: fadeTargets,
+                    alpha: 1,
+                    duration: 1000,
+                    ease: 'Sine.easeInOut'
+                });
+            }
+        };
+
+        // Safety fallback to guarantee overlay destruction if animation stutters (set to 3500ms so it doesn't race against normal 1800ms sequence)
+        this.time.delayedCall(3500, () => {
+            if (this._blackOverlay) {
+                finishStartAnim();
+            }
+        });
+
+        const startText = this.add.text(cx, cy, "START!", {
+            fontSize: "64px",
+            fontStyle: "bold",
+            fontFamily: "Outfit, Inter, sans-serif",
+            color: "#ffed4a",
+            letterSpacing: 8,
+            stroke: "#000000",
+            strokeThickness: 8,
+            shadow: { offsetX: 0, offsetY: 4, color: '#000000', blur: 12, stroke: true, fill: true }
+        }).setOrigin(0.5).setDepth(200).setScale(2.5).setAlpha(0);
+
+        if (this.bgmKey) playGlobalBGM(this, this.bgmKey);
+        this.playSFX('sfx_battleStart', { volume: 0.9 });
+        if (this.cameras && this.cameras.main) {
+            this.cameras.main.shake(250, 0.008);
+        }
+
+        // Phase 1: Heavy impact slam from 2.5x to 1.0x
         this.tweens.add({
             targets: startText,
-            scale: 1.2,
+            scale: 1.0,
             alpha: 1,
             duration: 300,
-            ease: 'Back.out',
-            onStart: () => {
-                if (this.bgmKey) playGlobalBGM(this, this.bgmKey);
-                this.playSFX('sfx_battleStart', { volume: 0.9 });
-            },
+            ease: 'Back.easeOut',
             onComplete: () => {
-                this.time.delayedCall(800, () => {
-                    this.tweens.add({
-                        targets: startText,
-                        scale: 1.5,
-                        alpha: 0,
-                        duration: 300,
-                        onComplete: () => {
-                            startText.destroy();
-                            if (this._blackOverlay) {
-                                this.tweens.add({
-                                    targets: this._blackOverlay,
-                                    alpha: 0,
-                                    duration: 400,
-                                    ease: 'Power2',
-                                    onComplete: () => {
-                                        this._blackOverlay.destroy();
-                                        this._blackOverlay = null;
-
-                                        // FADE IN ENEMIES (Sprite + HUD)
-                                        const fadeTargets = [];
-                                        this.enemies.forEach((enemy, idx) => {
-                                            fadeTargets.push(enemy);
-                                            if (this.enemyHUDs[idx] && this.enemyHUDs[idx].container) {
-                                                fadeTargets.push(this.enemyHUDs[idx].container);
-                                            }
-                                        });
-
-                                        if (fadeTargets.length > 0) {
-                                            this.tweens.add({
-                                                targets: fadeTargets,
-                                                alpha: 1,
-                                                duration: 1000,
-                                                ease: 'Sine.easeInOut'
-                                            });
+                // Phase 2: Slow expansion creep
+                this.tweens.add({
+                    targets: startText,
+                    scale: 1.15,
+                    duration: 600,
+                    ease: 'Sine.easeInOut',
+                    onComplete: () => {
+                        // Phase 3: Explosive exit zoom and fade out
+                        this.tweens.add({
+                            targets: startText,
+                            alpha: 0,
+                            scale: 1.8,
+                            duration: 250,
+                            ease: 'Power2.easeIn',
+                            onComplete: () => {
+                                startText.destroy();
+                                if (this._blackOverlay) {
+                                    this.tweens.add({
+                                        targets: this._blackOverlay,
+                                        alpha: 0,
+                                        duration: 400,
+                                        ease: 'Power2',
+                                        onComplete: () => {
+                                            finishStartAnim();
                                         }
-                                    }
-                                });
+                                    });
+                                } else {
+                                    finishStartAnim();
+                                }
                             }
-                        }
-                    });
+                        });
+                    }
                 });
             }
         });
@@ -3151,33 +3589,71 @@ export default class BattleScene extends Phaser.Scene {
     _showStatusModal(entity) {
         if (!entity || entity.hp <= 0) return;
 
+        const isEnemy = !!(this.enemies && this.enemies.includes(entity));
+        const themeTint = isEnemy ? 0xef4444 : 0x38bdf8;
+        const themeColor = isEnemy ? "#ef4444" : "#38bdf8";
+
         const modalContainer = this.add.container(0, 0).setDepth(150);
 
-        const cover = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.7).setInteractive();
+        const cover = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.75).setInteractive();
         cover.on("pointerdown", (pointer, x, y, event) => {
             event.stopPropagation();
         });
         modalContainer.add(cover);
 
-        const windowBg = this.add.rectangle(CX, H / 2, 380, 400, 0x0d1b2a);
-        windowBg.setStrokeStyle(2, 0xe74c3c);
+        let windowBg;
+        const modalW = 420;
+        const modalH = 460;
+        if (this.textures.exists('bg_card_x100')) {
+            windowBg = this.add.image(CX, H / 2, 'bg_card_x100').setDisplaySize(modalW, modalH);
+            windowBg.setTint(themeTint);
+        } else {
+            windowBg = this.add.rectangle(CX, H / 2, modalW, modalH, 0x0d1b2a);
+            windowBg.setStrokeStyle(2, themeTint);
+        }
+        windowBg.setInteractive();
+        windowBg.on("pointerdown", (pointer, x, y, event) => event.stopPropagation());
         modalContainer.add(windowBg);
 
-        const title = this.add.text(CX, H / 2 - 170, `${entity.charName} - STATUS`, { fontSize: "16px", color: "#e74c3c", fontStyle: "bold" }).setOrigin(0.5);
+        const title = this.add.text(CX, H / 2 - 170, `${entity.charName} - STATUS`, {
+            fontSize: "16px",
+            color: themeColor,
+            fontStyle: "bold",
+            fontFamily: "Outfit, Inter, sans-serif",
+            stroke: "#000000",
+            strokeThickness: 3
+        }).setOrigin(0.5);
         modalContainer.add(title);
 
-        let currentY = H / 2 - 130;
+        let currentY = H / 2 - 125;
 
         const visibleEffects = entity.activeEffects || [];
         if (visibleEffects.length === 0) {
-            const noEffectTxt = this.add.text(CX, currentY + 50, "No Active Status Effects", { fontSize: "13px", color: "#aaaaaa", fontStyle: "italic" }).setOrigin(0.5);
+            const noEffectTxt = this.add.text(CX, currentY + 40, "No Active Status Effects", {
+                fontSize: "13px",
+                color: isEnemy ? "#f87171" : "#7dd3fc",
+                fontStyle: "italic",
+                fontFamily: "Outfit, Inter, sans-serif"
+            }).setOrigin(0.5);
             modalContainer.add(noEffectTxt);
         } else {
             visibleEffects.forEach((e) => {
                 const isBuff = (e.effect_type || '').toLowerCase() === 'buff';
-                const color = isBuff ? '#f1c40f' : '#7ec8e3';
 
-                let emoji = '❓';
+                let boxTint, textColor, valColor;
+                if (isEnemy) {
+                    // Monster Buff = Red (dangerous), Monster Debuff = Sky Blue (advantage for player)
+                    boxTint = isBuff ? 0xef4444 : 0x38bdf8;
+                    textColor = isBuff ? "#ef4444" : "#38bdf8";
+                    valColor = isBuff ? "#fca5a5" : "#e0f2fe";
+                } else {
+                    // Player Buff = Sky Blue (advantage for player), Player Debuff = Red (dangerous)
+                    boxTint = isBuff ? 0x38bdf8 : 0xef4444;
+                    textColor = isBuff ? "#38bdf8" : "#ef4444";
+                    valColor = isBuff ? "#e0f2fe" : "#fca5a5";
+                }
+
+                let emoji = '🔮';
                 const stat = (e.target_stat || '').toUpperCase();
                 if (stat === 'ATK') emoji = '⚔️';
                 else if (stat === 'DEF') emoji = '🛡️';
@@ -3193,23 +3669,80 @@ export default class BattleScene extends Phaser.Scene {
                 const durText = dur > 0 ? `(${dur} Turns)` : "(Permanent)";
                 const valueText = e.value ? `Value: ${Math.floor(e.value * 100)}%` : "";
 
-                const box = this.add.rectangle(CX, currentY, 340, 40, 0x111111).setStrokeStyle(1, 0x333333);
-                const emojiTxt = this.add.text(CX - 150, currentY, emoji, { fontSize: "16px" }).setOrigin(0.5);
-                const nameTxt = this.add.text(CX - 120, currentY, `${effectName} ${durText}`, { fontSize: "12px", color: color, fontStyle: "bold" }).setOrigin(0, 0.5);
-                const valTxt = this.add.text(CX + 150, currentY, valueText, { fontSize: "11px", color: "#aaaaaa" }).setOrigin(1, 0.5);
+                let box;
+                const itemW = 340;
+                const itemH = 42;
+                if (this.textures.exists('bg_card_x12')) {
+                    box = this.add.image(CX, currentY, 'bg_card_x12').setDisplaySize(itemW, itemH);
+                    box.setTint(boxTint);
+                } else {
+                    box = this.add.rectangle(CX, currentY, itemW, itemH, 0x111827).setStrokeStyle(1, boxTint);
+                }
+
+                const emojiTxt = this.add.text(CX - 145, currentY, emoji, { fontSize: "16px" }).setOrigin(0.5);
+                const nameTxt = this.add.text(CX - 120, currentY, `${effectName} ${durText}`, {
+                    fontSize: "12px",
+                    color: textColor,
+                    fontStyle: "bold",
+                    fontFamily: "Outfit, Inter, sans-serif",
+                    stroke: "#070d19",
+                    strokeThickness: 3
+                }).setOrigin(0, 0.5);
+                const valTxt = this.add.text(CX + 145, currentY, valueText, {
+                    fontSize: "11px",
+                    color: valColor,
+                    fontStyle: "bold",
+                    fontFamily: "Outfit, Inter, sans-serif",
+                    stroke: "#070d19",
+                    strokeThickness: 2
+                }).setOrigin(1, 0.5);
 
                 modalContainer.add([box, emojiTxt, nameTxt, valTxt]);
-                currentY += 45;
+                currentY += 48;
             });
         }
 
-        const closeBtn = this.add.rectangle(CX, H / 2 + 160, 100, 30, 0x2a0d0d).setStrokeStyle(1.5, 0xe74c3c).setInteractive({ useHandCursor: true });
-        const closeText = this.add.text(CX, H / 2 + 160, "CLOSE", { fontSize: "11px", color: "#ff8a80", fontStyle: "bold" }).setOrigin(0.5);
+        // Close Button using Button B asset
+        let closeBtn;
+        const btnW = 120;
+        const btnH = 36;
+        const closeY = H / 2 + 165;
+
+        if (this.textures.exists('btn_b_normal')) {
+            closeBtn = this.add.image(CX, closeY, 'btn_b_normal').setDisplaySize(btnW, btnH);
+            closeBtn.setTint(themeTint);
+        } else {
+            closeBtn = this.add.rectangle(CX, closeY, btnW, btnH, 0x111827).setStrokeStyle(1.5, themeTint);
+        }
+
+        const closeText = this.add.text(CX, closeY, "CLOSE", {
+            fontSize: "12px",
+            color: "#ffffff",
+            fontStyle: "bold",
+            fontFamily: "Outfit, Inter, sans-serif",
+            stroke: "#000000",
+            strokeThickness: 3
+        }).setOrigin(0.5);
+
         modalContainer.add([closeBtn, closeText]);
 
-        closeBtn.on("pointerover", () => closeBtn.setFillStyle(0x401515));
-        closeBtn.on("pointerout", () => closeBtn.setFillStyle(0x2a0d0d));
-        closeBtn.on("pointerdown", () => modalContainer.destroy());
+        closeBtn.setInteractive({ useHandCursor: true });
+        closeBtn.on("pointerover", () => {
+            if (this.textures.exists('btn_b_hover')) closeBtn.setTexture('btn_b_hover');
+            closeBtn.setTint(themeTint);
+        });
+        closeBtn.on("pointerout", () => {
+            if (this.textures.exists('btn_b_normal')) closeBtn.setTexture('btn_b_normal');
+            closeBtn.setTint(themeTint);
+        });
+        closeBtn.on("pointerdown", () => {
+            if (this.textures.exists('btn_b_active')) closeBtn.setTexture('btn_b_active');
+            closeBtn.setTint(themeTint);
+            modalContainer.destroy();
+        });
+        closeBtn.on("pointerup", () => {
+            if (this.textures.exists('btn_b_normal')) closeBtn.setTexture('btn_b_normal');
+        });
     }
 
     // ===== VFX SYSTEM =====

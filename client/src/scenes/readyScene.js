@@ -31,32 +31,47 @@ export default class ReadyScene extends Phaser.Scene {
 
         // "READY" Text
         const readyText = this.add.text(CX, CY, "READY", {
-            fontSize: "42px",
+            fontSize: "56px",
             fontStyle: "bold",
-            fontFamily: "Outfit",
-            color: THEME.TEXT_PRIMARY,
-            letterSpacing: 8
-        }).setOrigin(0.5).setAlpha(0).setScale(0.5);
+            fontFamily: "Outfit, Inter, sans-serif",
+            color: "#38bdf8",
+            letterSpacing: 8,
+            stroke: "#000000",
+            strokeThickness: 8,
+            shadow: { offsetX: 0, offsetY: 4, color: '#000000', blur: 12, stroke: true, fill: true }
+        }).setOrigin(0.5).setDepth(200).setAlpha(0).setScale(2.5);
 
-        // Tween for READY text (zoom in & fade)
+        if (this.cameras && this.cameras.main) {
+            this.cameras.main.shake(200, 0.006);
+        }
+
+        // Phase 1: Heavy impact slam from 2.5x to 1.0x
         this.tweens.add({
             targets: readyText,
-            scale: 1,
+            scale: 1.0,
             alpha: 1,
-            duration: 400,
-            ease: 'Back.out',
+            duration: 300,
+            ease: 'Back.easeOut',
             onComplete: () => {
-                // Wait briefly, then move to BattleScene
-                this.time.delayedCall(800, () => {
-                    // Fade out
-                    this.tweens.add({
-                        targets: [readyText],
-                        alpha: 0,
-                        duration: 300,
-                        onComplete: () => {
-                            this.scene.start('BattleScene', this.battleData);
-                        }
-                    });
+                // Phase 2: Slow expansion creep
+                this.tweens.add({
+                    targets: readyText,
+                    scale: 1.15,
+                    duration: 600,
+                    ease: 'Sine.easeInOut',
+                    onComplete: () => {
+                        // Phase 3: Explosive exit zoom and fade out
+                        this.tweens.add({
+                            targets: readyText,
+                            alpha: 0,
+                            scale: 1.7,
+                            duration: 250,
+                            ease: 'Power2.easeIn',
+                            onComplete: () => {
+                                this.scene.start('BattleScene', this.battleData);
+                            }
+                        });
+                    }
                 });
             }
         });
