@@ -157,12 +157,43 @@ exports.saveBattleResult = async (req, res) => {
             );
         }
 
-        // Ambil data stamina player yang tersisa untuk dikembalikan di response
+        // Ambil data stamina & gender player untuk dikembalikan di response & format asset MC
         const [playerRows] = await conn.query(
-            'SELECT stamina FROM players WHERE player_id = ?',
+            'SELECT username, gender, stamina FROM players WHERE player_id = ?',
             [playerId]
         );
-        const remainingStamina = playerRows[0] ? playerRows[0].stamina : 0;
+        const playerInfo = playerRows[0] || { username: 'Main Character', gender: 'Male', stamina: 0 };
+        const remainingStamina = playerInfo.stamina;
+        const genderSuffix = (playerInfo.gender || 'Male').toLowerCase();
+        const mcName = playerInfo.username || 'Main Character';
+
+        const formatMcPortrait = (mcId, portraitPath) => {
+            if (!portraitPath) return portraitPath;
+            let path = portraitPath;
+            if (mcId === 1) {
+                if (!path.includes('-male') && !path.includes('-female')) {
+                    path += `-${genderSuffix}`;
+                }
+            }
+            if (!path.endsWith('.png') && !path.endsWith('.jpg')) {
+                path += '.png';
+            }
+            return path;
+        };
+
+        const formatMcSquare = (mcId, squarePath) => {
+            if (!squarePath) return squarePath;
+            let path = squarePath;
+            if (mcId === 1) {
+                if (!path.includes('-male') && !path.includes('-female')) {
+                    path += `-${genderSuffix}`;
+                }
+            }
+            if (!path.endsWith('.png') && !path.endsWith('.jpg')) {
+                path += '.png';
+            }
+            return path;
+        };
 
         // 3. Cek apakah ini penyelesaian pertama kali
         const [existingQuest] = await conn.query(
@@ -296,15 +327,17 @@ exports.saveBattleResult = async (req, res) => {
                             [playerId, detail.unlocks_mc_id]
                         );
                         const [charDetail] = await conn.query(
-                            'SELECT mc_name AS name, mc_rarity AS rarity, mc_element AS element, mc_portrait_path FROM master_characters WHERE mc_id = ?',
+                            'SELECT mc_name AS name, mc_rarity AS rarity, mc_element AS element, mc_portrait_path, mc_square_path FROM master_characters WHERE mc_id = ?',
                             [detail.unlocks_mc_id]
                         );
-                        const cDetail = charDetail[0] || { name: 'Unknown Character', rarity: null, element: null, mc_portrait_path: null };
+                        const cDetail = charDetail[0] || { name: 'Unknown Character', rarity: null, element: null, mc_portrait_path: null, mc_square_path: null };
                         
                         obtainedRewards.push({
                             reward_type: 'Character', reward_item_id: detail.unlocks_mc_id, quantity: 1,
-                            name: cDetail.name, description: `Karakter terbuka via Senjata ${detail.name}!`, rarity: cDetail.rarity, element: cDetail.element,
-                            is_new_unlock: true, portrait_path: cDetail.mc_portrait_path
+                            name: detail.unlocks_mc_id === 1 ? mcName : cDetail.name, description: `Karakter terbuka via Senjata ${detail.name}!`, rarity: cDetail.rarity, element: cDetail.element,
+                            is_new_unlock: true,
+                            portrait_path: formatMcPortrait(detail.unlocks_mc_id, cDetail.mc_portrait_path),
+                            square_path: formatMcSquare(detail.unlocks_mc_id, cDetail.mc_square_path)
                         });
                     }
                 } else {
@@ -345,14 +378,16 @@ exports.saveBattleResult = async (req, res) => {
                     isDuplicate = true;
                 }
                 const [charDetail] = await conn.query(
-                    'SELECT mc_name AS name, mc_rarity AS rarity, mc_element AS element, mc_portrait_path FROM master_characters WHERE mc_id = ?',
+                    'SELECT mc_name AS name, mc_rarity AS rarity, mc_element AS element, mc_portrait_path, mc_square_path FROM master_characters WHERE mc_id = ?',
                     [item.reward_item_id]
                 );
-                const detail = charDetail[0] || { name: 'Unknown Character', rarity: null, element: null, mc_portrait_path: null };
+                const detail = charDetail[0] || { name: 'Unknown Character', rarity: null, element: null, mc_portrait_path: null, mc_square_path: null };
                 obtainedRewards.push({
                     reward_type: 'Character', reward_item_id: item.reward_item_id, quantity: item.quantity,
-                    name: detail.name, description: isDuplicate ? 'Sudah dimiliki (duplikat)' : null, rarity: detail.rarity, element: detail.element,
-                    is_new_unlock: !isDuplicate, portrait_path: detail.mc_portrait_path
+                    name: item.reward_item_id === 1 ? mcName : detail.name, description: isDuplicate ? 'Sudah dimiliki (duplikat)' : null, rarity: detail.rarity, element: detail.element,
+                    is_new_unlock: !isDuplicate,
+                    portrait_path: formatMcPortrait(item.reward_item_id, detail.mc_portrait_path),
+                    square_path: formatMcSquare(item.reward_item_id, detail.mc_square_path)
                 });
             }
         }
@@ -441,10 +476,10 @@ exports.saveBattleResult = async (req, res) => {
                             expData.party_exp_details.push({
                                 inv_id: char.inv_id,
                                 mc_id: char.mc_id,
-                                name: char.mc_name,
+                                name: char.mc_id === 1 ? mcName : char.mc_name,
                                 rarity: char.mc_rarity,
                                 element: char.mc_element,
-                                portrait_path: char.mc_portrait_path,
+                                portrait_path: formatMcPortrait(char.mc_id, char.mc_portrait_path),
                                 total_exp: newExp,
                                 current_level: realLevel,
                                 old_level: char.item_level,

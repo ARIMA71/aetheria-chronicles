@@ -100,18 +100,68 @@ export default class VictoryScene extends Phaser.Scene {
             PartyApi.getInventory(this.playerId)
         ])
             .then(([res, presetsRes, invRes]) => {
-                this.loadingText.destroy();
-                this.spinCircle.destroy();
+                let assetsToLoad = 0;
+                const checkAndLoadTex = (key, path) => {
+                    if (!path) return;
+                    let fullPath = path;
+                    if (!fullPath.endsWith('.png') && !fullPath.endsWith('.jpg')) fullPath += '.png';
+                    if (this.textures.exists(key)) {
+                        const tex = this.textures.get(key);
+                        const src = tex && tex.source && tex.source[0] && tex.source[0].src ? tex.source[0].src : '';
+                        const decodedSrc = decodeURIComponent(src);
+                        if (decodedSrc && !decodedSrc.includes(fullPath) && !decodedSrc.endsWith(fullPath)) {
+                            this.textures.remove(key);
+                        }
+                    }
+                    if (!this.textures.exists(key)) {
+                        this.load.image(key, fullPath);
+                        assetsToLoad++;
+                    }
+                };
 
-                if (res.status === "success") {
-                    this.renderVictoryData(res.data, presetsRes.data, invRes.data);
+                const chars = invRes && invRes.data && invRes.data.characters ? invRes.data.characters : [];
+                chars.forEach(c => {
+                    if (c.mc_portrait_path) checkAndLoadTex(`portrait_${c.mc_id}`, c.mc_portrait_path);
+                    if (c.mc_square_path) checkAndLoadTex(`char_sq_${c.mc_id}`, c.mc_square_path);
+                });
+
+                if (res && res.status === 'success' && res.data && res.data.obtained_rewards) {
+                    res.data.obtained_rewards.forEach(r => {
+                        if (r.reward_type === 'Character' || r.is_new_unlock) {
+                            const mcId = r.reward_item_id || r.mc_id;
+                            if (mcId) {
+                                if (r.portrait_path) checkAndLoadTex(`portrait_${mcId}`, r.portrait_path);
+                                if (r.square_path) {
+                                    checkAndLoadTex(`char_sq_${mcId}`, r.square_path);
+                                } else if (r.portrait_path) {
+                                    let sqPath = r.portrait_path.replace('potret', 'square');
+                                    checkAndLoadTex(`char_sq_${mcId}`, sqPath);
+                                }
+                            }
+                        }
+                    });
+                }
+
+                const proceed = () => {
+                    if (this.loadingText) this.loadingText.destroy();
+                    if (this.spinCircle) this.spinCircle.destroy();
+                    if (res.status === "success") {
+                        this.renderVictoryData(res.data, presetsRes.data, invRes.data);
+                    } else {
+                        this.showError(res.message || "Failed to process battle results.");
+                    }
+                };
+
+                if (assetsToLoad > 0) {
+                    this.load.once('complete', proceed);
+                    this.load.start();
                 } else {
-                    this.showError(res.message || "Failed to process battle results.");
+                    proceed();
                 }
             })
             .catch(err => {
-                this.loadingText.destroy();
-                this.spinCircle.destroy();
+                if (this.loadingText) this.loadingText.destroy();
+                if (this.spinCircle) this.spinCircle.destroy();
                 this.showError("Connection Error: " + err.message);
             });
     }
@@ -260,7 +310,10 @@ export default class VictoryScene extends Phaser.Scene {
         const lootPanelBg = this.add.rectangle(CX, lootBoxY + lootBoxH / 2, lootBoxW, lootBoxH, 0x0F172A, 0.7);
         lootPanelBg.setStrokeStyle(1.5, 0x1E293B);
 
-        if (rewards.length === 0) {
+        // Filter out Character rewards from standard Loot Grid (Character rewards are presented via Modal Popups)
+        const lootRewards = rewards.filter(r => r.reward_type !== 'Character');
+
+        if (lootRewards.length === 0) {
             this.add.text(CX, lootBoxY + lootBoxH / 2, "No rewards dropped.", {
                 fontSize: "14px", color: THEME.TEXT_MUTED, fontStyle: "italic"
             }).setOrigin(0.5);
@@ -277,11 +330,11 @@ export default class VictoryScene extends Phaser.Scene {
             const boxSize = 75;
             const padding = 15;
 
-            rewards.forEach((item, index) => {
+            lootRewards.forEach((item, index) => {
                 const row = Math.floor(index / maxCols);
                 const colInRow = index % maxCols;
 
-                const itemsInThisRow = Math.min(maxCols, rewards.length - row * maxCols);
+                const itemsInThisRow = Math.min(maxCols, lootRewards.length - row * maxCols);
                 const rowW = (itemsInThisRow * boxSize) + ((itemsInThisRow - 1) * padding);
                 const rowStartX = (W - rowW) / 2 + (boxSize / 2);
 
@@ -293,14 +346,12 @@ export default class VictoryScene extends Phaser.Scene {
                 let borderColor = THEME.BORDER;
                 if (item.reward_type === 'Currency') borderColor = 0xD4A017;
                 else if (item.reward_type === 'Weapon') borderColor = 0x94A3B8;
-                else if (item.reward_type === 'Character') borderColor = 0xA78BFA;
 
                 itemBg.setStrokeStyle(1, borderColor);
 
                 let iconTxt = "📦";
                 if (item.reward_type === 'Currency') iconTxt = "🪙";
                 else if (item.reward_type === 'Weapon') iconTxt = "⚔️";
-                else if (item.reward_type === 'Character') iconTxt = "👤";
 
                 const tIcon = this.add.text(ix, iy - 14, iconTxt, { fontSize: "24px" }).setOrigin(0.5);
                 const itemName = item.name ? item.name.substring(0, 10) : "";
@@ -312,7 +363,7 @@ export default class VictoryScene extends Phaser.Scene {
                 this.lootContainer.add([itemBg, tIcon, tName, tQty]);
             });
 
-            const rows = Math.ceil(rewards.length / maxCols);
+            const rows = Math.ceil(lootRewards.length / maxCols);
             const totalContentH = 30 + rows * (boxSize + padding);
             this.maxLootScroll = Math.max(0, totalContentH - lootBoxH);
 
@@ -499,11 +550,11 @@ export default class VictoryScene extends Phaser.Scene {
                 shape.fillCircle(elX, elY, 9);
                 elImg.setMask(shape.createGeometryMask());
                 const strokeCircle = this.add.circle(elX, elY, 9).setStrokeStyle(1, 0x0f172a);
-                modal.addMultiple([elImg, strokeCircle]);
+                modal.add([elImg, strokeCircle]);
             } else {
                 const elCircle = this.add.circle(elX, elY, 9, rarityColorInt).setStrokeStyle(1, 0x0f172a);
                 const elTxt = this.add.text(elX, elY, element.charAt(0).toUpperCase(), { fontSize: '10px', color: '#ffffff', fontStyle: 'bold', fontFamily: 'Outfit' }).setOrigin(0.5);
-                modal.addMultiple([elCircle, elTxt]);
+                modal.add([elCircle, elTxt]);
             }
 
             // Rarity Label on Bottom Left Corner

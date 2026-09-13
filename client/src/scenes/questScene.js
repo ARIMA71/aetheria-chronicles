@@ -87,9 +87,39 @@ export default class QuestScene extends Phaser.Scene {
             if (!this.textures.exists('element_earth')) { this.load.image('element_earth', 'assets/icons/elements/rock.png'); assetsToLoad++; }
 
             this.fullCharacters.forEach(c => {
-                if (c.mc_portrait_path && !this.textures.exists(`portrait_${c.mc_id}`)) {
-                    this.load.image(`portrait_${c.mc_id}`, c.mc_portrait_path);
-                    assetsToLoad++;
+                if (c.mc_portrait_path) {
+                    let pPath = c.mc_portrait_path;
+                    if (!pPath.endsWith('.png') && !pPath.endsWith('.jpg')) pPath += '.png';
+                    const pKey = `portrait_${c.mc_id}`;
+                    if (this.textures.exists(pKey)) {
+                        const tex = this.textures.get(pKey);
+                        const src = tex && tex.source && tex.source[0] && tex.source[0].src ? tex.source[0].src : '';
+                        const decodedSrc = decodeURIComponent(src);
+                        if (decodedSrc && !decodedSrc.includes(pPath) && !decodedSrc.endsWith(pPath)) {
+                            this.textures.remove(pKey);
+                        }
+                    }
+                    if (!this.textures.exists(pKey)) {
+                        this.load.image(pKey, pPath);
+                        assetsToLoad++;
+                    }
+                }
+                if (c.mc_square_path) {
+                    let sqPath = c.mc_square_path;
+                    if (!sqPath.endsWith('.png') && !sqPath.endsWith('.jpg')) sqPath += '.png';
+                    const sqKey = `char_sq_${c.mc_id}`;
+                    if (this.textures.exists(sqKey)) {
+                        const tex = this.textures.get(sqKey);
+                        const src = tex && tex.source && tex.source[0] && tex.source[0].src ? tex.source[0].src : '';
+                        const decodedSrc = decodeURIComponent(src);
+                        if (decodedSrc && !decodedSrc.includes(sqPath) && !decodedSrc.endsWith(sqPath)) {
+                            this.textures.remove(sqKey);
+                        }
+                    }
+                    if (!this.textures.exists(sqKey)) {
+                        this.load.image(sqKey, sqPath);
+                        assetsToLoad++;
+                    }
                 }
             });
 

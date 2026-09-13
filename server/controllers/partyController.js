@@ -79,9 +79,8 @@ exports.getPartyPresets = async (req, res) => {
 
                 const pppId = insertRes.insertId;
                 await conn.query(
-                    `INSERT INTO player_mc_skills (ppp_id, slot_number, ms_id) VALUES 
-                    (?, 1, 1), (?, 2, 2), (?, 3, 3), (?, 4, 4)`,
-                    [pppId, pppId, pppId, pppId]
+                    `INSERT INTO player_mc_skills (ppp_id, slot_number, ms_id) VALUES (?, 1, 1)`,
+                    [pppId]
                 );
 
                 // Refetch presets

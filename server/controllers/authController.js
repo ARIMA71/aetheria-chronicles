@@ -83,20 +83,12 @@ exports.register = async (req, res) => {
         const newPppId = presetResult.insertId;
 
         // --------------------------------------------------
-        // Langkah D: MC Default Skills (ms_id 1–4) — Parameterized Query
+        // Langkah D: MC Default Skill (Slot 1 → ms_id 1 Inspire)
         // --------------------------------------------------
-        const defaultSkills = [
-            [newPppId, 1, 1], // Slot 1 → ms_id 1 (Inspire)
-            [newPppId, 2, 2], // Slot 2 → ms_id 2
-            [newPppId, 3, 3], // Slot 3 → ms_id 3
-            [newPppId, 4, 4], // Slot 4 → ms_id 4
-        ];
-        for (const skill of defaultSkills) {
-            await conn.query(
-                'INSERT INTO player_mc_skills (ppp_id, slot_number, ms_id) VALUES (?, ?, ?)',
-                skill
-            );
-        }
+        await conn.query(
+            'INSERT INTO player_mc_skills (ppp_id, slot_number, ms_id) VALUES (?, 1, 1)',
+            [newPppId]
+        );
 
         // --------------------------------------------------
         // Langkah E: Starter Material — 3x Green Potion (mat_id: 6)

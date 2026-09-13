@@ -193,9 +193,26 @@ export default class BattleScene extends Phaser.Scene {
 
         chars.forEach(d => {
             const keyId = d.mc_id || d.id || d.slot;
-            if (d.sprite_path) { this.load.image(`sprite_${keyId}`, d.sprite_path); assetsToLoad++; }
-            if (d.portrait_path) { this.load.image(`portrait_${keyId}`, d.portrait_path); assetsToLoad++; }
-            if (d.splash_path) { this.load.image(`portrait_full_${keyId}`, d.splash_path); assetsToLoad++; }
+            const checkAndLoad = (key, path) => {
+                if (!path) return;
+                let fullPath = path;
+                if (!fullPath.endsWith('.png') && !fullPath.endsWith('.jpg')) fullPath += '.png';
+                if (this.textures.exists(key)) {
+                    const tex = this.textures.get(key);
+                    const src = tex && tex.source && tex.source[0] && tex.source[0].src ? tex.source[0].src : '';
+                    const decodedSrc = decodeURIComponent(src);
+                    if (decodedSrc && !decodedSrc.includes(fullPath) && !decodedSrc.endsWith(fullPath)) {
+                        this.textures.remove(key);
+                    }
+                }
+                if (!this.textures.exists(key)) {
+                    this.load.image(key, fullPath);
+                    assetsToLoad++;
+                }
+            };
+            checkAndLoad(`sprite_${keyId}`, d.sprite_path);
+            checkAndLoad(`portrait_${keyId}`, d.portrait_path);
+            checkAndLoad(`portrait_full_${keyId}`, d.splash_path);
         });
         const allEnemies = j.data.waves ? j.data.waves.flat() : (j.data.enemies || []);
         allEnemies.forEach(e => {
@@ -352,9 +369,26 @@ export default class BattleScene extends Phaser.Scene {
 
         chars.forEach(d => {
             const keyId = d.mc_id || d.id || d.slot;
-            if (d.sprite_path) { this.load.image(`sprite_${keyId}`, d.sprite_path); assetsToLoad++; }
-            if (d.portrait_path) { this.load.image(`portrait_${keyId}`, d.portrait_path); assetsToLoad++; }
-            if (d.splash_path) { this.load.image(`portrait_full_${keyId}`, d.splash_path); assetsToLoad++; }
+            const checkAndLoad = (key, path) => {
+                if (!path) return;
+                let fullPath = path;
+                if (!fullPath.endsWith('.png') && !fullPath.endsWith('.jpg')) fullPath += '.png';
+                if (this.textures.exists(key)) {
+                    const tex = this.textures.get(key);
+                    const src = tex && tex.source && tex.source[0] && tex.source[0].src ? tex.source[0].src : '';
+                    const decodedSrc = decodeURIComponent(src);
+                    if (decodedSrc && !decodedSrc.includes(fullPath) && !decodedSrc.endsWith(fullPath)) {
+                        this.textures.remove(key);
+                    }
+                }
+                if (!this.textures.exists(key)) {
+                    this.load.image(key, fullPath);
+                    assetsToLoad++;
+                }
+            };
+            checkAndLoad(`sprite_${keyId}`, d.sprite_path);
+            checkAndLoad(`portrait_${keyId}`, d.portrait_path);
+            checkAndLoad(`portrait_full_${keyId}`, d.splash_path);
         });
         const allEnemies = state.waves ? state.waves.flat() : (state.enemies || []);
         allEnemies.forEach(e => {
