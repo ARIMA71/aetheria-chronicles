@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { THEME } from '../main.js';
 import { checkSession } from '../utils/auth.js';
 import BattleApi from '../services/BattleApi.js';
+import TelemetryApi from '../services/TelemetryApi.js';
 
 const W = 480, H = 800, CX = 240, CY = 400;
 
@@ -54,6 +55,10 @@ export default class DefeatScene extends Phaser.Scene {
         if (this.bsId) {
             BattleApi.surrenderBattle(this.bsId, this.playerId).catch(e => console.error("Failed to surrender battle in DB:", e));
         }
+
+        // Send telemetry benchmark report to server log
+        const statusStr = this.isRetreat ? 'RETREAT' : 'DEFEAT';
+        TelemetryApi.reportBattleBenchmark(this.questId, statusStr);
 
         // Dim the background battle scene with darker overlay (transparency 88%)
         const sysW = this.scale.width;

@@ -1,5 +1,6 @@
 import { THEME } from '../main.js';
 import { clearSession } from '../utils/auth.js';
+import { API_BASE } from '../config.js';
 
 export default class TopMenuComponent {
     constructor(scene) {
@@ -807,7 +808,7 @@ export default class TopMenuComponent {
 
             try {
                 const token = localStorage.getItem('aetheria_token');
-                const res = await fetch('http://localhost:3000/api/auth/bind-account', {
+                const res = await fetch(`${API_BASE}/api/auth/bind-account`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

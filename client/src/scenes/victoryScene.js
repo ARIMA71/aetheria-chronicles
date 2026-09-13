@@ -3,6 +3,7 @@ import { THEME } from '../main.js';
 import { checkSession, getPlayerUsername } from '../utils/auth.js';
 import BattleApi from '../services/BattleApi.js';
 import PartyApi from '../services/PartyApi.js';
+import TelemetryApi from '../services/TelemetryApi.js';
 import { playGlobalBGM } from '../utils/audioManager.js';
 
 const W = 480, H = 800, CX = 240, CY = 400;
@@ -93,6 +94,9 @@ export default class VictoryScene extends Phaser.Scene {
         const raw = localStorage.getItem('aetheria_player');
         const playerData = raw ? JSON.parse(raw) : {};
         this.selectedPresetSlot = playerData.selected_preset_slot || 1;
+
+        // Send telemetry benchmark report to server log
+        TelemetryApi.reportBattleBenchmark(this.questId, 'VICTORY');
 
         Promise.all([
             BattleApi.saveBattleResult(payload),

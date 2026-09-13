@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { THEME } from '../main.js';
 import { checkSession } from '../utils/auth.js';
 import { playGlobalBGM } from '../utils/audioManager.js';
+import { API_BASE } from '../config.js';
 
 const W = 480, H = 800, CX = 240;
 
@@ -740,7 +741,7 @@ export default class AuthScene extends Phaser.Scene {
     async _doAuth(endpoint, username, password, gender, isRegister, errorDiv, submitBtn) {
         try {
             const payload = isRegister ? { username, gender } : { username, password };
-            const res = await fetch(`http://localhost:3000${endpoint}`, {
+            const res = await fetch(`${API_BASE}${endpoint}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)

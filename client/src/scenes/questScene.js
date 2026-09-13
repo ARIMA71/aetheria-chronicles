@@ -6,9 +6,10 @@ import BattleApi from '../services/BattleApi.js';
 import PartyApi from '../services/PartyApi.js';
 import { CameraScrollManager } from '../utils/cameraScroll.js';
 import TopMenuComponent from '../ui/TopMenuComponent.js';
+import { API_BASE as _ROOT } from '../config.js';
 
 const W = 480, H = 830, CX = 240;
-const API_BASE = 'http://localhost:3000/api';
+const API_BASE = `${_ROOT}/api`;
 
 // Area positions on the map (Staggered organic layout)
 const AREA_DOTS = [

@@ -3,8 +3,7 @@
  */
 
 import { stopGlobalBGM } from './audioManager.js';
-
-const API_BASE = 'http://localhost:3000';
+import { API_BASE } from '../config.js';
 const INACTIVITY_TIMEOUT = 10 * 60 * 1000; // 10 minutes in milliseconds
 const AUTO_REFRESH_TIMEOUT = 5 * 60 * 1000; // 5 minutes in milliseconds
 

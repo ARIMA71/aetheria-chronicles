@@ -5,6 +5,7 @@ import { checkSession, clearSession, saveCurrentScene } from '../utils/auth.js';
 import BattleApi from '../services/BattleApi.js';
 import PartyApi from '../services/PartyApi.js';
 import TopMenuComponent from '../ui/TopMenuComponent.js';
+import { API_BASE } from '../config.js';
 
 const W = 480, H = 880, CX = 240;
 
@@ -97,7 +98,7 @@ export default class MainMenuScene extends Phaser.Scene {
         if (!this.playerData || !this.playerData.player_id) return;
 
         try {
-            const res = await fetch(`http://localhost:3000/api/player/${this.playerData.player_id}`, {
+            const res = await fetch(`${API_BASE}/api/player/${this.playerData.player_id}`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }

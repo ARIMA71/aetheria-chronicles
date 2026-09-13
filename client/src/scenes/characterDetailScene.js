@@ -4,6 +4,7 @@ import { playGlobalBGM } from '../utils/audioManager.js';
 import { checkSession, saveCurrentScene, clearSession, getPlayerId } from '../utils/auth.js';
 import PartyApi from '../services/PartyApi.js';
 import TopMenuComponent from '../ui/TopMenuComponent.js';
+import { API_BASE } from '../config.js';
 
 // Element icons are loaded as PNGs in preload
 
@@ -403,7 +404,7 @@ export default class CharacterDetailScene extends Phaser.Scene {
         this.modalGroup.add(loadingText);
 
         try {
-            const res = await fetch(`http://localhost:3000/api/party/${playerId}/inventory/all`);
+            const res = await fetch(`${API_BASE}/api/party/${playerId}/inventory/all`);
             const data = await res.json();
 
             if (data.status === 'success') {
@@ -525,7 +526,7 @@ export default class CharacterDetailScene extends Phaser.Scene {
 
                     enhTxt.setText('UPGRADING...').setColor('#f59e0b');
                     try {
-                        const upgRes = await fetch(`http://localhost:3000/api/party/${playerId}/upgrade`, {
+                        const upgRes = await fetch(`${API_BASE}/api/party/${playerId}/upgrade`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -584,7 +585,7 @@ export default class CharacterDetailScene extends Phaser.Scene {
         this.modalGroup.add(loadingText);
 
         try {
-            const res = await fetch(`http://localhost:3000/api/party/${this.playerId}/inventory/all`);
+            const res = await fetch(`${API_BASE}/api/party/${this.playerId}/inventory/all`);
             const data = await res.json();
 
             if (data.status === 'success') {
@@ -598,7 +599,7 @@ export default class CharacterDetailScene extends Phaser.Scene {
                 let orbReq = 3 * (char.limit_break_level + 1);
 
                 try {
-                    const costRes = await fetch(`http://localhost:3000/api/party/${this.playerId}/lb-cost/${char.mc_id}/${char.limit_break_level + 1}`);
+                    const costRes = await fetch(`${API_BASE}/api/party/${this.playerId}/lb-cost/${char.mc_id}/${char.limit_break_level + 1}`);
                     const costData = await costRes.json();
 
                     if (costData.status === 'success') {

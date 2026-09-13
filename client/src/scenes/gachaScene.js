@@ -3,6 +3,7 @@ import { THEME } from '../main.js';
 import { playGlobalBGM } from '../utils/audioManager.js';
 import { checkSession, saveCurrentScene, clearSession } from '../utils/auth.js';
 import TopMenuComponent from '../ui/TopMenuComponent.js';
+import { API_BASE } from '../config.js';
 
 // Element icons are loaded as PNGs in preload
 
@@ -58,7 +59,7 @@ export default class GachaScene extends Phaser.Scene {
     async fetchGachaInfo() {
         const token = localStorage.getItem('aetheria_token');
         try {
-            const res = await fetch(`http://localhost:3000/api/gacha/info/${this.playerData.player_id}`, {
+            const res = await fetch(`${API_BASE}/api/gacha/info/${this.playerData.player_id}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             const json = await res.json();
@@ -224,7 +225,7 @@ export default class GachaScene extends Phaser.Scene {
         const token = localStorage.getItem('aetheria_token');
 
         try {
-            const res = await fetch('http://localhost:3000/api/gacha/pull', {
+            const res = await fetch(`${API_BASE}/api/gacha/pull`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

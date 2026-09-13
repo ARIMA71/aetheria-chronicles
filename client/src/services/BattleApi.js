@@ -3,7 +3,8 @@
  * Handles all network requests for the battle scene.
  */
 
-const API_BASE = "http://localhost:3000/api/battle";
+import { API_BASE as _ROOT } from '../config.js';
+const API_BASE = `${_ROOT}/api/battle`;
 
 export default class BattleApi {
     /**

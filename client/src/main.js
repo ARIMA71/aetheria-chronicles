@@ -145,6 +145,9 @@ const game = new Phaser.Game(config);
             lastTime = now;
 
             window.__currentFps = currentFps;
+            if (!window.__fpsSamples) window.__fpsSamples = [];
+            window.__fpsSamples.push(currentFps);
+            if (window.__fpsSamples.length > 300) window.__fpsSamples.shift();
 
             if (fpsCounter) {
                 const color = currentFps >= 50 ? '#22c55e' : (currentFps >= 30 ? '#eab308' : '#ef4444');
@@ -163,6 +166,11 @@ window.__benchmarkHistory = [];
 window.logBenchmark = function (endpoint, status, durationMs) {
     const timeStr = new Date().toLocaleTimeString();
     const fps = window.__currentFps || 60;
+    window.__lastApiLatency = `${durationMs} ms`;
+    if (!window.__latencySamples) window.__latencySamples = [];
+    window.__latencySamples.push(durationMs);
+    if (window.__latencySamples.length > 100) window.__latencySamples.shift();
+
     const entry = {
         Time: timeStr,
         Endpoint: endpoint,
