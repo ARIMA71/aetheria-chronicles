@@ -7,7 +7,7 @@ import { CameraScrollManager } from '../utils/cameraScroll.js';
 import TopMenuComponent from '../ui/TopMenuComponent.js';
 
 const W = 480, H = 880, CX = 240;
-const COLOR_SSR = 0xffd700, COLOR_SR = 0xc0c0c0, COLOR_R = 0xcd7f32, COLOR_EMPTY = 0x334155;
+const COLOR_SSR = 0xffd700, COLOR_SR = 0xa855f7, COLOR_R = 0xef4444, COLOR_EMPTY = 0x334155;
 
 export default class PartyScene extends Phaser.Scene {
     constructor() { super('PartyScene'); }
@@ -87,6 +87,21 @@ export default class PartyScene extends Phaser.Scene {
             if (existing) {
                 const presetCopy = JSON.parse(JSON.stringify(existing));
                 if (actualMcInvId) presetCopy.main_char_inv_id = actualMcInvId;
+
+                // Sanitize character slots
+                ['char_slot_1_inv_id', 'char_slot_2_inv_id', 'char_slot_3_inv_id'].forEach(slot => {
+                    if (presetCopy[slot] != null && !this.characters.some(c => Number(c.inv_id) === Number(presetCopy[slot]))) {
+                        presetCopy[slot] = null;
+                    }
+                });
+
+                // Sanitize weapon grid slots
+                ['weap_grid_1_inv_id', 'weap_grid_2_inv_id', 'weap_grid_3_inv_id', 'weap_grid_4_inv_id', 'weap_grid_5_inv_id'].forEach(slot => {
+                    if (presetCopy[slot] != null && !this.weapons.some(w => Number(w.inv_id) === Number(presetCopy[slot]))) {
+                        presetCopy[slot] = (slot === 'weap_grid_1_inv_id') ? defaultWeapInvId : null;
+                    }
+                });
+
                 if (!presetCopy.weap_grid_1_inv_id) presetCopy.weap_grid_1_inv_id = defaultWeapInvId;
                 this.localPresets.push(presetCopy);
             } else {
@@ -111,7 +126,18 @@ export default class PartyScene extends Phaser.Scene {
         this.characters.forEach(char => {
             const path = char.mc_square_path;
             if (path && !this.textures.exists(`char_sq_${char.mc_id}`)) {
-                this.load.image(`char_sq_${char.mc_id}`, path);
+                let fullPath = path;
+                if (!fullPath.endsWith('.png') && !fullPath.endsWith('.jpg')) fullPath += '.png';
+                this.load.image(`char_sq_${char.mc_id}`, fullPath);
+                assetsToLoad++;
+            }
+        });
+        this.weapons.forEach(weap => {
+            const path = weap.mw_img_path;
+            if (path && !this.textures.exists(`weap_img_${weap.mw_id}`)) {
+                let fullPath = path;
+                if (!fullPath.endsWith('.png') && !fullPath.endsWith('.jpg')) fullPath += '.png';
+                this.load.image(`weap_img_${weap.mw_id}`, fullPath);
                 assetsToLoad++;
             }
         });
@@ -376,12 +402,20 @@ export default class PartyScene extends Phaser.Scene {
                 const sy = cy + 18;
 
                 const skill = presetSkills[i];
-                const sBox = this.add.graphics().fillStyle(THEME.AETHER, 1).fillRoundedRect(sx - 18, sy - 18, 36, 36, 4);
+                const sBox = this.add.graphics();
+                if (skill) {
+                    sBox.fillStyle(THEME.AETHER, 1).lineStyle(1, THEME.BORDER).fillRoundedRect(sx - 18, sy - 18, 36, 36, 4).strokeRoundedRect(sx - 18, sy - 18, 36, 36, 4);
+                } else {
+                    sBox.fillStyle(0x000000, 0.2).lineStyle(1.5, THEME.BORDER, 0.8).fillRoundedRect(sx - 18, sy - 18, 36, 36, 4).strokeRoundedRect(sx - 18, sy - 18, 36, 36, 4);
+                }
+
                 const sZone = this.add.zone(sx, sy, 36, 36).setInteractive({ useHandCursor: true });
                 sZone.on('pointerdown', () => {
                     if (skill) {
                         const skillData = this.mcSkills.find(s => s.ms_id === skill.ms_id);
                         if (skillData) this.showSkillReadOnlyModal(skillData, false);
+                    } else {
+                        this.showMcSkillSelectionList(i);
                     }
                 });
 
@@ -421,8 +455,8 @@ export default class PartyScene extends Phaser.Scene {
             let strokeColor = COLOR_EMPTY;
             if (char) {
                 if (char.mc_rarity === 'SSR') strokeColor = 0xffd700;
-                else if (char.mc_rarity === 'SR') strokeColor = 0xc0c0c0;
-                else if (char.mc_rarity === 'R') strokeColor = 0xcd7f32;
+                else if (char.mc_rarity === 'SR') strokeColor = 0xa855f7;
+                else if (char.mc_rarity === 'R') strokeColor = 0xef4444;
             }
 
             // Container Main Box
@@ -492,7 +526,7 @@ export default class PartyScene extends Phaser.Scene {
                 }
 
                 // Rarity Icon/Text (Bottom-Left of MAIN container)
-                const rColorHex = strokeColor === 0xffd700 ? '#ffd700' : (strokeColor === 0xc0c0c0 ? '#c0c0c0' : '#cd7f32');
+                const rColorHex = strokeColor === 0xffd700 ? '#ffd700' : (strokeColor === 0xa855f7 ? '#a855f7' : '#ef4444');
                 this.uiGroup.add(this.add.text(23, slot.y + 47, char.mc_rarity, {
                     fontSize: '11px', color: rColorHex, fontStyle: 'bold', stroke: '#000000', strokeThickness: 2, fontFamily: 'Outfit'
                 }).setOrigin(0, 1));
@@ -552,8 +586,8 @@ export default class PartyScene extends Phaser.Scene {
                 });
 
             } else {
-                this.uiGroup.add(this.add.text(84, slot.y, '+', { fontSize: '24px', color: THEME.TEXT_MUTED }).setOrigin(0.5));
-                this.uiGroup.add(this.add.text(145, slot.y, 'Tap to assign character...', { fontSize: '14px', color: THEME.TEXT_MUTED, fontStyle: 'italic' }).setOrigin(0, 0.5));
+                this.uiGroup.add(this.add.text(pX, slot.y, '+', { fontSize: '24px', color: THEME.TEXT_MUTED }).setOrigin(0.5));
+                this.uiGroup.add(this.add.text(160, slot.y, 'Tap to assign character...', { fontSize: '14px', color: THEME.TEXT_MUTED, fontStyle: 'italic' }).setOrigin(0, 0.5));
             }
         });
     }
@@ -607,15 +641,32 @@ export default class PartyScene extends Phaser.Scene {
                 let rColorNum = 0xffffff;
                 let rColorStr = '#ffffff';
                 if (weap.mw_rarity === 'SSR') { rColorNum = 0xffd700; rColorStr = '#ffd700'; }
-                else if (weap.mw_rarity === 'SR') { rColorNum = 0xc0c0c0; rColorStr = '#c0c0c0'; }
-                else if (weap.mw_rarity === 'R') { rColorNum = 0xcd7f32; rColorStr = '#cd7f32'; }
+                else if (weap.mw_rarity === 'SR') { rColorNum = 0xa855f7; rColorStr = '#a855f7'; }
+                else if (weap.mw_rarity === 'R') { rColorNum = 0xef4444; rColorStr = '#ef4444'; }
 
-                artBg.lineStyle(1, rColorNum);
-                artBg.fillRoundedRect(slot.x - slot.w / 2 + 4, slot.y - slot.h / 2 + 4, slot.w - 8, artH, 6);
-                artBg.strokeRoundedRect(slot.x - slot.w / 2 + 4, slot.y - slot.h / 2 + 4, slot.w - 8, artH, 6);
-                this.uiGroup.add(artBg);
+                const imgKey = `weap_img_${weap.mw_id}`;
+                if (this.textures.exists(imgKey)) {
+                    const weapImg = this.add.image(slot.x, slot.y - slot.h / 2 + 4 + artH / 2, imgKey);
+                    weapImg.setDisplaySize(slot.w - 8, artH);
+                    weapImg.setAlpha(1, 1, 0.4, 0.4);
+                    const maskShape = this.make.graphics();
+                    maskShape.fillStyle(0xffffff);
+                    maskShape.fillRoundedRect(slot.x - slot.w / 2 + 4, slot.y - slot.h / 2 + 4, slot.w - 8, artH, 6);
+                    weapImg.setMask(maskShape.createGeometryMask());
+                    this.uiGroup.add(weapImg);
+                } else {
+                    artBg.fillRoundedRect(slot.x - slot.w / 2 + 4, slot.y - slot.h / 2 + 4, slot.w - 8, artH, 6);
+                    this.uiGroup.add(artBg);
+                }
 
-                this.uiGroup.add(this.add.text(slot.x, slot.y - slot.h / 2 + 4 + artH / 2, weap.mw_name.split(' ')[0], { fontSize: slot.isMain ? '12px' : '10px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold', stroke: '#000', strokeThickness: 2 }).setOrigin(0.5));
+                const border = this.add.graphics();
+                border.lineStyle(1, rColorNum);
+                border.strokeRoundedRect(slot.x - slot.w / 2 + 4, slot.y - slot.h / 2 + 4, slot.w - 8, artH, 6);
+                this.uiGroup.add(border);
+
+                if (!this.textures.exists(`weap_img_${weap.mw_id}`)) {
+                    this.uiGroup.add(this.add.text(slot.x, slot.y - slot.h / 2 + 4 + artH / 2, weap.mw_name.split(' ')[0], { fontSize: slot.isMain ? '12px' : '10px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold', stroke: '#000', strokeThickness: 2 }).setOrigin(0.5));
+                }
 
                 // Element Indicator top right
                 const element = weap.mw_element;
@@ -1241,8 +1292,8 @@ export default class PartyScene extends Phaser.Scene {
             let color = THEME.BORDER;
             const rarity = isWeapon ? item.mw_rarity : item.mc_rarity;
             if (rarity === 'SSR') color = 0xffd700;
-            else if (rarity === 'SR') color = 0xc0c0c0;
-            else if (rarity === 'R') color = 0xcd7f32;
+            else if (rarity === 'SR') color = 0xa855f7;
+            else if (rarity === 'R') color = 0xef4444;
 
             const cardBg = this.add.graphics();
             cardBg.fillStyle(THEME.PANEL, 1);
@@ -1262,17 +1313,45 @@ export default class PartyScene extends Phaser.Scene {
             });
             this.modalGroup.add(zone);
 
-            // Art Placeholder (Top 45%)
+            // Art Placeholder / Image (Top 45%)
             const artH = boxH * 0.45;
-            const artBg = this.add.graphics();
-            artBg.fillStyle(THEME.BG, 1);
-            artBg.lineStyle(1, color);
-            artBg.fillRoundedRect(ix - boxW / 2 + 4, iy - boxH / 2 + 4, boxW - 8, artH, 6);
-            artBg.strokeRoundedRect(ix - boxW / 2 + 4, iy - boxH / 2 + 4, boxW - 8, artH, 6);
-            this.modalGroup.add(artBg);
+            const yTop = iy - boxH / 2;
+            if (isWeapon) {
+                const imgKey = `weap_img_${item.mw_id}`;
+                if (this.textures.exists(imgKey)) {
+                    const weapImg = this.add.image(ix, yTop + 4 + artH / 2, imgKey);
+                    weapImg.setDisplaySize(boxW - 8, artH);
+                    weapImg.setAlpha(1, 1, 0.4, 0.4);
+                    const maskShape = this.make.graphics();
+                    maskShape.fillStyle(0xffffff);
+                    maskShape.fillRoundedRect(ix - boxW / 2 + 4, yTop + 4, boxW - 8, artH, 6);
+                    weapImg.setMask(maskShape.createGeometryMask());
+                    this.modalGroup.add(weapImg);
+                } else {
+                    const artBg = this.add.graphics();
+                    artBg.fillStyle(THEME.BG, 1);
+                    artBg.fillRoundedRect(ix - boxW / 2 + 4, yTop + 4, boxW - 8, artH, 6);
+                    this.modalGroup.add(artBg);
+                }
 
-            const itemName = isWeapon ? item.mw_name : item.mc_name;
-            this.modalGroup.add(this.add.text(ix, iy - boxH / 2 + 4 + artH / 2, itemName.split(' ')[0], { fontSize: '10px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold' }).setOrigin(0.5));
+                const border = this.add.graphics();
+                border.lineStyle(1, color);
+                border.strokeRoundedRect(ix - boxW / 2 + 4, yTop + 4, boxW - 8, artH, 6);
+                this.modalGroup.add(border);
+            } else {
+                const artBg = this.add.graphics();
+                artBg.fillStyle(THEME.BG, 1);
+                artBg.lineStyle(1, color);
+                artBg.fillRoundedRect(ix - boxW / 2 + 4, yTop + 4, boxW - 8, artH, 6);
+                artBg.strokeRoundedRect(ix - boxW / 2 + 4, yTop + 4, boxW - 8, artH, 6);
+                this.modalGroup.add(artBg);
+            }
+
+            const hasWeapImg = isWeapon && this.textures.exists(`weap_img_${item.mw_id}`);
+            if (!hasWeapImg) {
+                const itemName = isWeapon ? item.mw_name : item.mc_name;
+                this.modalGroup.add(this.add.text(ix, iy - boxH / 2 + 4 + artH / 2, itemName.split(' ')[0], { fontSize: '10px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold' }).setOrigin(0.5));
+            }
 
             const element = isWeapon ? item.mw_element : item.mc_element;
             const elColor = this.getElementColor(element);
@@ -1298,8 +1377,8 @@ export default class PartyScene extends Phaser.Scene {
             // RARITY Indicator at bottom left of art
             let rColor = '#ffffff';
             if (rarity === 'SSR') rColor = '#ffd700'; // Gold
-            else if (rarity === 'SR') rColor = '#c0c0c0'; // Silver
-            else if (rarity === 'R') rColor = '#cd7f32'; // Bronze
+            else if (rarity === 'SR') rColor = '#a855f7'; // Purple
+            else if (rarity === 'R') rColor = '#ef4444'; // Red
 
             if (rarity) {
                 const rTxt = this.add.text(ix - boxW / 2 + 6, iy - boxH / 2 + artH + 5, rarity, { fontSize: '11px', color: rColor, fontStyle: 'bold', stroke: '#000000', strokeThickness: 2, fontFamily: 'Outfit' }).setOrigin(0, 1);
@@ -1522,8 +1601,8 @@ export default class PartyScene extends Phaser.Scene {
                 let rColor = THEME.BORDER;
                 let rStr = '#ffffff';
                 if (weap.mw_rarity === 'SSR') { rColor = 0xffd700; rStr = '#ffd700'; }
-                else if (weap.mw_rarity === 'SR') { rColor = 0xc0c0c0; rStr = '#c0c0c0'; }
-                else if (weap.mw_rarity === 'R') { rColor = 0xcd7f32; rStr = '#cd7f32'; }
+                else if (weap.mw_rarity === 'SR') { rColor = 0xa855f7; rStr = '#a855f7'; }
+                else if (weap.mw_rarity === 'R') { rColor = 0xef4444; rStr = '#ef4444'; }
 
                 const boxW = 120;
                 const boxH = 80;
@@ -1603,8 +1682,8 @@ export default class PartyScene extends Phaser.Scene {
                 let rColor = THEME.BORDER;
                 let rStr = '#ffffff';
                 if (char.mc_rarity === 'SSR') { rColor = 0xffd700; rStr = '#ffd700'; }
-                else if (char.mc_rarity === 'SR') { rColor = 0xc0c0c0; rStr = '#c0c0c0'; }
-                else if (char.mc_rarity === 'R') { rColor = 0xcd7f32; rStr = '#cd7f32'; }
+                else if (char.mc_rarity === 'SR') { rColor = 0xa855f7; rStr = '#a855f7'; }
+                else if (char.mc_rarity === 'R') { rColor = 0xef4444; rStr = '#ef4444'; }
 
                 const pSize = 80;
 

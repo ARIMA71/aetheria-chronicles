@@ -84,7 +84,7 @@ exports.pull = async (req, res) => {
 
         // 3. Ambil Item Banner beserta drop_chance-nya
         let sqlBanner = `
-            SELECT gbi.item_id as master_item_id, gbi.drop_chance, mw.mw_rarity, mw.mw_element, mw.unlocks_mc_id, mw.mw_name 
+            SELECT gbi.item_id as master_item_id, gbi.drop_chance, mw.mw_id, mw.mw_rarity, mw.mw_element, mw.unlocks_mc_id, mw.mw_name, mw.mw_icon_path, mw.mw_img_path 
             FROM gacha_banner_items gbi
             JOIN master_weapons mw ON gbi.item_id = mw.mw_id
             WHERE gbi.gb_id = ?
@@ -150,9 +150,12 @@ exports.pull = async (req, res) => {
             let resultEntry = {
                 item_type: 'Weapon',
                 master_item_id: pulled.master_item_id,
+                mw_id: pulled.mw_id || pulled.master_item_id,
                 name: pulled.mw_name,
                 rarity: pulled.mw_rarity,
                 element: pulled.mw_element,
+                mw_icon_path: pulled.mw_icon_path,
+                mw_img_path: pulled.mw_img_path,
                 is_character_unlocked: false,
                 is_character_duplicate: false,
                 materials_converted: null
@@ -302,7 +305,7 @@ exports.info = async (req, res) => {
         const banner = bannerRows[0] || { gb_pity_guarantee: 50, gb_cost_single: 50, gb_cost_multies: 500 };
 
         const [itemRows] = await conn.query(`
-            SELECT mw.mw_name, mw.mw_rarity, mw.mw_element, gbi.drop_chance 
+            SELECT mw.mw_id, mw.mw_name, mw.mw_rarity, mw.mw_element, mw.mw_icon_path, mw.mw_img_path, gbi.drop_chance 
             FROM gacha_banner_items gbi 
             JOIN master_weapons mw ON gbi.item_id = mw.mw_id 
             WHERE gbi.gb_id = ? 

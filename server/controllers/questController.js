@@ -32,7 +32,7 @@ exports.getQuests = async (req, res) => {
 
         // Query drop loot info
         const [loots] = await db.query(`
-            SELECT qr.mq_id, qr.reward_type, m.mat_name, mw.mw_name, qr.quantity, qr.drop_chance
+            SELECT qr.mq_id, qr.reward_type, m.mat_name, mw.mw_name, qr.quantity, qr.drop_chance, qr.is_first_clear
             FROM quest_rewards qr
             LEFT JOIN master_materials m ON qr.reward_item_id = m.mat_id AND qr.reward_type = 'Material'
             LEFT JOIN master_weapons mw ON qr.reward_item_id = mw.mw_id AND qr.reward_type = 'Weapon'
@@ -69,7 +69,12 @@ exports.getQuests = async (req, res) => {
                 if (l.reward_type === 'Weapon' && l.mw_name) itemName = l.mw_name;
                 if (l.reward_type === 'Gold') itemName = 'Gold';
                 if (l.reward_type === 'Diamond') itemName = 'Diamond';
-                return { item_name: itemName, quantity: l.quantity, drop_chance: l.drop_chance };
+                return {
+                    item_name: itemName,
+                    quantity: l.quantity,
+                    drop_chance: l.drop_chance,
+                    is_first_clear: l.is_first_clear === 1
+                };
             });
 
             targetArea.quests.push({

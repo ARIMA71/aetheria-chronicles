@@ -9,15 +9,55 @@ exports.getPartyPresets = async (req, res) => {
 
         let [presets] = await conn.query('SELECT * FROM player_party_presets WHERE player_id = ? ORDER BY preset_slot ASC', [playerId]);
 
-        // Auto-correct main_char_inv_id to ensure MC data is always valid (heals broken states from DB rebuilds)
+        // Auto-correct main_char_inv_id and heal any unowned/broken inv_ids in presets
         const [mcRows] = await conn.query("SELECT inv_id FROM player_inventories WHERE player_id = ? AND master_item_id = 1 AND item_type = 'Character' LIMIT 1", [playerId]);
         const trueMcInvId = mcRows.length > 0 ? mcRows[0].inv_id : null;
-        if (trueMcInvId) {
-            for (let p of presets) {
-                if (p.main_char_inv_id !== trueMcInvId) {
-                    await conn.query('UPDATE player_party_presets SET main_char_inv_id = ? WHERE ppp_id = ?', [trueMcInvId, p.ppp_id]);
-                    p.main_char_inv_id = trueMcInvId;
+
+        const [playerInvRows] = await conn.query("SELECT inv_id, item_type FROM player_inventories WHERE player_id = ?", [playerId]);
+        const ownedInvSet = new Set(playerInvRows.map(r => Number(r.inv_id)));
+        const defaultWeap = playerInvRows.find(r => r.item_type === 'Weapon');
+        const defaultWeapInvId = defaultWeap ? Number(defaultWeap.inv_id) : null;
+
+        for (let p of presets) {
+            let updated = false;
+
+            if (trueMcInvId && p.main_char_inv_id !== trueMcInvId) {
+                p.main_char_inv_id = trueMcInvId;
+                updated = true;
+            }
+
+            for (let slotKey of ['char_slot_1_inv_id', 'char_slot_2_inv_id', 'char_slot_3_inv_id']) {
+                if (p[slotKey] != null && !ownedInvSet.has(Number(p[slotKey]))) {
+                    p[slotKey] = null;
+                    updated = true;
                 }
+            }
+
+            if (p.weap_grid_1_inv_id != null && !ownedInvSet.has(Number(p.weap_grid_1_inv_id))) {
+                p.weap_grid_1_inv_id = defaultWeapInvId;
+                updated = true;
+            }
+
+            for (let slotKey of ['weap_grid_2_inv_id', 'weap_grid_3_inv_id', 'weap_grid_4_inv_id', 'weap_grid_5_inv_id']) {
+                if (p[slotKey] != null && !ownedInvSet.has(Number(p[slotKey]))) {
+                    p[slotKey] = null;
+                    updated = true;
+                }
+            }
+
+            if (updated) {
+                await conn.query(`
+                    UPDATE player_party_presets 
+                    SET main_char_inv_id = ?,
+                        char_slot_1_inv_id = ?, char_slot_2_inv_id = ?, char_slot_3_inv_id = ?,
+                        weap_grid_1_inv_id = ?, weap_grid_2_inv_id = ?, weap_grid_3_inv_id = ?, weap_grid_4_inv_id = ?, weap_grid_5_inv_id = ?
+                    WHERE ppp_id = ?
+                `, [
+                    p.main_char_inv_id,
+                    p.char_slot_1_inv_id, p.char_slot_2_inv_id, p.char_slot_3_inv_id,
+                    p.weap_grid_1_inv_id, p.weap_grid_2_inv_id, p.weap_grid_3_inv_id, p.weap_grid_4_inv_id, p.weap_grid_5_inv_id,
+                    p.ppp_id
+                ]);
             }
         }
 

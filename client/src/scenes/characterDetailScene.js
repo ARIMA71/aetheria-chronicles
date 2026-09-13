@@ -26,12 +26,15 @@ export default class CharacterDetailScene extends Phaser.Scene {
         this.load.image('element_fire', 'assets/icons/elements/fire.png');
         this.load.image('element_wind', 'assets/icons/elements/wind.png');
         this.load.image('element_earth', 'assets/icons/rock.png');
+        if (!this.cache.audio.exists('sfx_success')) {
+            this.load.audio('sfx_success', 'assets/audio/sfx/success.mp3');
+        }
     }
 
     create() {
         if (!checkSession(this)) return;
         playGlobalBGM(this, 'main_menu');
-        this.add.rectangle(0, 0, W, H, THEME.BG).setOrigin(0);
+        this.add.rectangle(0, 0, W, H, THEME.BG).setOrigin(0).setScrollFactor(0).setDepth(-100);
 
         this.scrollGroup = this.add.group();
         this.modalGroup = this.add.group();
@@ -712,6 +715,9 @@ export default class CharacterDetailScene extends Phaser.Scene {
     }
 
     showUpgradeSuccessModal(oldLevel, newLevel, newExp) {
+        if (this.sound.get('sfx_success') || this.cache.audio.exists('sfx_success')) {
+            this.sound.play('sfx_success', { volume: 0.8 });
+        }
         this.modalGroup.clear(true, true);
         const W = this.cameras.main.width, H = this.cameras.main.height, CX = W / 2, CY = H / 2;
 
@@ -745,6 +751,9 @@ export default class CharacterDetailScene extends Phaser.Scene {
     }
 
     showLimitBreakSuccessModal() {
+        if (this.sound.get('sfx_success') || this.cache.audio.exists('sfx_success')) {
+            this.sound.play('sfx_success', { volume: 0.8 });
+        }
         this.modalGroup.clear(true, true);
         const W = this.cameras.main.width, H = this.cameras.main.height, CX = W / 2, CY = H / 2;
 
@@ -902,8 +911,8 @@ export default class CharacterDetailScene extends Phaser.Scene {
             let color = THEME.BORDER;
             const rarity = item.mc_rarity;
             if (rarity === 'SSR') color = 0xffd700;
-            else if (rarity === 'SR') color = 0xc0c0c0;
-            else if (rarity === 'R') color = 0xcd7f32;
+            else if (rarity === 'SR') color = 0xa855f7;
+            else if (rarity === 'R') color = 0xef4444;
 
             const cardBg = this.add.graphics();
             cardBg.fillStyle(THEME.PANEL, 1);
@@ -977,8 +986,8 @@ export default class CharacterDetailScene extends Phaser.Scene {
             if (rarity) {
                 let rColor = '#ffffff';
                 if (rarity === 'SSR') rColor = '#ffd700';
-                else if (rarity === 'SR') rColor = '#c0c0c0';
-                else if (rarity === 'R') rColor = '#cd7f32';
+                else if (rarity === 'SR') rColor = '#a855f7';
+                else if (rarity === 'R') rColor = '#ef4444';
                 this.modalGroup.add(this.add.text(ix - pSize / 2 + 4, yTop + 4 + pSize - 2, rarity, { fontSize: '11px', color: rColor, fontStyle: 'bold', stroke: '#000000', strokeThickness: 2, fontFamily: 'Outfit' }).setOrigin(0, 1));
             }
 

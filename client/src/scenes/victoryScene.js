@@ -170,8 +170,8 @@ export default class VictoryScene extends Phaser.Scene {
             let rColorInt = THEME.BORDER;
             let rColorHex = '#ffffff';
             if (char.rarity === 'SSR') { rColorInt = 0xffd700; rColorHex = '#ffd700'; }
-            else if (char.rarity === 'SR') { rColorInt = 0xc0c0c0; rColorHex = '#c0c0c0'; }
-            else if (char.rarity === 'R') { rColorInt = 0xcd7f32; rColorHex = '#cd7f32'; }
+            else if (char.rarity === 'SR') { rColorInt = 0xa855f7; rColorHex = '#a855f7'; }
+            else if (char.rarity === 'R') { rColorInt = 0xef4444; rColorHex = '#ef4444'; }
 
             // Portrait Background (85x145)
             const portBg = this.add.rectangle(px, cardCenterY, 85, 145, THEME.PANEL, 0.7);

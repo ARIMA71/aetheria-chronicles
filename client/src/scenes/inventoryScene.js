@@ -94,12 +94,24 @@ export default class InventoryScene extends Phaser.Scene {
                 }
             }
 
-            // Dynamically load missing character square portraits
+            // Dynamically load missing character square portraits and weapon landscape images
             let assetsToLoad = 0;
             this.characters.forEach(char => {
                 const path = char.mc_square_path;
                 if (path && !this.textures.exists(`char_sq_${char.mc_id}`)) {
-                    this.load.image(`char_sq_${char.mc_id}`, path);
+                    let fullPath = path;
+                    if (!fullPath.endsWith('.png') && !fullPath.endsWith('.jpg')) fullPath += '.png';
+                    this.load.image(`char_sq_${char.mc_id}`, fullPath);
+                    assetsToLoad++;
+                }
+            });
+
+            this.weapons.forEach(weap => {
+                const path = weap.mw_img_path;
+                if (path && !this.textures.exists(`weap_img_${weap.mw_id}`)) {
+                    let fullPath = path;
+                    if (!fullPath.endsWith('.png') && !fullPath.endsWith('.jpg')) fullPath += '.png';
+                    this.load.image(`weap_img_${weap.mw_id}`, fullPath);
                     assetsToLoad++;
                 }
             });
@@ -309,8 +321,8 @@ export default class InventoryScene extends Phaser.Scene {
             if (this.currentTab !== 'Materials') {
                 const rarity = isWeapon ? item.mw_rarity : item.mc_rarity;
                 if (rarity === 'SSR') color = 0xffd700; // Gold
-                else if (rarity === 'SR') color = 0xc0c0c0; // Silver
-                else if (rarity === 'R') color = 0xcd7f32; // Bronze
+                else if (rarity === 'SR') color = 0xa855f7; // Purple
+                else if (rarity === 'R') color = 0xef4444; // Red
             }
 
             const cardBg = this.add.graphics();
@@ -345,10 +357,24 @@ export default class InventoryScene extends Phaser.Scene {
                 artBg.fillStyle(THEME.BG, 1);
 
                 if (isWeapon) {
-                    artBg.lineStyle(1, color);
-                    artBg.fillRoundedRect(ix - boxW / 2 + 4, yTop + 4, boxW - 8, artH, 6);
-                    artBg.strokeRoundedRect(ix - boxW / 2 + 4, yTop + 4, boxW - 8, artH, 6);
-                    this.scrollGroup.add(artBg);
+                    const weapKey = `weap_img_${item.mw_id}`;
+                    if (this.textures.exists(weapKey)) {
+                        const weapImg = this.add.image(ix, yTop + 4 + artH / 2, weapKey).setDisplaySize(boxW - 8, artH);
+                        weapImg.setAlpha(1, 1, 0.4, 0.4);
+                        const maskShape = this.make.graphics();
+                        maskShape.fillStyle(0xffffff);
+                        maskShape.fillRoundedRect(ix - boxW / 2 + 4, yTop + 4, boxW - 8, artH, 6);
+                        weapImg.setMask(maskShape.createGeometryMask());
+                        this.scrollGroup.add(weapImg);
+                    } else {
+                        artBg.fillRoundedRect(ix - boxW / 2 + 4, yTop + 4, boxW - 8, artH, 6);
+                        this.scrollGroup.add(artBg);
+                    }
+
+                    const border = this.add.graphics();
+                    border.lineStyle(1, color);
+                    border.strokeRoundedRect(ix - boxW / 2 + 4, yTop + 4, boxW - 8, artH, 6);
+                    this.scrollGroup.add(border);
                 } else {
                     const pSize = boxW - 8;
                     const sqKey = `char_sq_${item.mc_id}`;
@@ -371,9 +397,12 @@ export default class InventoryScene extends Phaser.Scene {
                     this.scrollGroup.add(border);
                 }
 
-                const itemName = isWeapon ? item.mw_name : item.mc_name;
-                const nameY = isWeapon ? (yTop + 4 + artH / 2) : (yTop + 4 + artH + 10);
-                this.scrollGroup.add(this.add.text(ix, nameY, itemName.split(' ')[0], { fontSize: '10px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold', stroke: isWeapon ? '#000' : null, strokeThickness: isWeapon ? 2 : 0 }).setOrigin(0.5));
+                const hasWeapImg = isWeapon && this.textures.exists(`weap_img_${item.mw_id}`);
+                if (!hasWeapImg) {
+                    const itemName = isWeapon ? item.mw_name : item.mc_name;
+                    const nameY = isWeapon ? (yTop + 4 + artH / 2) : (yTop + 4 + artH + 10);
+                    this.scrollGroup.add(this.add.text(ix, nameY, itemName.split(' ')[0], { fontSize: '10px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold', stroke: isWeapon ? '#000' : null, strokeThickness: isWeapon ? 2 : 0 }).setOrigin(0.5));
+                }
 
                 const element = isWeapon ? item.mw_element : item.mc_element;
                 const elColor = this.getElementColor(element);
@@ -409,12 +438,12 @@ export default class InventoryScene extends Phaser.Scene {
                 const itemRarity = isWeapon ? item.mw_rarity : item.mc_rarity;
                 let rColor = '#ffffff';
                 if (itemRarity === 'SSR') rColor = '#ffd700';
-                else if (itemRarity === 'SR') rColor = '#c0c0c0';
-                else if (itemRarity === 'R') rColor = '#cd7f32';
+                else if (itemRarity === 'SR') rColor = '#a855f7';
+                else if (itemRarity === 'R') rColor = '#ef4444';
 
                 if (itemRarity) {
                     const rX = isWeapon ? (ix - boxW / 2 + 6) : (ix - (boxW - 8) / 2 + 4);
-                    const rY = yTop + 4 + artH + (isWeapon ? 5 : -2);
+                    const rY = yTop + 4 + artH + (isWeapon ? -2 : -2);
                     const rTxt = this.add.text(rX, rY, itemRarity, { fontSize: '9px', color: rColor, fontStyle: 'bold', stroke: '#000000', strokeThickness: 2, fontFamily: 'Outfit' }).setOrigin(0, 1);
                     this.scrollGroup.add(rTxt);
                 }

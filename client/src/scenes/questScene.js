@@ -10,17 +10,11 @@ import TopMenuComponent from '../ui/TopMenuComponent.js';
 const W = 480, H = 830, CX = 240;
 const API_BASE = 'http://localhost:3000/api';
 
-// Area dot positions on the map (top half)
+// Area positions on the map (Staggered organic layout)
 const AREA_DOTS = [
-    { x: 115, y: 190, label: 'I' },
-    { x: 240, y: 150, label: 'II' },
-    { x: 365, y: 200, label: 'III' },
-];
-
-// Paths between dots
-const PATH_POINTS = [
-    { x1: 145, y1: 190, x2: 210, y2: 150 },
-    { x1: 270, y1: 150, x2: 335, y2: 190 },
+    { x: 95, y: 220, label: 'I' },
+    { x: 240, y: 135, label: 'II' },
+    { x: 370, y: 210, label: 'III' },
 ];
 
 export default class QuestScene extends Phaser.Scene {
@@ -28,6 +22,10 @@ export default class QuestScene extends Phaser.Scene {
 
     preload() {
         this.load.image('bg_quest', 'assets/backgrounds/questScene.jpg');
+        if (!this.textures.exists('btn_icon_normal')) this.load.image('btn_icon_normal', 'assets/ui/button/C/Icon Button.png');
+        if (!this.textures.exists('btn_icon_hover')) this.load.image('btn_icon_hover', 'assets/ui/button/C/Icon Button Hover.png');
+        if (!this.textures.exists('card_x101')) this.load.image('card_x101', 'assets/ui/card/Card X101.png');
+        if (!this.textures.exists('card_x12')) this.load.image('card_x12', 'assets/ui/card/Card X12.png');
     }
 
     create() {
@@ -114,30 +112,62 @@ export default class QuestScene extends Phaser.Scene {
     }
 
     _buildMap() {
-        // Map background
-        this.add.rectangle(CX, 180, W - 20, 240, THEME.PANEL, 0.5).setStrokeStyle(1, THEME.BORDER);
-        this.add.text(CX, 75, 'SELECT AREA', { fontSize: '9px', fontFamily: 'Outfit', color: THEME.TEXT_SECONDARY, letterSpacing: 1 }).setOrigin(0.5);
+        // Title Header (No background rectangle behind map)
+        this.add.text(CX, 80, 'SELECT AREA', { fontSize: '11px', fontStyle: 'bold', fontFamily: 'Outfit', color: '#A5B4FC', letterSpacing: 2 }).setOrigin(0.5);
 
-        // Draw paths between area dots
-        const gfx = this.add.graphics();
-        gfx.lineStyle(2, THEME.BORDER, 0.6);
-        PATH_POINTS.forEach(p => { gfx.beginPath(); gfx.moveTo(p.x1, p.y1); gfx.lineTo(p.x2, p.y2); gfx.strokePath(); });
-
-        // Area dot placeholders (updated after fetch)
+        // Area button placeholders using Button C design (Enlarged to 85px)
         this.areaDots = [];
         AREA_DOTS.forEach((dot, i) => {
-            const c = this.add.circle(dot.x, dot.y, 28, THEME.PANEL).setStrokeStyle(2, THEME.BORDER);
-            const t = this.add.text(dot.x, dot.y, dot.label, { fontSize: '14px', fontStyle: 'bold', color: THEME.TEXT_MUTED, fontFamily: 'Outfit' }).setOrigin(0.5);
-            const nameT = this.add.text(dot.x, dot.y + 38, '...', { fontSize: '9px', color: THEME.TEXT_SECONDARY, fontFamily: 'Outfit' }).setOrigin(0.5);
-            const lockT = this.add.text(dot.x, dot.y - 42, '', { fontSize: '11px' }).setOrigin(0.5);
-            this.areaDots.push({ circle: c, text: t, nameText: nameT, lockText: lockT, index: i });
+            const baseSize = 85;
+            
+            // Dark circle fill under button C
+            const circleBg = this.add.circle(dot.x, dot.y, (baseSize / 2) - 18, 0x0f172a, 1.0);
+
+            const btnKey = this.textures.exists('btn_icon_normal') ? 'btn_icon_normal' : null;
+            let btn;
+
+            if (btnKey) {
+                btn = this.add.image(dot.x, dot.y, 'btn_icon_normal').setOrigin(0.5);
+                btn.setDisplaySize(baseSize, baseSize);
+            } else {
+                btn = this.add.circle(dot.x, dot.y, baseSize / 2, 0x0f172a);
+                btn.setStrokeStyle(2, THEME.BORDER);
+            }
+
+            const labelTxt = this.add.text(dot.x, dot.y, dot.label, { fontSize: '15px', fontStyle: 'bold', color: '#ffffff', fontFamily: 'Outfit' }).setOrigin(0.5);
+            const nameTxt = this.add.text(dot.x, dot.y + 48, '...', { fontSize: '11px', fontStyle: 'bold', color: THEME.TEXT_SECONDARY, stroke: '#000000', strokeThickness: 3, fontFamily: 'Outfit' }).setOrigin(0.5);
+            const lockTxt = this.add.text(dot.x, dot.y - 44, '', { fontSize: '12px' }).setOrigin(0.5);
+
+            this.areaDots.push({
+                btn, circleBg, labelTxt, nameTxt, lockTxt, baseSize,
+                x: dot.x, y: dot.y, index: i
+            });
         });
     }
 
     _buildQuestPanel() {
-        this.add.rectangle(CX, 540, W - 20, 450, THEME.PANEL, 0.4).setStrokeStyle(1, THEME.BORDER);
-        this.questPanelTitle = this.add.text(CX, 335, 'Pilih area di peta untuk melihat quest', { fontSize: '11px', color: THEME.TEXT_MUTED, fontFamily: 'Outfit' }).setOrigin(0.5);
+        const panelW = W + 35; // 515px: Reduced width by 5px
+        const panelH = 645; // Reduced height by 5px
+        const panelY = 603; // Lowered Y position by 8px (from 595 to 603)
+
+        this.questPanelContainer = this.add.container(0, 0);
+
+        let panelBg;
+        if (this.textures.exists('card_x101')) {
+            panelBg = this.add.image(CX, panelY, 'card_x101').setDisplaySize(panelW, panelH);
+            panelBg.setTint(0x38bdf8); // Sky Blue tint
+        } else {
+            panelBg = this.add.rectangle(CX, panelY, panelW, panelH, THEME.PANEL, 0.4).setStrokeStyle(1, THEME.BORDER);
+        }
+
+        // Title positioned comfortably 49px below top edge of Card X101
+        this.questPanelTitle = this.add.text(CX, panelY - panelH / 2 + 49, 'Pilih area di peta untuk melihat quest', {
+            fontSize: '14px', fontStyle: 'bold', color: '#ffffff', fontFamily: 'Outfit', letterSpacing: 1.2
+        }).setOrigin(0.5);
+        
         this.questListContainer = this.add.container(0, 0);
+
+        this.questPanelContainer.add([panelBg, this.questPanelTitle, this.questListContainer]);
     }
 
     async fetchQuestData() {
@@ -162,34 +192,52 @@ export default class QuestScene extends Phaser.Scene {
             if (!this.areaDots[i]) return;
             const dot = this.areaDots[i];
             const unlocked = area.status === 'UNLOCKED';
-            dot.circle.setStrokeStyle(2, unlocked ? THEME.HEALTH : 0x555555);
-            dot.text.setColor(unlocked ? THEME.TEXT_PRIMARY : '#555555');
-            dot.nameText.setText(area.area_name);
-            dot.lockText.setText(unlocked ? '' : '🔒');
+            const isSelected = this.selectedArea === i;
+
+            const normalTint = 0x38bdf8;
+            const selectedTint = 0x22c55e;
+            const hoverTint = 0x60a5fa;
+
+            if (dot.btn.setTint) {
+                dot.btn.setTint(unlocked ? (isSelected ? selectedTint : normalTint) : 0x475569);
+            }
+
+            dot.labelTxt.setColor(unlocked ? '#ffffff' : '#64748b');
+            dot.nameTxt.setText(area.area_name);
+            dot.nameTxt.setColor(isSelected ? '#22c55e' : (unlocked ? THEME.TEXT_PRIMARY : '#64748b'));
+            dot.lockTxt.setText(unlocked ? '' : '🔒');
 
             if (unlocked) {
-                // Make circle interactive
-                dot.circle.setInteractive({ useHandCursor: true });
-                dot.circle.on('pointerover', () => dot.circle.setFillStyle(0x334155));
-                dot.circle.on('pointerout', () => dot.circle.setFillStyle(THEME.PANEL));
-                dot.circle.on('pointerdown', () => this._selectArea(i));
+                dot.btn.setInteractive({ useHandCursor: true });
+                dot.btn.on('pointerover', () => {
+                    if (this.textures.exists('btn_icon_hover')) dot.btn.setTexture('btn_icon_hover');
+                    if (dot.btn.setTint && this.selectedArea !== i) dot.btn.setTint(hoverTint);
+                    dot.btn.setDisplaySize(dot.baseSize * 1.06, dot.baseSize * 1.06);
+                    dot.circleBg.setScale(1.06);
+                    dot.labelTxt.setScale(1.06);
+                });
 
-                // Make label text interactive to prevent pointer-blocking overlay issue
-                dot.text.setInteractive({ useHandCursor: true });
-                dot.text.on('pointerdown', () => this._selectArea(i));
-                dot.text.on('pointerover', () => dot.circle.setFillStyle(0x334155));
-                dot.text.on('pointerout', () => dot.circle.setFillStyle(THEME.PANEL));
+                dot.btn.on('pointerout', () => {
+                    if (this.textures.exists('btn_icon_normal')) dot.btn.setTexture('btn_icon_normal');
+                    if (dot.btn.setTint) dot.btn.setTint(this.selectedArea === i ? selectedTint : normalTint);
+                    dot.btn.setDisplaySize(dot.baseSize, dot.baseSize);
+                    dot.circleBg.setScale(1.0);
+                    dot.labelTxt.setScale(1.0);
+                });
 
-                // Make name text below the dot interactive
-                dot.nameText.setInteractive({ useHandCursor: true });
-                dot.nameText.on('pointerdown', () => this._selectArea(i));
+                dot.btn.on('pointerdown', () => this._selectArea(i));
+
+                dot.labelTxt.setInteractive({ useHandCursor: true });
+                dot.labelTxt.on('pointerdown', () => this._selectArea(i));
+                dot.nameTxt.setInteractive({ useHandCursor: true });
+                dot.nameTxt.on('pointerdown', () => this._selectArea(i));
             } else {
-                dot.circle.setAlpha(0.5);
-                dot.text.setAlpha(0.5);
-                // Clear interaction if locked
-                dot.circle.disableInteractive();
-                dot.text.disableInteractive();
-                dot.nameText.disableInteractive();
+                if (dot.btn.setAlpha) dot.btn.setAlpha(0.6);
+                dot.labelTxt.setAlpha(0.6);
+                dot.nameTxt.setAlpha(0.6);
+                dot.btn.disableInteractive();
+                dot.labelTxt.disableInteractive();
+                dot.nameTxt.disableInteractive();
             }
         });
     }
@@ -197,94 +245,227 @@ export default class QuestScene extends Phaser.Scene {
     _selectArea(index) {
         this.selectedArea = index;
         const area = this.areaData[index];
-        // Highlight selected dot
+        
+        // Highlight selected area button tint
         this.areaDots.forEach((d, i) => {
             if (this.areaData[i] && this.areaData[i].status === 'UNLOCKED') {
-                d.circle.setStrokeStyle(2, i === index ? THEME.AETHER : THEME.HEALTH);
+                const isSel = i === index;
+                if (d.btn.setTint) {
+                    d.btn.setTint(isSel ? 0x22c55e : 0x38bdf8);
+                }
+                if (d.nameTxt) {
+                    d.nameTxt.setColor(isSel ? '#22c55e' : THEME.TEXT_PRIMARY);
+                }
             }
         });
+
         this.questPanelTitle.setText(`${area.area_name} — ${area.quests.length} Quests`);
         this._renderQuestList(area.quests);
+
+        // Slide up animation from out-of-frame bottom when area is selected
+        if (this.questPanelContainer) {
+            this.questPanelContainer.y = 350;
+            this.tweens.add({
+                targets: this.questPanelContainer,
+                y: 0,
+                duration: 400,
+                ease: 'Power2.out'
+            });
+        }
     }
 
     _renderQuestList(quests) {
         this.questListContainer.removeAll(true);
-        const startY = 400;
-        const cardH = 90, gap = 10;
+        const startY = 399; // Lowered by 8px (from 391 to 399)
+        const cardH = 85, gap = 10;
+        const cardW = W - 30; // 450px
 
         quests.forEach((q, i) => {
             const y = startY + i * (cardH + gap);
             const unlocked = q.status === 'UNLOCKED';
             const completed = q.completed;
 
-            const bg = this.add.rectangle(CX, y, W - 50, cardH, unlocked ? THEME.PANEL : 0x111111, 0.9);
-            bg.setStrokeStyle(1, completed ? THEME.HEALTH : (unlocked ? THEME.BORDER : 0x333333));
-
-            const icon = completed ? '✅' : (unlocked ? '⚔️' : '🔒');
-            const iconT = this.add.text(45, y - 15, icon, { fontSize: '18px' }).setOrigin(0, 0.5);
-            const nameT = this.add.text(75, y - 18, q.name, { fontSize: '12px', fontStyle: 'bold', color: unlocked ? THEME.TEXT_PRIMARY : '#555', fontFamily: 'Outfit' }).setOrigin(0, 0.5);
-            const infoT = this.add.text(75, y + 2, `⚡ ${q.stamina_cost} Stamina  |  💪 ${q.power_level} Power`, { fontSize: '9px', color: THEME.TEXT_SECONDARY, fontFamily: 'Outfit' }).setOrigin(0, 0.5);
-
-            // Enemy preview
-            const enemyNames = q.enemies.map(e => `${e.name} Lv.${e.level}`).join(', ');
-            const enemyT = this.add.text(75, y + 18, `👹 ${enemyNames || 'Unknown'}`, { fontSize: '9px', color: '#CD5C5C', fontFamily: 'Outfit' }).setOrigin(0, 0.5);
-
-            const items = [bg, iconT, nameT, infoT, enemyT];
-
-            if (unlocked && !completed) {
-                bg.setInteractive({ useHandCursor: true });
-                bg.on('pointerover', () => bg.setFillStyle(0x334155));
-                bg.on('pointerout', () => bg.setFillStyle(THEME.PANEL));
-                bg.on('pointerdown', () => this._showPreBattleModal(q));
-            } else if (unlocked && completed) {
-                // Allow replay
-                const replayT = this.add.text(W - 50, y, 'REPLAY', { fontSize: '9px', color: '#A5B4FC', fontStyle: 'bold', fontFamily: 'Outfit' }).setOrigin(1, 0.5);
-                items.push(replayT);
-                bg.setInteractive({ useHandCursor: true });
-                bg.on('pointerdown', () => this._showPreBattleModal(q));
+            let cardImg;
+            if (this.textures.exists('card_x12')) {
+                cardImg = this.add.image(CX, y, 'card_x12').setDisplaySize(cardW, cardH);
+                // Sky Blue tint for all unlocked cards!
+                cardImg.setTint(unlocked ? 0x38bdf8 : 0x475569);
+            } else {
+                cardImg = this.add.rectangle(CX, y, cardW, cardH, unlocked ? THEME.PANEL : 0x111111, 0.9);
+                cardImg.setStrokeStyle(1, completed ? THEME.HEALTH : (unlocked ? THEME.BORDER : 0x333333));
             }
 
-        this.questListContainer.add(items);
+            const icon = completed ? '✅' : (unlocked ? '⚔️' : '🔒');
+            const iconT = this.add.text(32, y - 18, icon, { fontSize: '18px' }).setOrigin(0, 0.5);
+            
+            // Name (Reduced font size: 13px bold)
+            const nameT = this.add.text(65, y - 18, q.name, {
+                fontSize: '13px', fontStyle: 'bold', color: unlocked ? '#ffffff' : '#94a3b8', fontFamily: 'Outfit'
+            }).setOrigin(0, 0.5);
+
+            // Info (Reduced font size: 10.5px bold)
+            const infoT = this.add.text(65, y + 2, `⚡ ${q.stamina_cost} Stamina   |   💪 ${q.power_level} Rec. Power`, {
+                fontSize: '10.5px', fontStyle: 'bold', color: '#f59e0b', fontFamily: 'Outfit'
+            }).setOrigin(0, 0.5);
+
+            // Enemy preview (Reduced font size: 10.5px bold)
+            const enemyNames = q.enemies.map(e => `${e.name} Lv.${e.level}`).join(', ');
+            const enemyT = this.add.text(65, y + 20, `👹 Enemies: ${enemyNames || 'Unknown'}`, {
+                fontSize: '10.5px', fontStyle: 'bold', color: '#ef4444', fontFamily: 'Outfit'
+            }).setOrigin(0, 0.5);
+
+            const items = [cardImg, iconT, nameT, infoT, enemyT];
+
+            if (unlocked) {
+                if (completed) {
+                    const replayT = this.add.text(W - 32, y - 18, 'REPLAY', {
+                        fontSize: '10.5px', color: '#4ade80', fontStyle: 'bold', fontFamily: 'Outfit'
+                    }).setOrigin(1, 0.5);
+                    items.push(replayT);
+                }
+
+                cardImg.setInteractive({ useHandCursor: true });
+                cardImg.on('pointerover', () => {
+                    if (cardImg.setTint) cardImg.setTint(0x7dd3fc); // Brighter Sky Blue on hover
+                });
+                cardImg.on('pointerout', () => {
+                    if (cardImg.setTint) cardImg.setTint(0x38bdf8); // Sky Blue
+                });
+                cardImg.on('pointerdown', () => this._showPreBattleModal(q));
+            }
+
+            this.questListContainer.add(items);
         });
 
-        // Aktifkan scroll dinamis berdasarkan quest terakhir
-        const maxY = startY + quests.length * (cardH + gap) + 50;
+        // Enable dynamic scrolling
+        const maxY = startY + quests.length * (cardH + gap) + 60;
         CameraScrollManager.enable(this, maxY);
     }
 
     _showPreBattleModal(quest) {
-        if (this.preBattleContainer) this.preBattleContainer.destroy();
-        // Bersihkan listener lama
-        if (this._modalDragMove) this.input.off('pointermove', this._modalDragMove);
-        if (this._modalDragUp) this.input.off('pointerup', this._modalDragUp);
+        this._destroyPreBattleModal();
 
-        this.preBattleContainer = this.add.container(0, 0).setDepth(50).setScrollFactor(0);
+        // 1. Root Container (Fixed on screen, depth 300)
+        this.preBattleContainer = this.add.container(0, 0).setDepth(300).setScrollFactor(0);
 
-        // Overlay FIXED — tidak ikut scroll
+        // 2. Fullscreen Dark Overlay
         const overlay = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.85).setInteractive();
-        this.preBattleContainer.add(overlay);
 
-        // scrollContainer — ini yang akan bergeser saat di-drag
-        const scrollContainer = this.add.container(0, 0);
-        this.preBattleContainer.add(scrollContainer);
+        // 3. Main Modal Background Window (Shifted down below TOP HUD: Y = 80 to 800, center Y = 440, height = 720px)
+        const panelBg = this.add.rectangle(CX, 440, W - 30, 720, 0x0d1b2a);
+        panelBg.setStrokeStyle(2, THEME.AETHER).setInteractive();
 
-        const items = [];
+        // 4. Fixed Header Bar (Y = 110)
+        const headerBg = this.add.rectangle(CX, 110, W - 30, 60, 0x1e293b).setStrokeStyle(1, THEME.BORDER);
+        const headerTitle = this.add.text(CX, 100, 'PRE-BATTLE STAGE', {
+            fontSize: '15px', fontStyle: 'bold', fontFamily: 'Outfit', color: '#A5B4FC', letterSpacing: 2
+        }).setOrigin(0.5);
+        const headerSubtitle = this.add.text(CX, 120, quest.name, {
+            fontSize: '11px', fontFamily: 'Outfit', color: THEME.TEXT_MUTED
+        }).setOrigin(0.5);
 
-        let currentY = 100; // Starting Y coordinate for content
-        const topY = currentY;
+        const closeBtn = this.add.circle(W - 40, 110, 15, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
+        const closeTxt = this.add.text(W - 40, 110, '✕', { fontSize: '12px', fontStyle: 'bold', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
 
-        // --- SECTION 1: HEADER ---
-        items.push(this.add.text(CX, currentY, 'PRE-BATTLE', { fontSize: '16px', fontStyle: 'bold', color: '#A5B4FC', fontFamily: 'Outfit', letterSpacing: 2 }).setOrigin(0.5));
+        closeBtn.on('pointerover', () => closeBtn.setFillStyle(0x334155));
+        closeBtn.on('pointerout', () => closeBtn.setFillStyle(THEME.PANEL));
+        closeBtn.on('pointerdown', () => this._destroyPreBattleModal());
+
+        // 5. Fixed Footer Action Buttons (Floating at Y = 768 without dark footer bar)
+        const partyBtn = this.add.rectangle(CX - 85, 768, 140, 44, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
+        const partyTxt = this.add.text(CX - 85, 768, '⚙ Atur Party', { fontSize: '11px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
+        partyBtn.on('pointerover', () => partyBtn.setFillStyle(0x334155));
+        partyBtn.on('pointerout', () => partyBtn.setFillStyle(THEME.PANEL));
+        partyBtn.on('pointerdown', () => {
+            this._destroyPreBattleModal();
+            this.scene.start('LoadingScene', { targetScene: 'PartyScene' });
+        });
+
+        const startBtn = this.add.rectangle(CX + 80, 768, 160, 44, 0x166534).setStrokeStyle(2, 0x22c55e).setInteractive({ useHandCursor: true });
+        const startTxt = this.add.text(CX + 80, 768, '⚔ Mulai Battle', { fontSize: '12px', fontStyle: 'bold', fontFamily: 'Outfit', color: '#a8e6cf' }).setOrigin(0.5);
+        startBtn.on('pointerover', () => startBtn.setFillStyle(0x15803d));
+        startBtn.on('pointerout', () => startBtn.setFillStyle(0x166534));
+        startBtn.on('pointerdown', () => this._startBattle(quest));
+
+        // 6. Scroll Viewport Setup (Y = 142 to Y = 735, height = 593px)
+        const viewY = 142;
+        const viewH = 593;
+
+        const maskShape = this.make.graphics();
+        maskShape.fillRect(15, viewY, W - 30, viewH);
+        const mask = maskShape.createGeometryMask();
+
+        this.scrollContainer = this.add.container(0, viewY);
+        this.scrollContainer.setMask(mask);
+
+        // Interactive Drag & Wheel Zone
+        const dragZone = this.add.rectangle(CX, viewY + viewH / 2, W - 30, viewH, 0x000000, 0).setInteractive();
+        let startY = 0;
+
+        dragZone.on('pointerdown', (pointer) => {
+            startY = this.scrollContainer.y - pointer.y;
+        });
+
+        dragZone.on('pointermove', (pointer) => {
+            if (pointer.isDown) {
+                let newY = pointer.y + startY;
+                const contentH = this.scrollContentHeight || viewH;
+                const minY = viewY - Math.max(0, contentH - viewH + 20);
+                const maxY = viewY;
+
+                if (newY > maxY) newY = maxY;
+                if (newY < minY) newY = minY;
+
+                this.scrollContainer.y = newY;
+            }
+        });
+
+        dragZone.on('wheel', (pointer, dx, dy) => {
+            let newY = this.scrollContainer.y - dy;
+            const contentH = this.scrollContentHeight || viewH;
+            const minY = viewY - Math.max(0, contentH - viewH + 20);
+            const maxY = viewY;
+
+            if (newY > maxY) newY = maxY;
+            if (newY < minY) newY = minY;
+
+            this.scrollContainer.y = newY;
+        });
+
+        // Add static modal structures to preBattleContainer (No footerBg)
+        this.preBattleContainer.add([
+            overlay, panelBg, headerBg, headerTitle, headerSubtitle, closeBtn, closeTxt,
+            dragZone, this.scrollContainer,
+            partyBtn, partyTxt, startBtn, startTxt
+        ]);
+
+        // 7. Populate Content inside scrollContainer
+        let currentY = 15;
+
+        // --- SECTION 1: QUEST BADGES & INFO ---
+        const badgeBg1 = this.add.rectangle(CX - 90, currentY + 12, 150, 26, 0x1e293b).setStrokeStyle(1, THEME.BORDER);
+        const badgeTxt1 = this.add.text(CX - 90, currentY + 12, `⚡ Stamina Cost: ${quest.stamina_cost}`, {
+            fontSize: '10px', fontStyle: 'bold', fontFamily: 'Outfit', color: '#f59e0b'
+        }).setOrigin(0.5);
+
+        const badgeBg2 = this.add.rectangle(CX + 90, currentY + 12, 150, 26, 0x1e293b).setStrokeStyle(1, THEME.BORDER);
+        const badgeTxt2 = this.add.text(CX + 90, currentY + 12, `💪 Rec. Power: ${quest.power_level}`, {
+            fontSize: '10px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_SECONDARY
+        }).setOrigin(0.5);
+
+        this.scrollContainer.add([badgeBg1, badgeTxt1, badgeBg2, badgeTxt2]);
+        currentY += 35;
+
+        const divider1 = this.add.rectangle(CX, currentY, W - 60, 1, 0x334155);
+        this.scrollContainer.add(divider1);
+        currentY += 15;
+
+        // --- SECTION 2: TARGET ENEMIES ---
+        const enemyHeader = this.add.text(35, currentY, 'TARGET ENEMIES', {
+            fontSize: '11px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_SECONDARY, letterSpacing: 1
+        }).setOrigin(0, 0.5);
+        this.scrollContainer.add(enemyHeader);
         currentY += 22;
-        items.push(this.add.text(CX, currentY, quest.name, { fontSize: '12px', color: THEME.TEXT_PRIMARY, fontFamily: 'Outfit' }).setOrigin(0.5));
-        currentY += 25;
-
-        items.push(this.add.rectangle(CX, currentY, W - 70, 1, 0x334155)); // Divider
-        currentY += 20;
-
-        // --- SECTION 2: ENEMY INFO ---
-        items.push(this.add.text(50, currentY, 'ENEMY INFO', { fontSize: '10px', fontStyle: 'bold', color: THEME.TEXT_SECONDARY, fontFamily: 'Outfit', letterSpacing: 1 }).setOrigin(0, 0.5));
-        currentY += 25;
 
         const uniqueEnemiesMap = new Map();
         quest.enemies.forEach(e => {
@@ -294,173 +475,150 @@ export default class QuestScene extends Phaser.Scene {
         const uniqueEnemies = Array.from(uniqueEnemiesMap.values());
 
         uniqueEnemies.forEach((e) => {
-            const elemColor = { Fire: '#CD5C5C', Wind: '#458B74', Earth: '#D4A017' }[e.element] || '#aaa';
-            items.push(
-                this.add.text(50, currentY, `👹 ${e.name}`, { fontSize: '11px', color: THEME.TEXT_PRIMARY, fontFamily: 'Outfit', fontStyle: 'bold' }).setOrigin(0, 0.5),
-                this.add.text(250, currentY, `Lv.${e.level}`, { fontSize: '10px', color: '#ffffff', fontFamily: 'Outfit' }).setOrigin(0, 0.5),
-                this.add.text(310, currentY, e.element, { fontSize: '10px', color: elemColor, fontFamily: 'Outfit' }).setOrigin(0, 0.5)
-            );
-            currentY += 25;
+            const elemColor = { Fire: '#ef4444', Wind: '#22c55e', Earth: '#d97706' }[e.element] || '#94a3b8';
+            const eBg = this.add.rectangle(CX, currentY + 10, W - 70, 24, 0x1e293b, 0.6).setStrokeStyle(1, 0x334155);
+            const eName = this.add.text(45, currentY + 10, `👹 ${e.name}`, { fontSize: '11px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0, 0.5);
+            const eLvl = this.add.text(260, currentY + 10, `Lv.${e.level}`, { fontSize: '10px', fontFamily: 'Outfit', color: '#ffffff' }).setOrigin(0, 0.5);
+            const eElem = this.add.text(340, currentY + 10, e.element, { fontSize: '10px', fontStyle: 'bold', fontFamily: 'Outfit', color: elemColor }).setOrigin(0, 0.5);
+
+            this.scrollContainer.add([eBg, eName, eLvl, eElem]);
+            currentY += 28;
         });
 
-        currentY += 10;
-        items.push(this.add.rectangle(CX, currentY, W - 70, 1, 0x334155)); // Divider
-        currentY += 20;
+        currentY += 5;
+        const divider2 = this.add.rectangle(CX, currentY, W - 60, 1, 0x334155);
+        this.scrollContainer.add(divider2);
+        currentY += 15;
 
-        // --- SECTION 3: DROP LOOT ---
-        items.push(this.add.text(50, currentY, 'DROP LOOT', { fontSize: '10px', fontStyle: 'bold', color: THEME.TEXT_SECONDARY, fontFamily: 'Outfit', letterSpacing: 1 }).setOrigin(0, 0.5));
-        currentY += 25;
+        // --- SECTION 3: POSSIBLE REWARDS ---
+        const rewardHeader = this.add.text(35, currentY, 'POSSIBLE REWARDS', {
+            fontSize: '11px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_SECONDARY, letterSpacing: 1
+        }).setOrigin(0, 0.5);
+        this.scrollContainer.add(rewardHeader);
+        currentY += 22;
 
-        const loots = quest.rewards.slice(0, 4);
+        const loots = quest.rewards;
         loots.forEach((r) => {
             const chance = Math.round(r.drop_chance * 100);
-            items.push(this.add.text(50, currentY, `• ${r.item_name} x${r.quantity} (${chance}%)`, { fontSize: '9px', color: THEME.TEXT_PRIMARY, fontFamily: 'Outfit' }).setOrigin(0, 0.5));
+            const isFirst = !!r.is_first_clear;
+            const isClaimed = isFirst && quest.completed;
+
+            let labelText = `• ${r.item_name} x${r.quantity} (${chance}%)`;
+            if (isFirst) {
+                labelText += ` 🎁 [First Clear]`;
+            }
+
+            const textColor = isClaimed ? '#64748b' : (isFirst ? '#f59e0b' : THEME.TEXT_PRIMARY);
+
+            const rTxt = this.add.text(45, currentY, labelText, {
+                fontSize: '10px',
+                fontFamily: 'Outfit',
+                color: textColor
+            }).setOrigin(0, 0.5);
+
+            this.scrollContainer.add(rTxt);
+
+            if (isClaimed) {
+                // Strikethrough line over reward text
+                const textWidth = rTxt.width;
+                const strikeLine = this.add.rectangle(45 + textWidth / 2, currentY, textWidth, 1, 0x64748b);
+                
+                // Red CLAIMED text at right edge
+                const claimedTxt = this.add.text(W - 45, currentY, 'CLAIMED', {
+                    fontSize: '9px',
+                    fontStyle: 'bold',
+                    fontFamily: 'Outfit',
+                    color: '#ef4444'
+                }).setOrigin(1, 0.5);
+
+                this.scrollContainer.add([strikeLine, claimedTxt]);
+            }
+
             currentY += 20;
         });
 
         currentY += 10;
-        items.push(this.add.rectangle(CX, currentY, W - 70, 1, 0x334155)); // Divider
-        currentY += 20;
+        const divider3 = this.add.rectangle(CX, currentY, W - 60, 1, 0x334155);
+        this.scrollContainer.add(divider3);
+        currentY += 15;
 
-        // --- SECTION 4: STAMINA & POWER ---
-        items.push(this.add.text(50, currentY, `⚡ Stamina Cost: ${quest.stamina_cost}`, { fontSize: '11px', color: '#f39c12', fontFamily: 'Outfit', fontStyle: 'bold' }).setOrigin(0, 0.5));
-        currentY += 20;
-        items.push(this.add.text(50, currentY, `💪 Rec. Power: ${quest.power_level}`, { fontSize: '11px', color: THEME.TEXT_SECONDARY, fontFamily: 'Outfit' }).setOrigin(0, 0.5));
-
-        currentY += 20;
-        items.push(this.add.rectangle(CX, currentY, W - 70, 1, 0x334155)); // Divider
-        items.push(this.add.text(CX, currentY, 'SELECT PARTY PRESET', { fontSize: '10px', fontStyle: 'bold', color: THEME.TEXT_SECONDARY, fontFamily: 'Outfit', letterSpacing: 1 }).setOrigin(0.5));
-        currentY += 30;
+        // --- SECTION 4: PARTY PRESET SELECTION ---
+        const presetHeader = this.add.text(CX, currentY, 'SELECT PARTY PRESET', {
+            fontSize: '11px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_SECONDARY, letterSpacing: 1
+        }).setOrigin(0.5);
+        this.scrollContainer.add(presetHeader);
+        currentY += 25;
 
         this._presetBtns = [];
         for (let s = 1; s <= 5; s++) {
             const bx = CX - 160 + (s - 1) * 80;
             const active = s === this.selectedPresetSlot;
-            const btn = this.add.rectangle(bx, currentY, 70, 36, active ? 0x1a2744 : THEME.PANEL).setStrokeStyle(2, active ? THEME.AETHER : THEME.BORDER).setInteractive({ useHandCursor: true });
-            const txt = this.add.text(bx, currentY, `Slot ${s}`, { fontSize: '10px', fontStyle: 'bold', color: active ? '#A5B4FC' : THEME.TEXT_SECONDARY, fontFamily: 'Outfit' }).setOrigin(0.5);
-            btn.on('pointerdown', () => { this.selectedPresetSlot = s; this._showPreBattleModal(quest); });
+            const btn = this.add.rectangle(bx, currentY, 72, 34, active ? 0x1e3a8a : THEME.PANEL).setStrokeStyle(2, active ? 0x3b82f6 : THEME.BORDER).setInteractive({ useHandCursor: true });
+            const txt = this.add.text(bx, currentY, `Slot ${s}`, { fontSize: '10px', fontStyle: 'bold', color: active ? '#ffffff' : THEME.TEXT_SECONDARY, fontFamily: 'Outfit' }).setOrigin(0.5);
+            
+            btn.on('pointerdown', () => {
+                this.selectedPresetSlot = s;
+                this._showPreBattleModal(quest);
+            });
             this._presetBtns.push({ btn, txt });
-            items.push(btn, txt);
+            this.scrollContainer.add([btn, txt]);
         }
 
-        currentY += 35; // Menambah jarak antara tombol slot dan tulisan Party Power
+        currentY += 35;
 
         // Container untuk Preset Cards & Skills
         if (this.presetCardsContainer) this.presetCardsContainer.destroy();
         this.presetCardsContainer = this.add.container(0, 0);
-        items.push(this.presetCardsContainer);
+        this.scrollContainer.add(this.presetCardsContainer);
 
-        this.presetPowerText = this.add.text(CX, currentY, 'Loading data...', { fontSize: '10px', color: THEME.TEXT_MUTED, fontFamily: 'Outfit' }).setOrigin(0.5);
+        this.presetPowerText = this.add.text(CX, currentY, 'Loading data...', { fontSize: '11px', color: THEME.TEXT_MUTED, fontFamily: 'Outfit' }).setOrigin(0.5);
         this.presetCardsContainer.add(this.presetPowerText);
 
-        this.presetCardsStartY = currentY + 35; // Menambah jarak antara Party Power dan Card
+        this.presetCardsStartY = currentY + 30;
         if (this.partyDataLoaded) {
             this._renderPresetCards(this.presetCardsStartY);
         }
 
-        // Tambah jarak untuk cards (potret + kotak skill) agar tidak overlap dengan tombol action
-        currentY += 300; 
+        currentY += 300; // Spacing for preset cards + skills grid
+        this.scrollContentHeight = currentY;
+    }
 
-        // --- SECTION 6: ACTION BUTTONS ---
-        const partyBtn = this.add.rectangle(CX - 85, currentY, 150, 40, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
-        const partyTxt = this.add.text(CX - 85, currentY, '⚙ Atur Party', { fontSize: '11px', fontStyle: 'bold', color: THEME.TEXT_PRIMARY, fontFamily: 'Outfit' }).setOrigin(0.5);
-        partyBtn.on('pointerover', () => partyBtn.setFillStyle(0x334155));
-        partyBtn.on('pointerout', () => partyBtn.setFillStyle(THEME.PANEL));
-        items.push(partyBtn, partyTxt);
-
-        const startBtn = this.add.rectangle(CX + 85, currentY, 150, 40, 0x1a3a2a).setStrokeStyle(2, THEME.HEALTH).setInteractive({ useHandCursor: true });
-        const startTxt = this.add.text(CX + 85, currentY, '⚔ Mulai Battle', { fontSize: '11px', fontStyle: 'bold', color: '#a8e6cf', fontFamily: 'Outfit' }).setOrigin(0.5);
-        startBtn.on('pointerover', () => startBtn.setFillStyle(0x245a3a));
-        startBtn.on('pointerout', () => startBtn.setFillStyle(0x1a3a2a));
-        startBtn.on('pointerdown', () => this._startBattle(quest));
-        items.push(startBtn, startTxt);
-
-        currentY += 40;
-
-        // --- BACKGROUND PANEL ---
-        const topPadding = 30;
-        const bottomPadding = 30;
-        const totalHeight = (currentY - topY) + topPadding + bottomPadding;
-        const panelCenterY = (topY - topPadding) + (totalHeight / 2);
-
-        const panel = this.add.rectangle(CX, panelCenterY, W - 30, totalHeight, 0x0d1b2a).setStrokeStyle(2, THEME.AETHER).setInteractive();
-
-        // Insert panel di belakang semua konten
-        items.splice(0, 0, panel);
-
-        // --- GEOMETRY MASK UNTUK SCROLLING ---
-        // Membuat mask agar konten yang di-scroll terpotong rapi di batas panel
-        const panelTop = topY - topPadding;
-        const maskShape = this.make.graphics();
-        maskShape.fillStyle(0xffffff);
-        // Kotak mask seukuran panel background
-        maskShape.fillRect(CX - (W - 30) / 2, panelTop, W - 30, totalHeight);
-        const scrollMask = maskShape.createGeometryMask();
-        scrollContainer.setMask(scrollMask);
-
-        // Close button (Top-Right relative to panel)
-        const panelRight = CX + (W - 30) / 2;
-        const closeBtn = this.add.circle(panelRight - 25, panelTop + 25, 14, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
-        const closeTxt = this.add.text(panelRight - 25, panelTop + 25, '✕', { fontSize: '12px', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
-        closeBtn.on('pointerover', () => closeBtn.setFillStyle(0x334155));
-        closeBtn.on('pointerout', () => closeBtn.setFillStyle(THEME.PANEL));
-        items.push(closeBtn, closeTxt);
-
-        scrollContainer.add(items);
-
-        // ============================================================
-        // SCROLLABLE MODAL SYSTEM
-        // ============================================================
-        // Hitung apakah konten melebihi tinggi layar
-        const contentBottom = panelTop + totalHeight;
-        const maxScroll = Math.max(0, contentBottom - H + 20);
-
-        let isDragging = false;
-        let dragStartY = 0;
-        let dragStartContentY = 0;
-
-        const handleDragStart = (pointer, localX, localY, e) => {
-            if (e) e.stopPropagation();
-            isDragging = true;
-            dragStartY = pointer.y;
-            dragStartContentY = scrollContainer.y;
-        };
-
-        overlay.on('pointerdown', handleDragStart);
-        panel.on('pointerdown', handleDragStart);
-
-        this._modalDragMove = (pointer) => {
-            if (!isDragging) return;
-            const dy = pointer.y - dragStartY;
-            let newY = dragStartContentY + dy;
-            // Clamp: tidak boleh scroll ke bawah (newY > 0), dan tidak boleh lebih dari maxScroll ke atas
-            if (newY > 0) newY = 0;
-            if (newY < -maxScroll) newY = -maxScroll;
-            scrollContainer.setY(newY);
-        };
-
-        this._modalDragUp = () => { isDragging = false; };
-
-        this.input.on('pointermove', this._modalDragMove);
-        this.input.on('pointerup', this._modalDragUp);
-
-        // Fungsi untuk cleanup saat modal ditutup
-        const destroyModal = () => {
-            this.input.off('pointermove', this._modalDragMove);
-            this.input.off('pointerup', this._modalDragUp);
-            if (this.preBattleContainer) this.preBattleContainer.destroy();
+    _destroyPreBattleModal() {
+        if (this.preBattleContainer) {
+            this.preBattleContainer.destroy();
             this.preBattleContainer = null;
-        };
+        }
+    }
 
-        closeBtn.on('pointerdown', destroyModal);
-        partyBtn.on('pointerdown', () => {
-            destroyModal();
-            this.scene.start('LoadingScene', { targetScene: 'PartyScene' });
+    _ensureCircularElementTextures() {
+        ['fire', 'wind', 'earth', 'rock'].forEach(elem => {
+            const sourceKey = `element_${elem}`;
+            const circleKey = `element_${elem}_circle`;
+            if (this.textures.exists(sourceKey) && !this.textures.exists(circleKey)) {
+                try {
+                    const srcTex = this.textures.get(sourceKey).getSourceImage();
+                    if (srcTex && srcTex.width > 0) {
+                        const canvasTex = this.textures.createCanvas(circleKey, 64, 64);
+                        const ctx = canvasTex.context;
+                        ctx.save();
+                        ctx.beginPath();
+                        ctx.arc(32, 32, 32, 0, Math.PI * 2, true);
+                        ctx.closePath();
+                        ctx.clip();
+                        ctx.drawImage(srcTex, 0, 0, 64, 64);
+                        ctx.restore();
+                        canvasTex.refresh();
+                    }
+                } catch (e) {
+                    console.warn('Failed to create circular element texture:', e);
+                }
+            }
         });
     }
 
     _renderPresetCards(startY) {
         if (!this.presetCardsContainer || !this.partyDataLoaded) return;
+        this._ensureCircularElementTextures();
 
         // Bersihkan renderan card sebelumnya
         this.presetCardsContainer.removeAll(true);
@@ -524,8 +682,8 @@ export default class QuestScene extends Phaser.Scene {
             let rColorInt = THEME.BORDER;
             let rColorHex = '#ffffff';
             if (char.mc_rarity === 'SSR') { rColorInt = 0xffd700; rColorHex = '#ffd700'; }
-            else if (char.mc_rarity === 'SR') { rColorInt = 0xc0c0c0; rColorHex = '#c0c0c0'; }
-            else if (char.mc_rarity === 'R') { rColorInt = 0xcd7f32; rColorHex = '#cd7f32'; }
+            else if (char.mc_rarity === 'SR') { rColorInt = 0xa855f7; rColorHex = '#a855f7'; }
+            else if (char.mc_rarity === 'R') { rColorInt = 0xef4444; rColorHex = '#ef4444'; }
 
             // Portrait Background
             const portBg = this.add.rectangle(px, cardY, 85, 145, THEME.PANEL, 0.7);
@@ -541,7 +699,7 @@ export default class QuestScene extends Phaser.Scene {
                 this.presetCardsContainer.add(img);
             }
 
-            // Element Icon
+            // Element Icon (Borderless circular cropped icon)
             let elementStr = char.mc_element;
             if (char.mc_id === 1 && preset.weap_grid_1_inv_id) {
                 const mainWeap = this.fullWeapons.find(w => w.inv_id === preset.weap_grid_1_inv_id);
@@ -549,17 +707,17 @@ export default class QuestScene extends Phaser.Scene {
                     elementStr = mainWeap.sa_element;
                 }
             }
+            const elCircleKey = elementStr ? `element_${elementStr.toLowerCase()}_circle` : '';
             const elKey = elementStr ? `element_${elementStr.toLowerCase()}` : '';
-            if (this.textures.exists(elKey)) {
-                const ex = px + 42.5 - 12;
-                const ey = cardY - 72.5 + 12;
+            const ex = px + 42.5 - 12;
+            const ey = cardY - 72.5 + 12;
+
+            if (this.textures.exists(elCircleKey)) {
+                const elImg = this.add.image(ex, ey, elCircleKey).setDisplaySize(18, 18);
+                this.presetCardsContainer.add(elImg);
+            } else if (this.textures.exists(elKey)) {
                 const elImg = this.add.image(ex, ey, elKey).setDisplaySize(18, 18);
-                const shape = this.make.graphics();
-                shape.fillCircle(ex, ey, 9);
-                elImg.setMask(shape.createGeometryMask());
-                
-                const elBorder = this.add.circle(ex, ey, 9).setStrokeStyle(1, THEME.PANEL);
-                this.presetCardsContainer.add([elImg, elBorder]);
+                this.presetCardsContainer.add(elImg);
             }
 
             // Rarity Text
@@ -639,7 +797,7 @@ export default class QuestScene extends Phaser.Scene {
             }
 
             // Success — go to battle
-            if (this.preBattleContainer) this.preBattleContainer.destroy();
+            this._destroyPreBattleModal();
             this.scene.start('LoadingScene', {
                 targetScene: 'ReadyScene',
                 targetData: {
@@ -805,5 +963,4 @@ export default class QuestScene extends Phaser.Scene {
 
         this.resumeContainer.add(items);
     }
-
 }

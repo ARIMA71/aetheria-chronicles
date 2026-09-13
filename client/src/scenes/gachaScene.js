@@ -199,6 +199,8 @@ export default class GachaScene extends Phaser.Scene {
         dropRateBtn.on('pointerover', () => { dropRateBtn.setFillStyle(0x334155); dropRateTxt.setColor('#ffffff'); });
         dropRateBtn.on('pointerout', () => { dropRateBtn.setFillStyle(THEME.PANEL); dropRateTxt.setColor(THEME.TEXT_SECONDARY); });
         dropRateBtn.on('pointerdown', () => {
+            if (this.scrollContainer) this.scrollContainer.y = 120;
+            this.populateDropRateList();
             this.dropRateModal.setVisible(true);
         });
 
@@ -327,7 +329,44 @@ export default class GachaScene extends Phaser.Scene {
     populateDropRateList() {
         if (!this.bannerItems) return;
 
-        // Bersihkan list sebelumnya
+        // Preload missing weapon icon assets if any
+        let assetsToLoad = 0;
+        this.bannerItems.forEach((item) => {
+            const iconPath = item.mw_icon_path || item.mw_img_path;
+            const wId = item.mw_id || item.master_item_id;
+            if (iconPath && wId) {
+                let fullPath = iconPath;
+                if (!fullPath.endsWith('.png') && !fullPath.endsWith('.jpg')) fullPath += '.png';
+                const iconKey = `weap_icon_${wId}`;
+
+                // Clean up stale texture if it was cached using landscape/portrait path previously
+                if (this.textures.exists(iconKey)) {
+                    const tex = this.textures.get(iconKey);
+                    if (tex && tex.source && tex.source[0] && tex.source[0].src && tex.source[0].src.includes('portraits')) {
+                        this.textures.remove(iconKey);
+                    }
+                }
+
+                if (!this.textures.exists(iconKey) && !this.textures.exists(`weap_icon_failed_${wId}`)) {
+                    this.load.image(iconKey, fullPath);
+                    this.load.once(`filecomplete-image-${iconKey}`, () => {
+                        if (this.scene && this.scene.isActive()) this.populateDropRateList();
+                    });
+                    this.load.once('loaderror', (fileObj) => {
+                        if (fileObj && fileObj.key === iconKey) {
+                            this.textures.addBase64(`weap_icon_failed_${wId}`, 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');
+                        }
+                    });
+                    assetsToLoad++;
+                }
+            }
+        });
+
+        if (assetsToLoad > 0 && !this.load.isLoading()) {
+            this.load.start();
+        }
+
+        // Bersihkan list sebelumnya & render langsung tanpa menunggu/early return
         this.scrollContainer.removeAll(true);
         let currY = 20;
 
@@ -335,23 +374,33 @@ export default class GachaScene extends Phaser.Scene {
             // Container per item
             const itemBox = this.add.container(40, currY);
 
-            // Base frame (sama dengan di draw result)
+            // Base frame
             let frameColor = 0x334155;
             let strokeColor = 0x475569;
 
             if (item.mw_rarity === 'SSR') {
                 frameColor = 0x7c2d12; strokeColor = 0xf59e0b;
             } else if (item.mw_rarity === 'SR') {
-                frameColor = 0x4c1d95; strokeColor = 0xa78bfa;
+                frameColor = 0x4c1d95; strokeColor = 0xa855f7;
+            } else if (item.mw_rarity === 'R') {
+                frameColor = 0x881337; strokeColor = 0xef4444;
             }
 
-            // Image Container (Scale diperkecil sedikit agar muat di list)
+            // Image Container
             const rect = this.add.rectangle(0, 0, 60, 60, frameColor).setStrokeStyle(2, strokeColor).setOrigin(0);
-            const placeholderImg = this.add.rectangle(5, 5, 50, 50, 0x1e293b).setOrigin(0);
+            
+            const wId = item.mw_id || item.master_item_id;
+            const iconKey = `weap_icon_${wId}`;
+            let itemImg;
+            if (this.textures.exists(iconKey)) {
+                itemImg = this.add.image(30, 30, iconKey).setDisplaySize(50, 50);
+            } else {
+                itemImg = this.add.rectangle(5, 5, 50, 50, 0x1e293b).setOrigin(0);
+            }
 
             // Rarity
             const rarityBg = this.add.rectangle(30, 60, 60, 12, 0x0f172a).setOrigin(0.5, 1);
-            const rarityColor = item.mw_rarity === 'SSR' ? '#fbbf24' : (item.mw_rarity === 'SR' ? '#403fffff' : '#53ff81ff');
+            const rarityColor = item.mw_rarity === 'SSR' ? '#fbbf24' : (item.mw_rarity === 'SR' ? '#a855f7' : '#ef4444');
             const rarityText = this.add.text(30, 54, item.mw_rarity, {
                 fontSize: '9px', fontStyle: 'bold', fontFamily: 'Outfit', color: rarityColor
             }).setOrigin(0.5);
@@ -368,7 +417,7 @@ export default class GachaScene extends Phaser.Scene {
 
             // Divider line
             const divider = this.add.rectangle(-20, 75, W - 40, 1, THEME.BORDER).setOrigin(0);
-            itemBox.add([rect, placeholderImg, rarityBg, rarityText, nameTxt, rateTxt, divider]);
+            itemBox.add([rect, itemImg, rarityBg, rarityText, nameTxt, rateTxt, divider]);
 
             // Element Icon (Disesuaikan ukurannya agar pas di dalam lingkaran tanpa mask)
             const elKey = item.mw_element ? `element_${item.mw_element.toLowerCase()}` : null;
@@ -433,38 +482,74 @@ export default class GachaScene extends Phaser.Scene {
             this.sound.play('sfx_gacha', { volume: 0.8 });
         }
 
-        // Clear previous grid items
+        // Render modal immediately
         this.resultItemsGroup.clear(true, true);
 
         const isMulti = items.length > 1;
-
-        let startX = isMulti ? CX - 130 : CX;
-        let startY = isMulti ? 200 : H / 2 - 50;
-        let spacingX = 90;
-        let spacingY = 110;
+        const spacingX = 90;
+        const spacingY = 110;
+        const cols = 4;
+        const startY = isMulti ? 200 : H / 2 - 50;
 
         items.forEach((item, index) => {
-            let row = isMulti ? Math.floor(index / 4) : 0;
-            let col = isMulti ? index % 4 : 0;
+            let row = isMulti ? Math.floor(index / cols) : 0;
+            let colInRow = isMulti ? (index % cols) : 0;
 
-            // If it's the last row of a 10x+1 (the 11th item), center it
-            if (isMulti && index === 10) {
-                row = 2;
-                col = 1.5; // shift to center roughly
+            let x = CX;
+            let y = startY;
+
+            if (isMulti) {
+                const itemsInThisRow = Math.min(cols, items.length - row * cols);
+                const rowWidth = (itemsInThisRow - 1) * spacingX;
+                const rowStartX = CX - rowWidth / 2;
+                x = rowStartX + colInRow * spacingX;
+                y = startY + row * spacingY;
             }
 
-            let x = startX + (col * spacingX);
-            let y = startY + (row * spacingY);
-
-            this.createResultItem(x, y, item);
+            this.createResultItem(x, y, item, index);
         });
 
         this.resultContainer.setVisible(true);
         this.newCharactersQueue = items.filter(i => i.is_character_unlocked);
+
+        // Preload missing 1:1 weapon icon assets in background if any
+        let assetsToLoad = 0;
+        items.forEach((item) => {
+            const iconPath = item.mw_icon_path || item.mw_img_path;
+            const wId = item.mw_id || item.master_item_id;
+            if (iconPath && wId) {
+                let fullPath = iconPath;
+                if (!fullPath.endsWith('.png') && !fullPath.endsWith('.jpg')) fullPath += '.png';
+                const iconKey = `weap_icon_${wId}`;
+
+                if (this.textures.exists(iconKey)) {
+                    const tex = this.textures.get(iconKey);
+                    if (tex && tex.source && tex.source[0] && tex.source[0].src && tex.source[0].src.includes('portraits')) {
+                        this.textures.remove(iconKey);
+                    }
+                }
+
+                if (!this.textures.exists(iconKey) && !this.textures.exists(`weap_icon_failed_${wId}`)) {
+                    this.load.image(iconKey, fullPath);
+                    this.load.once('loaderror', (fileObj) => {
+                        if (fileObj && fileObj.key === iconKey) {
+                            this.textures.addBase64(`weap_icon_failed_${wId}`, 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');
+                        }
+                    });
+                    assetsToLoad++;
+                }
+            }
+        });
+
+        if (assetsToLoad > 0 && !this.load.isLoading()) {
+            this.load.start();
+        }
     }
 
-    createResultItem(x, y, itemData) {
-        const itemBox = this.add.container(x, y);
+    createResultItem(x, y, itemData, index = 0) {
+        // Start 50px lower for slide-in animation with alpha 0
+        const itemBox = this.add.container(x, y + 50);
+        itemBox.setAlpha(0);
 
         // Base frame - Solid rounded color
         let frameColor = 0x334155;
@@ -475,22 +560,32 @@ export default class GachaScene extends Phaser.Scene {
             strokeColor = 0xf59e0b; // Gold
         } else if (itemData.rarity === 'SR') {
             frameColor = 0x4c1d95;
-            strokeColor = 0xa78bfa; // Purple
+            strokeColor = 0xa855f7; // Purple
+        } else if (itemData.rarity === 'R') {
+            frameColor = 0x881337;
+            strokeColor = 0xef4444; // Red
         }
 
         const rect = this.add.rectangle(0, 0, 75, 75, frameColor).setStrokeStyle(2, strokeColor);
 
-        // Placeholder item shape
-        const placeholderImg = this.add.rectangle(0, 0, 50, 50, 0x1e293b);
+        // Item Icon (1:1 square asset) or fallback placeholder
+        const wId = itemData.mw_id || itemData.master_item_id;
+        const iconKey = `weap_icon_${wId}`;
+        let itemImg;
+        if (this.textures.exists(iconKey)) {
+            itemImg = this.add.image(0, 0, iconKey).setDisplaySize(50, 50);
+        } else {
+            itemImg = this.add.rectangle(0, 0, 50, 50, 0x1e293b);
+        }
 
         // Rarity text (Bottom Center)
         const rarityBg = this.add.rectangle(0, 37, 75, 14, 0x0f172a);
-        const rarityColor = itemData.rarity === 'SSR' ? '#fbbf24' : (itemData.rarity === 'SR' ? '#c084fc' : '#94a3b8');
+        const rarityColor = itemData.rarity === 'SSR' ? '#fbbf24' : (itemData.rarity === 'SR' ? '#a855f7' : '#ef4444');
         const rarityText = this.add.text(0, 37, itemData.rarity, {
             fontSize: '10px', fontStyle: 'bold', fontFamily: 'Outfit', color: rarityColor
         }).setOrigin(0.5);
 
-        itemBox.add([rect, placeholderImg, rarityBg, rarityText]);
+        itemBox.add([rect, itemImg, rarityBg, rarityText]);
 
         // Element Icon (Disesuaikan ukurannya agar pas di dalam lingkaran tanpa mask)
         const elKey = itemData.element ? `element_${itemData.element.toLowerCase()}` : null;
@@ -516,10 +611,18 @@ export default class GachaScene extends Phaser.Scene {
             itemBox.add([badgeBg, badgeTxt]);
         }
 
-        // Convert Duplicates text? Optional, could clutter. Keeping clean.
-
         this.resultContainer.add(itemBox);
         this.resultItemsGroup.add(itemBox);
+
+        // Slide in from bottom with slight bounce (Back.easeOut) and fade in
+        this.tweens.add({
+            targets: itemBox,
+            y: y,
+            alpha: 1,
+            duration: 350,
+            ease: 'Back.easeOut',
+            delay: index * 75
+        });
     }
 
     _buildNewCharacterModal() {

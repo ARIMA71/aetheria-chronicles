@@ -26,6 +26,9 @@ export default class WeaponDetailScene extends Phaser.Scene {
         this.load.image('element_fire', 'assets/icons/elements/fire.png');
         this.load.image('element_wind', 'assets/icons/elements/wind.png');
         this.load.image('element_earth', 'assets/icons/elements/rock.png');
+        if (!this.cache.audio.exists('sfx_success')) {
+            this.load.audio('sfx_success', 'assets/audio/sfx/success.mp3');
+        }
     }
 
     create() {
@@ -111,17 +114,38 @@ export default class WeaponDetailScene extends Phaser.Scene {
         const bannerW = W - 30; // Added padding
         cy += 70;
 
-        // PORTRAIT PLACEHOLDER
+        const path = weap.mw_img_path;
+        const imgKey = `weap_img_${weap.mw_id}`;
+        if (path && !this.textures.exists(imgKey)) {
+            let fullPath = path;
+            if (!fullPath.endsWith('.png') && !fullPath.endsWith('.jpg')) fullPath += '.png';
+            this.load.image(imgKey, fullPath);
+            this.load.once('complete', () => this.renderUI());
+            this.load.start();
+            return;
+        }
+
+        // PORTRAIT PLACEHOLDER & IMAGE
         const portraitH = 160;
         const portraitBox = this.add.rectangle(CX, cy + portraitH / 2, bannerW, portraitH, 0x0a0f1d, 0.5).setStrokeStyle(1, THEME.BORDER);
         this.scrollGroup.add(portraitBox);
 
+        if (this.textures.exists(imgKey)) {
+            const weapImg = this.add.image(CX, cy + portraitH / 2, imgKey);
+            weapImg.setDisplaySize(bannerW, portraitH);
+            const maskShape = this.make.graphics();
+            maskShape.fillStyle(0xffffff);
+            maskShape.fillRoundedRect(CX - bannerW / 2, cy, bannerW, portraitH, 4);
+            weapImg.setMask(maskShape.createGeometryMask());
+            this.scrollGroup.add(weapImg);
+        }
+
         // Rarity at top right of portrait container
         const rarity = weap.mw_rarity;
         let rarityColor = '#ffffff';
-        if (rarity === 'SSR') rarityColor = '#ffd700'; // Kuning
-        else if (rarity === 'SR') rarityColor = '#3b82f6'; // Biru
-        else if (rarity === 'R') rarityColor = '#10b981'; // Hijau
+        if (rarity === 'SSR') rarityColor = '#ffd700'; // Gold
+        else if (rarity === 'SR') rarityColor = '#a855f7'; // Purple
+        else if (rarity === 'R') rarityColor = '#ef4444'; // Red
 
         this.scrollGroup.add(this.add.text(CX + bannerW / 2 - 10, cy + 15, rarity, { fontSize: '16px', color: rarityColor, fontStyle: 'bold', stroke: '#000', strokeThickness: 2 }).setOrigin(1, 0.5));
 
@@ -526,6 +550,9 @@ export default class WeaponDetailScene extends Phaser.Scene {
 
 
     showUpgradeSuccessModal(oldLevel, newLevel, newExp) {
+        if (this.sound.get('sfx_success') || this.cache.audio.exists('sfx_success')) {
+            this.sound.play('sfx_success', { volume: 0.8 });
+        }
         this.modalGroup.clear(true, true);
         const W = this.cameras.main.width, H = this.cameras.main.height, CX = W / 2, CY = H / 2;
 
@@ -559,6 +586,9 @@ export default class WeaponDetailScene extends Phaser.Scene {
     }
 
     showLimitBreakSuccessModal() {
+        if (this.sound.get('sfx_success') || this.cache.audio.exists('sfx_success')) {
+            this.sound.play('sfx_success', { volume: 0.8 });
+        }
         this.modalGroup.clear(true, true);
         const W = this.cameras.main.width, H = this.cameras.main.height, CX = W / 2, CY = H / 2;
 
@@ -713,8 +743,8 @@ export default class WeaponDetailScene extends Phaser.Scene {
             let color = THEME.BORDER;
             const rarity = item.mw_rarity;
             if (rarity === 'SSR') color = 0xffd700;
-            else if (rarity === 'SR') color = 0xc0c0c0;
-            else if (rarity === 'R') color = 0xcd7f32;
+            else if (rarity === 'SR') color = 0xa855f7;
+            else if (rarity === 'R') color = 0xef4444;
 
             const cardBg = this.add.graphics();
             cardBg.fillStyle(THEME.PANEL, 1);
@@ -732,14 +762,32 @@ export default class WeaponDetailScene extends Phaser.Scene {
             this.modalGroup.add(zone);
 
             const artH = boxH * 0.45;
-            const artBg = this.add.graphics();
-            artBg.fillStyle(THEME.BG, 1);
-            artBg.lineStyle(1, color);
-            artBg.fillRoundedRect(ix - boxW / 2 + 4, iy - boxH / 2 + 4, boxW - 8, artH, 6);
-            artBg.strokeRoundedRect(ix - boxW / 2 + 4, iy - boxH / 2 + 4, boxW - 8, artH, 6);
-            this.modalGroup.add(artBg);
+            const yTop = iy - boxH / 2;
+            const imgKey = `weap_img_${item.mw_id}`;
+            if (this.textures.exists(imgKey)) {
+                const weapImg = this.add.image(ix, yTop + 4 + artH / 2, imgKey);
+                weapImg.setDisplaySize(boxW - 8, artH);
+                weapImg.setAlpha(1, 1, 0.4, 0.4);
+                const maskShape = this.make.graphics();
+                maskShape.fillStyle(0xffffff);
+                maskShape.fillRoundedRect(ix - boxW / 2 + 4, yTop + 4, boxW - 8, artH, 6);
+                weapImg.setMask(maskShape.createGeometryMask());
+                this.modalGroup.add(weapImg);
+            } else {
+                const artBg = this.add.graphics();
+                artBg.fillStyle(THEME.BG, 1);
+                artBg.fillRoundedRect(ix - boxW / 2 + 4, yTop + 4, boxW - 8, artH, 6);
+                this.modalGroup.add(artBg);
+            }
 
-            this.modalGroup.add(this.add.text(ix, iy - boxH / 2 + 4 + artH / 2, item.mw_name.split(' ')[0], { fontSize: '10px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold' }).setOrigin(0.5));
+            const border = this.add.graphics();
+            border.lineStyle(1, color);
+            border.strokeRoundedRect(ix - boxW / 2 + 4, yTop + 4, boxW - 8, artH, 6);
+            this.modalGroup.add(border);
+
+            if (!this.textures.exists(`weap_img_${item.mw_id}`)) {
+                this.modalGroup.add(this.add.text(ix, iy - boxH / 2 + 4 + artH / 2, item.mw_name.split(' ')[0], { fontSize: '10px', color: THEME.TEXT_PRIMARY, fontStyle: 'bold' }).setOrigin(0.5));
+            }
 
             const element = item.mw_element;
             const elKey = element ? `element_${element.toLowerCase()}` : '';
@@ -762,8 +810,8 @@ export default class WeaponDetailScene extends Phaser.Scene {
 
             let rColor = '#ffffff';
             if (rarity === 'SSR') rColor = '#ffd700';
-            else if (rarity === 'SR') rColor = '#c0c0c0';
-            else if (rarity === 'R') rColor = '#cd7f32';
+            else if (rarity === 'SR') rColor = '#a855f7';
+            else if (rarity === 'R') rColor = '#ef4444';
 
             if (rarity) {
                 this.modalGroup.add(this.add.text(ix - boxW / 2 + 6, iy - boxH / 2 + artH + 5, rarity, { fontSize: '11px', color: rColor, fontStyle: 'bold', stroke: '#000000', strokeThickness: 2, fontFamily: 'Outfit' }).setOrigin(0, 1));
