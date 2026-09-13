@@ -11,14 +11,20 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Routes
+// API Routes
 app.use('/api', routes);
 
-// Test route
-app.get('/', (req, res) => {
-  res.json({
-    message: 'Aetheria Chronicles API is running'
-  });
+// Serve Client Static Build & Game Assets
+const path = require('path');
+const clientDistPath = path.join(__dirname, '../client/dist');
+const clientAssetsPath = path.join(__dirname, '../client/assets');
+
+app.use(express.static(clientDistPath));
+app.use('/assets', express.static(clientAssetsPath));
+
+// Fallback to index.html for non-API routes
+app.use((req, res) => {
+  res.sendFile(path.join(clientDistPath, 'index.html'));
 });
 
 // Server start

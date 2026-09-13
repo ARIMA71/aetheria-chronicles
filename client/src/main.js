@@ -104,33 +104,8 @@ const config = {
 
 const game = new Phaser.Game(config);
 
-// ── Portability Benchmark: Standalone High-Visibility FPS Counter ──
+// ── Portability Benchmark: Silent FPS & Latency Sampling for Telemetry ──
 (function setupFPSBenchmark() {
-    let fpsCounter = document.getElementById('fps-benchmark-counter');
-    if (!fpsCounter) {
-        fpsCounter = document.createElement('div');
-        fpsCounter.id = 'fps-benchmark-counter';
-        fpsCounter.style.cssText = `
-            position: fixed;
-            top: 15px;
-            right: 15px;
-            background: rgba(15, 23, 42, 0.92);
-            color: #22c55e;
-            border: 2px solid #22c55e;
-            padding: 8px 16px;
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 15px;
-            font-weight: bold;
-            border-radius: 8px;
-            z-index: 9999999;
-            box-shadow: 0 4px 15px rgba(34, 197, 94, 0.4);
-            pointer-events: none;
-            user-select: none;
-            letter-spacing: 1px;
-        `;
-        document.body.appendChild(fpsCounter);
-    }
-
     let frameCount = 0;
     let lastTime = performance.now();
 
@@ -148,15 +123,6 @@ const game = new Phaser.Game(config);
             if (!window.__fpsSamples) window.__fpsSamples = [];
             window.__fpsSamples.push(currentFps);
             if (window.__fpsSamples.length > 300) window.__fpsSamples.shift();
-
-            if (fpsCounter) {
-                const color = currentFps >= 50 ? '#22c55e' : (currentFps >= 30 ? '#eab308' : '#ef4444');
-                fpsCounter.style.color = color;
-                fpsCounter.style.borderColor = color;
-                fpsCounter.style.boxShadow = `0 4px 15px ${color}66`;
-                const pingText = window.__lastApiLatency ? ` | 📡 API: ${window.__lastApiLatency}` : '';
-                fpsCounter.innerText = `⚡ ${currentFps} FPS${pingText}`;
-            }
         }
     });
 })();
