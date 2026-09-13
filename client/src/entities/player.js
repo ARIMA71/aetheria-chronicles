@@ -254,6 +254,55 @@ export default class Player extends Phaser.GameObjects.Container {
     // ACTION QUEUE & AUTO
     // ─────────────────────────────────────────────────────────────────────────
 
+    get isStunned() {
+        if (this.hp <= 0) return false;
+        const effects = this.activeEffects || [];
+        return effects.some(e => {
+            if (!e) return false;
+            const stat = String(e.target_stat || e.stat || e.modifier_target || '').toUpperCase();
+            const name = String(e.effect_name || e.name || e.mse_name || '').toUpperCase();
+            const type = String(e.effect_type || e.type || e.mse_type || '').toUpperCase();
+            return stat === 'STUN' || name.includes('STUN') || type === 'STUN';
+        });
+    }
+
+    updateStunVisual() {
+        // UI HUD portrait card selalu solid
+        this.setAlpha(1.0);
+
+        if (this.hp <= 0) {
+            if (this._stunTween) {
+                this._stunTween.stop();
+                this._stunTween = null;
+            }
+            return;
+        }
+
+        // Hanya sprite karakter di arena pertarungan yang kelap-kelip alpha
+        if (this.isStunned && this.battleSprite) {
+            if (!this._stunTween || !this._stunTween.isPlaying()) {
+                if (this._stunTween) this._stunTween.stop();
+                this._stunTween = this.scene.tweens.add({
+                    targets: this.battleSprite,
+                    alpha: 0.35,
+                    duration: 400,
+                    yoyo: true,
+                    repeat: -1,
+                    ease: 'Sine.easeInOut'
+                });
+            }
+        } else {
+            if (this._stunTween) {
+                this._stunTween.stop();
+                this._stunTween = null;
+            }
+            if (this.battleSprite) {
+                this.battleSprite.setAlpha(1.0);
+                this.battleSprite.clearTint();
+            }
+        }
+    }
+
     updateActionBadge() {
         if (this.hp <= 0) {
             this._actionBadgeBg.setAlpha(0);
@@ -264,7 +313,10 @@ export default class Player extends Phaser.GameObjects.Container {
         let icon = '';
         let color = 0x94a3b8;
         
-        if (this.isAuto) {
+        if (this.isStunned) {
+            icon = '💫';
+            color = 0xf59e0b; // amber / stunned
+        } else if (this.isAuto) {
             icon = '🤖';
             color = 0x3b82f6; // blue
         } else if (this.queuedAction.type === 'basic_attack') {
@@ -353,11 +405,9 @@ export default class Player extends Phaser.GameObjects.Container {
             this._koText.setAlpha(0);
             this._bg.setStrokeStyle(1, 0x334155);
             this._accent.setFillStyle(this._elemColor);
-            if (this.battleSprite) {
-                this.battleSprite.setAlpha(1.0);
-                this.battleSprite.clearTint();
-            }
         }
+
+        this.updateStunVisual();
 
         // ── Status Effect Indicators ──
         // Rebuild teks indikator kecil di atas HP bar setiap refresh

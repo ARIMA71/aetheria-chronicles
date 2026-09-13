@@ -15,11 +15,15 @@ exports.getQuests = async (req, res) => {
             ORDER BY mq.mq_order ASC
         `, [playerId]);
 
-        // Keep track of completed quest orders
-        let maxCompletedOrder = -1;
+        // --------------------------------------------------
+        // [HEADSTART PLAYTEST] Quest Unlock Rule:
+        // - Stage 0 s/d 7 (mq_order 0-7): Bebas dimainkan tanpa urutan.
+        // - Stage Nightmare 8-10 (mq_order >= 8): Terkunci sampai Stage 7 diselesaikan.
+        // --------------------------------------------------
+        let hasCompletedStage7 = false;
         rows.forEach(r => {
-            if (r.pq_status === 'Completed' && r.mq_order > maxCompletedOrder) {
-                maxCompletedOrder = r.mq_order;
+            if (r.pq_status === 'Completed' && (r.mq_order >= 7 || r.mq_id === 8)) {
+                hasCompletedStage7 = true;
             }
         });
 
@@ -57,8 +61,9 @@ exports.getQuests = async (req, res) => {
             if (q.mq_order >= 4 && q.mq_order <= 7) targetArea = areas[1];
             if (q.mq_order >= 8) targetArea = areas[2];
 
-            // A quest is unlocked if its order is <= maxCompletedOrder + 1
-            const isUnlocked = q.mq_order <= maxCompletedOrder + 1;
+            // [HEADSTART PLAYTEST] Unlock Determination:
+            // Stage 0-7 selalu terbuka; Stage 8+ (Nightmare) butuh penyelesaian Stage 7 (mq_order 7)
+            const isUnlocked = q.mq_order <= 7 ? true : hasCompletedStage7;
             if (isUnlocked) targetArea.status = 'UNLOCKED';
 
             const questEnemies = enemies.filter(e => e.mq_id === q.mq_id).map(e => ({ name: e.name, level: e.level, element: e.element }));

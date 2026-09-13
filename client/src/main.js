@@ -20,6 +20,12 @@ class GlobalClickSoundPlugin extends Phaser.Plugins.ScenePlugin {
         this.systems.events.on('create', this.onCreate, this);
     }
     onCreate() {
+        this.scene.input.on('pointerdown', () => {
+            if (this.scene.sound && this.scene.sound.context && this.scene.sound.context.state === 'suspended') {
+                this.scene.sound.context.resume();
+            }
+        });
+
         this.scene.input.on('gameobjectdown', (pointer, gameObject) => {
             // Abaikan jika gameObject diset disableClickSound, atau overlay / panel besar
             if (gameObject.disableClickSound) return;
@@ -132,9 +138,10 @@ window.__benchmarkHistory = [];
 window.logBenchmark = function (endpoint, status, durationMs) {
     const timeStr = new Date().toLocaleTimeString();
     const fps = window.__currentFps || 60;
-    window.__lastApiLatency = `${durationMs} ms`;
+    const numDuration = parseFloat(durationMs) || 0;
+    window.__lastApiLatency = `${numDuration.toFixed(1)} ms`;
     if (!window.__latencySamples) window.__latencySamples = [];
-    window.__latencySamples.push(durationMs);
+    window.__latencySamples.push(numDuration);
     if (window.__latencySamples.length > 100) window.__latencySamples.shift();
 
     const entry = {

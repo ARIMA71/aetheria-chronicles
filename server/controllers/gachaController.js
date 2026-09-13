@@ -171,14 +171,19 @@ exports.pull = async (req, res) => {
 
             // Cek apakah ada unlock karakter
             if (pulled.unlocks_mc_id !== null) {
-                // Ambil info karakter untuk display
+                // Ambil info karakter lengkap untuk display modal
                 const [charDataRows] = await conn.query(
-                    'SELECT mc_name, mc_splash_path FROM master_characters WHERE mc_id = ?',
+                    'SELECT mc_id, mc_name, mc_rarity, mc_element, mc_portrait_path, mc_square_path, mc_splash_path FROM master_characters WHERE mc_id = ?',
                     [pulled.unlocks_mc_id]
                 );
                 if (charDataRows.length > 0) {
                     const charData = charDataRows[0];
+                    resultEntry.mc_id = charData.mc_id;
                     resultEntry.character_name = charData.mc_name;
+                    resultEntry.character_rarity = charData.mc_rarity;
+                    resultEntry.character_element = charData.mc_element;
+                    resultEntry.character_portrait_path = charData.mc_portrait_path;
+                    resultEntry.character_square_path = charData.mc_square_path;
                     resultEntry.character_splash_path = charData.mc_splash_path;
                     if (resultEntry.character_splash_path && !resultEntry.character_splash_path.endsWith('.png')) {
                         resultEntry.character_splash_path += '.png';

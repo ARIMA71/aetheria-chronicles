@@ -21,6 +21,11 @@ const AREA_DOTS = [
 export default class QuestScene extends Phaser.Scene {
     constructor() { super('QuestScene'); }
 
+    init(data) {
+        this.targetData = data || {};
+        this.openQuestId = this.targetData.openQuestId || null;
+    }
+
     preload() {
         this.load.image('bg_quest', 'assets/backgrounds/questScene.jpg');
         if (!this.textures.exists('btn_icon_normal')) this.load.image('btn_icon_normal', 'assets/ui/button/C/Icon Button.png');
@@ -92,14 +97,6 @@ export default class QuestScene extends Phaser.Scene {
                     let pPath = c.mc_portrait_path;
                     if (!pPath.endsWith('.png') && !pPath.endsWith('.jpg')) pPath += '.png';
                     const pKey = `portrait_${c.mc_id}`;
-                    if (this.textures.exists(pKey)) {
-                        const tex = this.textures.get(pKey);
-                        const src = tex && tex.source && tex.source[0] && tex.source[0].src ? tex.source[0].src : '';
-                        const decodedSrc = decodeURIComponent(src);
-                        if (decodedSrc && !decodedSrc.includes(pPath) && !decodedSrc.endsWith(pPath)) {
-                            this.textures.remove(pKey);
-                        }
-                    }
                     if (!this.textures.exists(pKey)) {
                         this.load.image(pKey, pPath);
                         assetsToLoad++;
@@ -109,14 +106,6 @@ export default class QuestScene extends Phaser.Scene {
                     let sqPath = c.mc_square_path;
                     if (!sqPath.endsWith('.png') && !sqPath.endsWith('.jpg')) sqPath += '.png';
                     const sqKey = `char_sq_${c.mc_id}`;
-                    if (this.textures.exists(sqKey)) {
-                        const tex = this.textures.get(sqKey);
-                        const src = tex && tex.source && tex.source[0] && tex.source[0].src ? tex.source[0].src : '';
-                        const decodedSrc = decodeURIComponent(src);
-                        if (decodedSrc && !decodedSrc.includes(sqPath) && !decodedSrc.endsWith(sqPath)) {
-                            this.textures.remove(sqKey);
-                        }
-                    }
                     if (!this.textures.exists(sqKey)) {
                         this.load.image(sqKey, sqPath);
                         assetsToLoad++;
@@ -216,10 +205,29 @@ export default class QuestScene extends Phaser.Scene {
                 this.areaData = json.data.areas;
                 this._updateAreaDots();
 
-                // Auto-select the first unlocked area so quests are immediately visible
-                const firstUnlockedIdx = this.areaData.findIndex(a => a.status === 'UNLOCKED');
-                if (firstUnlockedIdx !== -1) {
-                    this._selectArea(firstUnlockedIdx);
+                let targetAreaIdx = -1;
+                let targetQuest = null;
+
+                if (this.openQuestId) {
+                    this.areaData.forEach((area, aIdx) => {
+                        const found = area.quests.find(q => q.mq_id === Number(this.openQuestId));
+                        if (found) {
+                            targetAreaIdx = aIdx;
+                            targetQuest = found;
+                        }
+                    });
+                }
+
+                if (targetAreaIdx !== -1) {
+                    this._selectArea(targetAreaIdx);
+                    if (targetQuest) {
+                        this._showPreBattleModal(targetQuest);
+                    }
+                } else {
+                    const firstUnlockedIdx = this.areaData.findIndex(a => a.status === 'UNLOCKED');
+                    if (firstUnlockedIdx !== -1) {
+                        this._selectArea(firstUnlockedIdx);
+                    }
                 }
             }
         } catch (e) { console.error('Failed to fetch quests:', e); }
@@ -452,7 +460,13 @@ export default class QuestScene extends Phaser.Scene {
         partyBtn.on('pointerdown', () => {
             if (this.textures.exists('btn_a_active')) partyBtn.setTexture('btn_a_active');
             this._destroyPreBattleModal();
-            this.scene.start('LoadingScene', { targetScene: 'PartyScene' });
+            this.scene.start('LoadingScene', {
+                targetScene: 'PartyScene',
+                targetData: {
+                    fromScene: 'QuestScene',
+                    questId: quest.mq_id
+                }
+            });
         });
 
         if (this.textures.exists('btn_a_normal')) {
@@ -929,33 +943,192 @@ export default class QuestScene extends Phaser.Scene {
 
     _showStaminaModal(quest, staminaData) {
         if (this.staminaModalContainer) this.staminaModalContainer.destroy();
-        this.staminaModalContainer = this.add.container(0, 0).setDepth(60);
+        this.staminaModalContainer = this.add.container(0, 0).setDepth(400);
 
+        const items = [];
+
+        // 1. Dark Overlay Backdrop
         const ov = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.85).setInteractive();
         ov.on('pointerdown', (p, x, y, e) => e.stopPropagation());
+        items.push(ov);
 
-        const pnl = this.add.rectangle(CX, H / 2, 340, 280, 0x0d1b2a).setStrokeStyle(2, 0xf39c12).setInteractive();
+        // 2. Main Panel Box using Card X101 UI asset
+        const panelW = 380;
+        const panelH = 340;
+        let pnl;
+        if (this.textures.exists('card_x101')) {
+            pnl = this.add.image(CX, H / 2, 'card_x101').setDisplaySize(panelW, panelH);
+            pnl.setTint(0x38bdf8); // Sky Blue tint
+        } else if (this.textures.exists('bg_card_x101')) {
+            pnl = this.add.image(CX, H / 2, 'bg_card_x101').setDisplaySize(panelW, panelH);
+            pnl.setTint(0x38bdf8);
+        } else {
+            pnl = this.add.rectangle(CX, H / 2, panelW, panelH, 0x0d1b2a).setStrokeStyle(2, 0xf39c12);
+        }
+        pnl.setInteractive();
         pnl.on('pointerdown', (p, x, y, e) => e.stopPropagation());
+        items.push(pnl);
 
-        const items = [ov, pnl];
-        items.push(this.add.text(CX, H / 2 - 110, '⚡ STAMINA HABIS', { fontSize: '16px', fontStyle: 'bold', color: '#f39c12', fontFamily: 'Outfit' }).setOrigin(0.5));
-        items.push(this.add.text(CX, H / 2 - 75, `Butuh: ${staminaData.stamina_cost} | Tersisa: ${staminaData.current_stamina}`, { fontSize: '11px', color: THEME.TEXT_SECONDARY, fontFamily: 'Outfit' }).setOrigin(0.5));
-        items.push(this.add.text(CX, H / 2 - 40, `Full Potion tersedia: ${staminaData.full_potion_count}x`, { fontSize: '12px', color: THEME.TEXT_PRIMARY, fontFamily: 'Outfit' }).setOrigin(0.5));
-        items.push(this.add.text(CX, H / 2 - 10, 'Gunakan 1x Full Potion untuk\nmengisi ulang stamina ke 100?', { fontSize: '10px', color: THEME.TEXT_SECONDARY, fontFamily: 'Outfit', align: 'center' }).setOrigin(0.5));
+        // 3. Title Text
+        const titleTxt = this.add.text(CX, H / 2 - 118, '⚡ STAMINA HABIS', {
+            fontSize: '18px',
+            fontStyle: 'bold',
+            color: '#f59e0b',
+            fontFamily: 'Outfit, Inter, sans-serif',
+            stroke: '#000000',
+            strokeThickness: 3,
+            letterSpacing: 2
+        }).setOrigin(0.5);
+        items.push(titleTxt);
+
+        // 4. Subtitle / Info
+        const costTxt = this.add.text(CX, H / 2 - 82, `Butuh: ${staminaData.stamina_cost} Stamina   |   Tersisa: ${staminaData.current_stamina}`, {
+            fontSize: '13px',
+            fontStyle: 'bold',
+            color: '#e2e8f0',
+            fontFamily: 'Outfit, Inter, sans-serif'
+        }).setOrigin(0.5);
+        items.push(costTxt);
+
+        const potCountTxt = this.add.text(CX, H / 2 - 48, `🧪 Full Potion tersedia: ${staminaData.full_potion_count}x`, {
+            fontSize: '14px',
+            fontStyle: 'bold',
+            color: '#38bdf8',
+            fontFamily: 'Outfit, Inter, sans-serif'
+        }).setOrigin(0.5);
+        items.push(potCountTxt);
+
+        const descTxt = this.add.text(CX, H / 2 - 12, 'Gunakan 1x Full Potion untuk\nmengisi ulang stamina ke 100%?', {
+            fontSize: '12px',
+            color: '#94a3b8',
+            fontFamily: 'Outfit, Inter, sans-serif',
+            align: 'center',
+            lineSpacing: 4
+        }).setOrigin(0.5);
+        items.push(descTxt);
+
+        // 5. Buttons (Button A asset with Green tint for Use, Red tint for Cancel)
+        const btnW = 300;
+        const btnH = 44;
 
         if (staminaData.full_potion_count > 0) {
-            const useBtn = this.add.rectangle(CX, H / 2 + 50, 260, 40, 0x1a3a2a).setStrokeStyle(2, THEME.HEALTH).setInteractive({ useHandCursor: true });
-            const useTxt = this.add.text(CX, H / 2 + 50, '🧪 Gunakan Full Potion', { fontSize: '12px', fontStyle: 'bold', color: '#a8e6cf', fontFamily: 'Outfit' }).setOrigin(0.5);
-            useBtn.on('pointerdown', () => this._useStaminaPotion(quest));
-            items.push(useBtn, useTxt);
-        } else {
-            items.push(this.add.text(CX, H / 2 + 50, 'Tidak ada Full Potion di inventory.', { fontSize: '11px', color: '#ff8a80', fontFamily: 'Outfit' }).setOrigin(0.5));
-        }
+            // --- Use Potion Button (Green Button A) ---
+            const btnUseY = H / 2 + 42;
+            let useBtnImg;
+            if (this.textures.exists('btn_a_normal')) {
+                useBtnImg = this.add.image(CX, btnUseY, 'btn_a_normal').setDisplaySize(btnW, btnH);
+                useBtnImg.setTint(0x2ecc71); // Green tint
+            } else {
+                useBtnImg = this.add.rectangle(CX, btnUseY, btnW, btnH, 0x1a3a2a).setStrokeStyle(2, 0x2ecc71);
+            }
+            const useTxt = this.add.text(CX, btnUseY, '🧪 Gunakan Full Potion', {
+                fontSize: '13px',
+                fontStyle: 'bold',
+                color: '#ffffff',
+                fontFamily: 'Outfit, Inter, sans-serif',
+                stroke: '#000000',
+                strokeThickness: 3
+            }).setOrigin(0.5);
 
-        const cancelBtn = this.add.rectangle(CX, H / 2 + 105, 140, 34, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
-        const cancelTxt = this.add.text(CX, H / 2 + 105, 'BATAL', { fontSize: '11px', fontStyle: 'bold', color: THEME.TEXT_PRIMARY, fontFamily: 'Outfit' }).setOrigin(0.5);
-        cancelBtn.on('pointerdown', () => this.staminaModalContainer.destroy());
-        items.push(cancelBtn, cancelTxt);
+            const useHitZone = this.add.rectangle(CX, btnUseY, btnW, btnH, 0x000000, 0).setInteractive({ useHandCursor: true });
+            useHitZone.on('pointerover', () => {
+                if (this.textures.exists('btn_a_hover')) useBtnImg.setTexture('btn_a_hover');
+                useBtnImg.setTint(0x52be80);
+            });
+            useHitZone.on('pointerout', () => {
+                if (this.textures.exists('btn_a_normal')) useBtnImg.setTexture('btn_a_normal');
+                useBtnImg.setTint(0x2ecc71);
+            });
+            useHitZone.on('pointerdown', () => {
+                if (this.textures.exists('btn_a_active')) useBtnImg.setTexture('btn_a_active');
+                this._useStaminaPotion(quest);
+            });
+            useHitZone.on('pointerup', () => {
+                if (this.textures.exists('btn_a_normal')) useBtnImg.setTexture('btn_a_normal');
+            });
+            items.push(useBtnImg, useTxt, useHitZone);
+
+            // --- Cancel Button (Red Button A) ---
+            const btnCancelY = H / 2 + 98;
+            let cancelBtnImg;
+            if (this.textures.exists('btn_a_normal')) {
+                cancelBtnImg = this.add.image(CX, btnCancelY, 'btn_a_normal').setDisplaySize(btnW, 40);
+                cancelBtnImg.setTint(0xe74c3c); // Red tint
+            } else {
+                cancelBtnImg = this.add.rectangle(CX, btnCancelY, btnW, 40, 0x2a0d0d).setStrokeStyle(1, 0xe74c3c);
+            }
+            const cancelTxt = this.add.text(CX, btnCancelY, 'BATAL', {
+                fontSize: '12px',
+                fontStyle: 'bold',
+                color: '#ffffff',
+                fontFamily: 'Outfit, Inter, sans-serif',
+                stroke: '#000000',
+                strokeThickness: 2
+            }).setOrigin(0.5);
+
+            const cancelHitZone = this.add.rectangle(CX, btnCancelY, btnW, 40, 0x000000, 0).setInteractive({ useHandCursor: true });
+            cancelHitZone.on('pointerover', () => {
+                if (this.textures.exists('btn_a_hover')) cancelBtnImg.setTexture('btn_a_hover');
+                cancelBtnImg.setTint(0xec7063);
+            });
+            cancelHitZone.on('pointerout', () => {
+                if (this.textures.exists('btn_a_normal')) cancelBtnImg.setTexture('btn_a_normal');
+                cancelBtnImg.setTint(0xe74c3c);
+            });
+            cancelHitZone.on('pointerdown', () => {
+                if (this.textures.exists('btn_a_active')) cancelBtnImg.setTexture('btn_a_active');
+                this.staminaModalContainer.destroy();
+            });
+            cancelHitZone.on('pointerup', () => {
+                if (this.textures.exists('btn_a_normal')) cancelBtnImg.setTexture('btn_a_normal');
+            });
+            items.push(cancelBtnImg, cancelTxt, cancelHitZone);
+        } else {
+            // --- No Potion Warning ---
+            const noPotTxt = this.add.text(CX, H / 2 + 35, '⚠️ Tidak ada Full Potion di inventory.', {
+                fontSize: '12px',
+                fontStyle: 'bold',
+                color: '#ff8a80',
+                fontFamily: 'Outfit, Inter, sans-serif'
+            }).setOrigin(0.5);
+            items.push(noPotTxt);
+
+            // --- Cancel Button (Button A with Red tint) ---
+            const btnCancelY = H / 2 + 90;
+            let cancelBtnImg;
+            if (this.textures.exists('btn_a_normal')) {
+                cancelBtnImg = this.add.image(CX, btnCancelY, 'btn_a_normal').setDisplaySize(btnW, btnH);
+                cancelBtnImg.setTint(0xe74c3c);
+            } else {
+                cancelBtnImg = this.add.rectangle(CX, btnCancelY, btnW, btnH, 0x2a0d0d).setStrokeStyle(1, 0xe74c3c);
+            }
+            const cancelTxt = this.add.text(CX, btnCancelY, 'BATAL', {
+                fontSize: '13px',
+                fontStyle: 'bold',
+                color: '#ffffff',
+                fontFamily: 'Outfit, Inter, sans-serif',
+                stroke: '#000000',
+                strokeThickness: 3
+            }).setOrigin(0.5);
+
+            const cancelHitZone = this.add.rectangle(CX, btnCancelY, btnW, btnH, 0x000000, 0).setInteractive({ useHandCursor: true });
+            cancelHitZone.on('pointerover', () => {
+                if (this.textures.exists('btn_a_hover')) cancelBtnImg.setTexture('btn_a_hover');
+                cancelBtnImg.setTint(0xec7063);
+            });
+            cancelHitZone.on('pointerout', () => {
+                if (this.textures.exists('btn_a_normal')) cancelBtnImg.setTexture('btn_a_normal');
+                cancelBtnImg.setTint(0xe74c3c);
+            });
+            cancelHitZone.on('pointerdown', () => {
+                if (this.textures.exists('btn_a_active')) cancelBtnImg.setTexture('btn_a_active');
+                this.staminaModalContainer.destroy();
+            });
+            cancelHitZone.on('pointerup', () => {
+                if (this.textures.exists('btn_a_normal')) cancelBtnImg.setTexture('btn_a_normal');
+            });
+            items.push(cancelBtnImg, cancelTxt, cancelHitZone);
+        }
 
         this.staminaModalContainer.add(items);
     }

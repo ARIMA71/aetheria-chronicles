@@ -97,13 +97,41 @@ export default class BattleScene extends Phaser.Scene {
     }
 
     setTurn(newTurn) {
-
         this.turn = newTurn;
         if (this._attackBtnContainer) {
             this._attackBtnContainer.setVisible(newTurn === "player");
         }
         if (this._globalAutoBtnContainer) {
             this._globalAutoBtnContainer.setVisible(newTurn === "player");
+        }
+
+        if (newTurn === "player") {
+            this._checkAndHandleStunnedParty();
+        }
+    }
+
+    _checkAndHandleStunnedParty() {
+        if (!this.players || !this.players.length) return;
+        const alive = this.players.filter(p => p.hp > 0);
+        if (!alive.length) return;
+
+        let stunnedCount = 0;
+        alive.forEach(p => {
+            if (p.isStunned) {
+                stunnedCount++;
+                if (p.queuedAction.type === 'none') {
+                    p.queuedAction = { type: 'basic_attack' };
+                }
+                p.updateActionBadge();
+            }
+        });
+
+        if (stunnedCount > 0) {
+            if (stunnedCount === alive.length) {
+                this.showLog("💫 Semua karakter ter-STUN! Tekan ATTACK untuk skip turn.", 'system');
+            } else {
+                this.showLog(`💫 ${stunnedCount} karakter ter-STUN! Turn karakter tersebut akan ter-skip.`, 'system');
+            }
         }
     }
     create() {
@@ -287,6 +315,7 @@ export default class BattleScene extends Phaser.Scene {
                 p.battleSprite.setDepth(i + 5);
                 p._spriteBaseX = spriteX;
                 p._spriteBaseY = spriteY;
+                p.refreshVisual();
                 // Idle Breathing Tween Animation
                 this.tweens.add({
                     targets: p.battleSprite,
@@ -476,6 +505,7 @@ export default class BattleScene extends Phaser.Scene {
                 p.battleSprite.setDepth(i + 5);
                 p._spriteBaseX = spriteX;
                 p._spriteBaseY = spriteY;
+                p.refreshVisual();
                 // Idle Breathing Tween Animation
                 this.tweens.add({
                     targets: p.battleSprite,
@@ -544,8 +574,8 @@ export default class BattleScene extends Phaser.Scene {
         if (p) p.setHighlight(true);
     }
     _tapPortrait(p) {
-        if (p.activeEffects && p.activeEffects.some(e => (e.target_stat || '').toUpperCase() === 'STUN')) {
-            this.showLog(`💫 ${p.charName} sedang STUN! Aksi dinonaktifkan.`);
+        if (p.isStunned) {
+            this.showLog(`💫 ${p.charName} sedang STUN! Turn akan ter-skip otomatis.`);
             this.playStunVibrateAnim(p);
         }
         if (this.activePlayer === p && this._actionWindowOpen) { this.closeActionWindow(); return; }
@@ -1413,6 +1443,11 @@ export default class BattleScene extends Phaser.Scene {
             this._awBasicBtn.setTint(0x38bdf8);
         });
         this._awBasicBtn.on('pointerdown', () => {
+            if (this.activePlayer && this.activePlayer.isStunned) {
+                this.showLog(`💫 ${this.activePlayer.charName} sedang STUN! Aksi dinonaktifkan.`);
+                this.playStunVibrateAnim(this.activePlayer);
+                return;
+            }
             if (this._awBasicBtnDisabled) return;
             if (this.textures.exists('btn_a_active')) this._awBasicBtn.setTexture('btn_a_active');
             this._awBasicBtn.setTint(0x38bdf8);
@@ -1455,6 +1490,11 @@ export default class BattleScene extends Phaser.Scene {
             this._awSpecialBtn.setTint(0x38bdf8);
         });
         this._awSpecialBtn.on('pointerdown', () => {
+            if (this.activePlayer && this.activePlayer.isStunned) {
+                this.showLog(`💫 ${this.activePlayer.charName} sedang STUN! Aksi dinonaktifkan.`);
+                this.playStunVibrateAnim(this.activePlayer);
+                return;
+            }
             if (this._awSpecialBtnDisabled) return;
             if (this.textures.exists('btn_a_active')) this._awSpecialBtn.setTexture('btn_a_active');
             this._awSpecialBtn.setTint(0x38bdf8);
@@ -1503,7 +1543,7 @@ export default class BattleScene extends Phaser.Scene {
         if (!this.activePlayer) return;
         const p = this.activePlayer;
 
-        if (p.activeEffects && p.activeEffects.some(e => (e.target_stat || '').toUpperCase() === 'STUN')) {
+        if (p.isStunned) {
             this.showLog(`💫 ${p.charName} sedang STUN! Aksi dinonaktifkan.`);
             this.playStunVibrateAnim(p);
             return;
@@ -1649,9 +1689,16 @@ export default class BattleScene extends Phaser.Scene {
 
             this._awSkillsContainer.add(elements);
 
-            if (canUse) {
+            if (canUse || isStunned) {
                 hitZone.setInteractive({ useHandCursor: true });
-                hitZone.on("pointerdown", () => this._selectAction('skill', sk.id, sk.name));
+                hitZone.on("pointerdown", () => {
+                    if (p.isStunned) {
+                        this.showLog(`💫 ${p.charName} sedang STUN! Aksi dinonaktifkan.`);
+                        this.playStunVibrateAnim(p);
+                        return;
+                    }
+                    this._selectAction('skill', sk.id, sk.name);
+                });
             }
         });
 
@@ -2627,7 +2674,7 @@ export default class BattleScene extends Phaser.Scene {
                                     else target.refreshVisual();
 
                                     const healPos = this._getVfxTargetPos(target);
-                                    this.playExactVFX('heal', healPos.x, healPos.y, { scale: 1.5 });
+                                    this.playExactVFX('heal', healPos.x, healPos.y, { scale: 1.5, useAddBlend: true });
 
                                     this.showFloatingHeal(target, ev.value);
                                     this.showLog(`[Heal] ${target.charName} restored HP!`, 'popup');
@@ -2638,7 +2685,7 @@ export default class BattleScene extends Phaser.Scene {
                                     else target.refreshVisual();
 
                                     const revPos = this._getVfxTargetPos(target);
-                                    this.playExactVFX('revive', revPos.x, revPos.y, { scale: 1.5 });
+                                    this.playExactVFX('revive', revPos.x, revPos.y, { scale: 1.5, useAddBlend: true });
 
                                     this.showLog(`✨ ${target.charName} revived!`, 'popup');
                                     delay = Math.max(delay, 600);
@@ -2649,7 +2696,7 @@ export default class BattleScene extends Phaser.Scene {
                                     delay = Math.max(delay, 500);
                                 } else if (ev.type === 'stun_skip') {
                                     const stunPos = this._getVfxTargetPos(target);
-                                    this.playExactVFX('stun', stunPos.x, stunPos.y, { scale: 1.5 });
+                                    this.playExactVFX('stun', stunPos.x, stunPos.y, { scale: 1.5, useAddBlend: true });
 
                                     const tgtName = target.charName || (target.monsterId ? 'ENEMY' : 'Character');
                                     this.showLog(`💫 ${tgtName} is STUNNED and cannot move!`, 'popup');
@@ -2685,13 +2732,13 @@ export default class BattleScene extends Phaser.Scene {
 
                                     const effPos = this._getVfxTargetPos(target);
                                     if ((ev.effectType || '').toLowerCase() === 'buff') {
-                                        this.playExactVFX('buff', effPos.x, effPos.y, { scale: 1.5 });
+                                        this.playExactVFX('buff', effPos.x, effPos.y, { scale: 1.5, useAddBlend: true });
                                         if (!playedBuffSound) {
                                             this.playSFX('sfx_buff', { volume: 0.6 });
                                             playedBuffSound = true;
                                         }
                                     } else {
-                                        this.playExactVFX('debuff', effPos.x, effPos.y, { scale: 1.5 });
+                                        this.playExactVFX('debuff', effPos.x, effPos.y, { scale: 1.5, useAddBlend: true });
                                         if (!playedDebuffSound) {
                                             this.playSFX('sfx_debuff', { volume: 0.6 });
                                             playedDebuffSound = true;
@@ -3012,12 +3059,14 @@ export default class BattleScene extends Phaser.Scene {
         const character_actions = [];
 
         for (const p of alive) {
-            if (p.isAuto && p.queuedAction.type === 'none') {
-                const saRdy = p.specialBar >= p.specialMax;
+            if (p.isStunned) {
+                p.queuedAction = { type: 'basic_attack' };
+            } else if (p.isAuto && p.queuedAction.type === 'none') {
+                const saRdy = (p.specialBar >= p.specialMax);
                 p.queuedAction = { type: saRdy ? 'special_attack' : 'basic_attack' };
             }
 
-            if (p.queuedAction.type === 'none') {
+            if (!p.isStunned && p.queuedAction.type === 'none') {
                 missingSelection = true;
                 allValid = false;
             } else {
@@ -3146,6 +3195,9 @@ export default class BattleScene extends Phaser.Scene {
                     pObj.refreshVisual();
                 }
             });
+            if (this.turn === 'player') {
+                this._checkAndHandleStunnedParty();
+            }
         }
 
         // Sync Enemies
@@ -3888,7 +3940,7 @@ export default class BattleScene extends Phaser.Scene {
 
         const scale = opts.scale !== undefined ? opts.scale : 1.5;
         const depth = opts.depth !== undefined ? opts.depth : 50;
-        const useAddBlend = opts.useAddBlend !== undefined ? opts.useAddBlend : false;
+        const useAddBlend = opts.useAddBlend !== undefined ? opts.useAddBlend : true;
 
         const vfx = this.add.sprite(targetX, targetY, key);
         vfx.setDepth(depth);

@@ -1069,15 +1069,30 @@ class BattleService {
                         caSkill = AiBehaviorService.calculateBossAction(state, enemy.ai_behaviors || enemy.aiBehaviors);
                         if (!caSkill) {
                             const currentCa = enemy.current_ca !== undefined ? enemy.current_ca : 0;
-                            const caMax = enemy.caMax !== undefined ? enemy.caMax : (enemy.final_stats && enemy.final_stats.caMax) !== undefined ? enemy.final_stats.caMax : 5;
+                            const caMax = enemy.caMax !== undefined ? enemy.caMax : (enemy.ca_max !== undefined ? enemy.ca_max : (enemy.final_stats && (enemy.final_stats.caMax || enemy.final_stats.ca_max)) || 5);
                             const isExhausted = (enemy.mode_state || enemy.modeState) === 'exhausted';
                             
                             if (currentCa >= caMax && !isExhausted) {
                                 const specialSkills = (enemy.ai_behaviors || enemy.aiBehaviors || []).filter(b => {
-                                    const cat = (b.skill ? b.skill.category : b.category) || '';
+                                    const skill = b.skill || b;
+                                    const cat = (skill ? skill.category : b.category) || '';
                                     return cat.toLowerCase() === 'special';
                                 });
-                                if (specialSkills.length > 0) caSkill = specialSkills[Math.floor(Math.random() * specialSkills.length)];
+                                if (specialSkills.length > 0) {
+                                    caSkill = specialSkills[Math.floor(Math.random() * specialSkills.length)];
+                                } else {
+                                    caSkill = {
+                                        skill: {
+                                            id: 9999,
+                                            name: `${enemy.name || 'Boss'} Special Attack`,
+                                            category: 'Special',
+                                            type: 'Damage',
+                                            target_type: 'All_Enemies',
+                                            modifier: 2.5,
+                                            element: enemy.element || 'Neutral'
+                                        }
+                                    };
+                                }
                             }
                         }
                     } else {
@@ -2236,12 +2251,12 @@ class BattleService {
                 // --- FALLBACK MECHANISM ---
                 if (!caSkill) {
                     const currentCa = enemy.current_ca !== undefined ? enemy.current_ca : 0;
-                    const caMax = enemy.caMax !== undefined ? enemy.caMax : (enemy.final_stats && enemy.final_stats.caMax) !== undefined ? enemy.final_stats.caMax : 5;
+                    const caMax = enemy.caMax !== undefined ? enemy.caMax : (enemy.ca_max !== undefined ? enemy.ca_max : (enemy.final_stats && (enemy.final_stats.caMax || enemy.final_stats.ca_max)) || 5);
                     const isExhausted = (enemy.mode_state || enemy.modeState) === 'exhausted';
                     
                     if (currentCa >= caMax && !isExhausted) {
                         const phase = (enemy.mode_state || enemy.modeState || 'Normal').trim().toLowerCase();
-                        console.warn(`[AI WARNING] Boss ID ${enemy.id} has no valid Special Skill mapped for Phase '${phase}' or logic failed. Using Random Fallback.`);
+                        console.warn(`[AI WARNING] Boss ID ${enemy.id} has no valid Special Skill mapped for Phase '${phase}' or logic failed. Using Fallback.`);
                         
                         const specialSkills = (enemy.ai_behaviors || enemy.aiBehaviors || []).filter(b => {
                             const skill = b.skill || b;
@@ -2251,6 +2266,18 @@ class BattleService {
                         
                         if (specialSkills.length > 0) {
                             caSkill = specialSkills[Math.floor(Math.random() * specialSkills.length)];
+                        } else {
+                            caSkill = {
+                                skill: {
+                                    id: 9999,
+                                    name: `${enemy.name || 'Boss'} Special Attack`,
+                                    category: 'Special',
+                                    type: 'Damage',
+                                    target_type: 'All_Enemies',
+                                    modifier: 2.5,
+                                    element: enemy.element || 'Neutral'
+                                }
+                            };
                         }
                     }
                 }

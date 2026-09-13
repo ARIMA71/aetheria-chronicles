@@ -115,7 +115,7 @@ exports.initBattle = async (req, res) => {
 
 exports.saveBattleResult = async (req, res) => {
     // bsId must be provided by the client now, along with the standard params
-    const { bsId, playerId, questId, potionsUsed, fullPotionsUsed } = req.body;
+    const { bsId, playerId, questId, potionsUsed, fullPotionsUsed, presetSlot } = req.body;
 
     if (!playerId || !questId) {
         return res.status(400).json({
@@ -413,10 +413,18 @@ exports.saveBattleResult = async (req, res) => {
                 // We process Player Rank EXP later down below to safely lock it
                 
                 // Fetch Active Party from preset to distribute EXP
-                const [presetRows] = await conn.query(
-                    'SELECT main_char_inv_id, char_slot_1_inv_id, char_slot_2_inv_id, char_slot_3_inv_id FROM player_party_presets WHERE player_id = ? ORDER BY preset_slot ASC LIMIT 1',
-                    [playerId]
+                const targetPresetSlot = presetSlot || 1;
+                let [presetRows] = await conn.query(
+                    'SELECT main_char_inv_id, char_slot_1_inv_id, char_slot_2_inv_id, char_slot_3_inv_id FROM player_party_presets WHERE player_id = ? AND preset_slot = ?',
+                    [playerId, targetPresetSlot]
                 );
+
+                if (presetRows.length === 0) {
+                    [presetRows] = await conn.query(
+                        'SELECT main_char_inv_id, char_slot_1_inv_id, char_slot_2_inv_id, char_slot_3_inv_id FROM player_party_presets WHERE player_id = ? ORDER BY preset_slot ASC LIMIT 1',
+                        [playerId]
+                    );
+                }
                 
                 if (presetRows.length > 0 && rewardCharExp > 0) {
                     const p = presetRows[0];
@@ -431,6 +439,9 @@ exports.saveBattleResult = async (req, res) => {
                              WHERE pi.inv_id IN (?)`,
                             [partyInvIds]
                         );
+
+                        // Urutkan partyRows secara KETAT mengikuti urutan partyInvIds (MC, Slot 1, Slot 2, Slot 3)
+                        partyRows.sort((a, b) => partyInvIds.indexOf(a.inv_id) - partyInvIds.indexOf(b.inv_id));
                         
                         for (const char of partyRows) {
                             const charType = char.mc_id === 1 ? 'MC' : 'Character';

@@ -15,9 +15,13 @@ export default class GachaScene extends Phaser.Scene {
     }
 
     preload() {
-        this.load.image('element_fire', 'assets/icons/elements/fire.png');
-        this.load.image('element_wind', 'assets/icons/elements/wind.png');
-        this.load.image('element_earth', 'assets/icons/elements/rock.png');
+        if (!this.textures.exists('element_fire')) this.load.image('element_fire', 'assets/icons/elements/fire.png');
+        if (!this.textures.exists('element_wind')) this.load.image('element_wind', 'assets/icons/elements/wind.png');
+        if (!this.textures.exists('element_earth')) this.load.image('element_earth', 'assets/icons/elements/rock.png');
+        if (!this.textures.exists('card_x3')) this.load.image('card_x3', 'assets/ui/card/Card X3.png');
+        if (!this.textures.exists('btn_a_normal')) this.load.image('btn_a_normal', 'assets/ui/button/A/Normal.png');
+        if (!this.textures.exists('btn_a_hover')) this.load.image('btn_a_hover', 'assets/ui/button/A/Hover.png');
+        if (!this.textures.exists('btn_a_active')) this.load.image('btn_a_active', 'assets/ui/button/A/Active.png');
     }
 
     create() {
@@ -350,9 +354,6 @@ export default class GachaScene extends Phaser.Scene {
 
                 if (!this.textures.exists(iconKey) && !this.textures.exists(`weap_icon_failed_${wId}`)) {
                     this.load.image(iconKey, fullPath);
-                    this.load.once(`filecomplete-image-${iconKey}`, () => {
-                        if (this.scene && this.scene.isActive()) this.populateDropRateList();
-                    });
                     this.load.once('loaderror', (fileObj) => {
                         if (fileObj && fileObj.key === iconKey) {
                             this.textures.addBase64(`weap_icon_failed_${wId}`, 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');
@@ -363,11 +364,19 @@ export default class GachaScene extends Phaser.Scene {
             }
         });
 
-        if (assetsToLoad > 0 && !this.load.isLoading()) {
-            this.load.start();
+        if (assetsToLoad > 0) {
+            if (!this.load.isLoading()) {
+                this.load.once('complete', () => {
+                    if (this.scene && this.scene.isActive()) {
+                        this.populateDropRateList();
+                    }
+                });
+                this.load.start();
+            }
+            return;
         }
 
-        // Bersihkan list sebelumnya & render langsung tanpa menunggu/early return
+        // Bersihkan list sebelumnya & render sekali saat seluruh asset siap
         this.scrollContainer.removeAll(true);
         let currY = 20;
 
@@ -627,33 +636,7 @@ export default class GachaScene extends Phaser.Scene {
     }
 
     _buildNewCharacterModal() {
-        this.newCharContainer = this.add.container(0, 0).setDepth(300).setVisible(false);
-
-        const backdrop = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.95).setInteractive();
-
-        const lightFx = this.add.circle(CX, H / 2 - 50, 150, 0xfbbf24, 0.2);
-
-        const title = this.add.text(CX, H / 2 - 180, 'NEW CHARACTER UNLOCKED!', {
-            fontSize: '18px', fontStyle: 'bold', fontFamily: 'Outfit', color: '#fcd34d', letterSpacing: 2
-        }).setOrigin(0.5);
-
-        const charPlaceholder = this.add.rectangle(CX, H / 2 - 50, 120, 120, 0x1e293b).setStrokeStyle(2, 0xf59e0b);
-
-        this.newCharName = this.add.text(CX, H / 2 + 30, 'Character Name', {
-            fontSize: '16px', fontStyle: 'bold', fontFamily: 'Outfit', color: '#ffffff'
-        }).setOrigin(0.5);
-
-        const okBtn = this.add.rectangle(CX, H / 2 + 100, 150, 40, 0xf59e0b).setInteractive({ useHandCursor: true });
-        const okTxt = this.add.text(CX, H / 2 + 100, 'AWESOME', {
-            fontSize: '12px', fontStyle: 'bold', fontFamily: 'Outfit', color: '#000000'
-        }).setOrigin(0.5);
-
-        okBtn.on('pointerdown', () => {
-            this.newCharContainer.setVisible(false);
-            this.processNextNewCharacter();
-        });
-
-        this.newCharContainer.add([backdrop, lightFx, title, charPlaceholder, this.newCharName, okBtn, okTxt]);
+        // Placeholder method kept for initialization compatibility
     }
 
     processNextNewCharacter() {
@@ -661,41 +644,216 @@ export default class GachaScene extends Phaser.Scene {
 
         const nextChar = this.newCharactersQueue.shift();
 
-        // Tampilkan modal karakter baru
-        if (this.sound.get('sfx_newCharacterUnlocked') || this.cache.audio.exists('sfx_newCharacterUnlocked')) {
-            this.sound.play('sfx_newCharacterUnlocked', { volume: 0.8 });
-        }
-        this.newCharName.setText(nextChar.character_name || nextChar.name);
+        const mcId = nextChar.mc_id || nextChar.unlocks_mc_id || nextChar.master_item_id;
+        const squarePath = nextChar.character_square_path || nextChar.square_path;
+        const portraitPath = nextChar.character_portrait_path || nextChar.portrait_path;
 
-        // Dynamically load the character splash image
-        if (nextChar.character_splash_path) {
-            const textureKey = `splash_${nextChar.name}`;
-            if (!this.textures.exists(textureKey)) {
-                this.load.image(textureKey, nextChar.character_splash_path);
-                this.load.once('complete', () => {
-                    this._showNewCharacterModalWithImage(textureKey);
-                });
-                this.load.start();
-            } else {
-                this._showNewCharacterModalWithImage(textureKey);
+        let assetsToLoad = 0;
+        const checkAndLoadTex = (key, path) => {
+            if (!path) return;
+            let fullPath = path;
+            if (!fullPath.endsWith('.png') && !fullPath.endsWith('.jpg')) fullPath += '.png';
+            if (!this.textures.exists(key)) {
+                this.load.image(key, fullPath);
+                assetsToLoad++;
             }
+        };
+
+        if (mcId) {
+            if (squarePath) checkAndLoadTex(`char_sq_${mcId}`, squarePath);
+            if (portraitPath) checkAndLoadTex(`portrait_${mcId}`, portraitPath);
+        }
+
+        const renderModal = () => {
+            this._showNewCharacterModalUI(nextChar);
+        };
+
+        if (assetsToLoad > 0) {
+            this.load.once('complete', renderModal);
+            this.load.start();
         } else {
-            this._showNewCharacterModalWithImage(null);
+            renderModal();
         }
     }
 
-    _showNewCharacterModalWithImage(textureKey) {
-        if (this.newCharImage) {
-            this.newCharImage.destroy();
+    _showNewCharacterModalUI(char) {
+        if (this.currentUnlockModal) {
+            this.currentUnlockModal.destroy();
         }
-        if (textureKey) {
-            this.newCharImage = this.add.image(CX, H / 2 - 50, textureKey).setOrigin(0.5);
-            // Optional: scale it if it's too large, e.g. setDisplaySize to fit inside modal
-            // Assuming splash is quite large, scale it down
-            this.newCharImage.setScale(0.8);
-            this.newCharContainer.add(this.newCharImage);
+
+        // Play Sound Effect
+        if (this.sound.get('sfx_newCharacterUnlocked') || this.cache.audio.exists('sfx_newCharacterUnlocked')) {
+            this.sound.play('sfx_newCharacterUnlocked', { volume: 0.8 });
         }
-        this.newCharContainer.setVisible(true);
+
+        const CX = W / 2;
+        const CY = H / 2;
+
+        const modal = this.add.container(0, 0).setDepth(400);
+        this.currentUnlockModal = modal;
+
+        // Dark overlay
+        const overlay = this.add.rectangle(CX, CY, W, H, 0x000000, 0.85).setInteractive();
+        modal.add(overlay);
+
+        const panelW = 340;
+        const panelH = 430;
+
+        // Modal Container Background using Card X3.png
+        let bg;
+        if (this.textures.exists('card_x3')) {
+            bg = this.add.image(CX, CY, 'card_x3').setDisplaySize(panelW, panelH);
+            bg.setTint(0x38bdf8); // Sky Blue tint for Card X3
+        } else {
+            bg = this.add.rectangle(CX, CY, panelW, panelH, THEME.BG, 1);
+            bg.setStrokeStyle(2, 0xD4A017);
+        }
+        modal.add(bg);
+
+        const mcId = char.mc_id || char.unlocks_mc_id || char.master_item_id || 1;
+        const charName = char.character_name || char.name || 'New Character';
+
+        // Rarity colors
+        let rarityColorInt = 0x38bdf8;
+        let rarityColorHex = '#38bdf8';
+        const rarityUpper = (char.character_rarity || char.rarity || 'SR').toUpperCase();
+        if (rarityUpper === 'SSR') { rarityColorInt = 0xffd700; rarityColorHex = '#ffd700'; }
+        else if (rarityUpper === 'SR') { rarityColorInt = 0xa855f7; rarityColorHex = '#a855f7'; }
+        else if (rarityUpper === 'R') { rarityColorInt = 0xef4444; rarityColorHex = '#ef4444'; }
+
+        // Title
+        modal.add(this.add.text(CX, CY - 160, "NEW CHARACTER UNLOCKED!", {
+            fontSize: "15px", color: "#ffffff", fontStyle: "bold", fontFamily: "Outfit", letterSpacing: 1
+        }).setOrigin(0.5));
+
+        // Square 1:1 Portrait Container (150x150)
+        const pSize = 150;
+        const pX = CX;
+        const pY = CY - 30;
+
+        const portBg = this.add.rectangle(pX, pY, pSize, pSize, 0x0f172a, 1.0);
+        modal.add(portBg);
+
+        // Portrait Image (Square 1:1)
+        const sqKey = `char_sq_${mcId}`;
+        const normKey = `portrait_${mcId}`;
+        let loadedTexKey = null;
+        if (this.textures.exists(sqKey)) loadedTexKey = sqKey;
+        else if (this.textures.exists(normKey)) loadedTexKey = normKey;
+
+        if (loadedTexKey) {
+            const portImg = this.add.image(pX, pY, loadedTexKey).setDisplaySize(pSize, pSize);
+            const maskShape = this.make.graphics();
+            maskShape.fillStyle(0xffffff);
+            maskShape.fillRoundedRect(pX - pSize / 2, pY - pSize / 2, pSize, pSize, 6);
+            portImg.setMask(maskShape.createGeometryMask());
+            modal.add(portImg);
+        } else {
+            modal.add(this.add.text(pX, pY, "👤", { fontSize: "56px" }).setOrigin(0.5));
+        }
+
+        // Outline / Border with Rarity Color
+        const border = this.add.graphics();
+        border.lineStyle(2.5, rarityColorInt);
+        border.strokeRoundedRect(pX - pSize / 2, pY - pSize / 2, pSize, pSize, 6);
+        modal.add(border);
+
+        // Element Icon on Top Right Corner
+        const element = char.character_element || char.element || 'Fire';
+        const elKey = `element_${element.toLowerCase()}`;
+        const elX = pX + pSize / 2 - 12;
+        const elY = pY - pSize / 2 + 12;
+
+        if (this.textures.exists(elKey)) {
+            const elImg = this.add.image(elX, elY, elKey).setDisplaySize(18, 18);
+            const shape = this.make.graphics();
+            shape.fillCircle(elX, elY, 9);
+            elImg.setMask(shape.createGeometryMask());
+            const strokeCircle = this.add.circle(elX, elY, 9).setStrokeStyle(1, 0x0f172a);
+            modal.add([elImg, strokeCircle]);
+        } else {
+            const elCircle = this.add.circle(elX, elY, 9, rarityColorInt).setStrokeStyle(1, 0x0f172a);
+            const elTxt = this.add.text(elX, elY, element.charAt(0).toUpperCase(), { fontSize: '10px', color: '#ffffff', fontStyle: 'bold', fontFamily: 'Outfit' }).setOrigin(0.5);
+            modal.add([elCircle, elTxt]);
+        }
+
+        // Rarity Label on Bottom Left Corner
+        const rX = pX - pSize / 2 + 8;
+        const rY = pY + pSize / 2 - 4;
+        const rTxt = this.add.text(rX, rY, rarityUpper, {
+            fontSize: '12px', color: rarityColorHex, fontStyle: 'bold', stroke: '#000000', strokeThickness: 3, fontFamily: 'Outfit'
+        }).setOrigin(0, 1);
+        modal.add(rTxt);
+
+        // Character Name
+        modal.add(this.add.text(CX, CY + 75, charName, {
+            fontSize: "20px", color: "#ffffff", fontStyle: "bold", fontFamily: "Outfit"
+        }).setOrigin(0.5));
+
+        // Button A Implementation for Modal
+        const btnY = CY + 145;
+        const btnW = 160;
+        const btnH = 42;
+
+        let btnBg;
+        if (this.textures.exists('btn_a_normal')) {
+            btnBg = this.add.image(CX, btnY, 'btn_a_normal').setDisplaySize(btnW, btnH).setInteractive({ useHandCursor: true });
+        } else {
+            btnBg = this.add.rectangle(CX, btnY, btnW, btnH, THEME.PANEL).setInteractive({ useHandCursor: true });
+            btnBg.setStrokeStyle(1.5, 0x38bdf8);
+        }
+        modal.add(btnBg);
+
+        const btnTxt = this.add.text(CX, btnY, "AWESOME!", {
+            fontSize: "14px", color: "#ffffff", fontStyle: "bold", fontFamily: "Outfit", letterSpacing: 1
+        }).setOrigin(0.5);
+        modal.add(btnTxt);
+
+        // Button Interactivity (Hover, Active, Click)
+        btnBg.on('pointerover', () => {
+            if (this.textures.exists('btn_a_hover')) btnBg.setTexture('btn_a_hover');
+            btnBg.setDisplaySize(btnW * 1.05, btnH * 1.05);
+            btnTxt.setScale(1.05);
+        });
+
+        btnBg.on('pointerout', () => {
+            if (this.textures.exists('btn_a_normal')) btnBg.setTexture('btn_a_normal');
+            btnBg.setDisplaySize(btnW, btnH);
+            btnTxt.setScale(1.0);
+        });
+
+        btnBg.on('pointerdown', () => {
+            if (this.textures.exists('btn_a_active')) btnBg.setTexture('btn_a_active');
+            btnBg.setDisplaySize(btnW * 0.95, btnH * 0.95);
+            btnTxt.setScale(0.95);
+        });
+
+        btnBg.on('pointerup', () => {
+            btnBg.setDisplaySize(btnW, btnH);
+            btnTxt.setScale(1.0);
+            this.tweens.add({
+                targets: modal,
+                scale: 0.8,
+                alpha: 0,
+                duration: 200,
+                ease: 'Power2',
+                onComplete: () => {
+                    modal.destroy();
+                    this.processNextNewCharacter(); // Show next if queue has more
+                }
+            });
+        });
+
+        // Pop in animation for modal
+        modal.setScale(0.8);
+        modal.setAlpha(0);
+        this.tweens.add({
+            targets: modal,
+            scale: 1,
+            alpha: 1,
+            duration: 300,
+            ease: 'Back.easeOut'
+        });
     }
 
     showToast(msg) {

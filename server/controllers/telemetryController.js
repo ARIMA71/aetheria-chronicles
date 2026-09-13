@@ -10,14 +10,24 @@ const logBenchmark = async (req, res) => {
             playerId = 0,
             username = 'Guest',
             questId = 0,
-            avgFps = 0,
-            minFps = 0,
-            maxFps = 0,
+            avgFps = 60,
+            minFps = 60,
+            maxFps = 60,
             avgLatencyMs = 0,
-            totalTurns = 0,
+            totalTurns = 1,
             battleStatus = 'UNKNOWN',
             deviceInfo = 'Browser'
-        } = req.body;
+        } = req.body || {};
+
+        const safeNumber = (val, fallback = 0) => {
+            const num = Number(val);
+            return isNaN(num) || val === null || val === undefined ? fallback : num;
+        };
+
+        const safeAvgFps = safeNumber(avgFps, 60);
+        const safeMinFps = safeNumber(minFps, 60);
+        const safeMaxFps = safeNumber(maxFps, 60);
+        const safeAvgLatency = safeNumber(avgLatencyMs, 0);
 
         const timestamp = new Date().toISOString();
         const entry = {
@@ -25,11 +35,11 @@ const logBenchmark = async (req, res) => {
             playerId,
             username,
             questId,
-            avgFps: Number(avgFps.toFixed(1)),
-            minFps: Number(minFps.toFixed(1)),
-            maxFps: Number(maxFps.toFixed(1)),
-            avgLatencyMs: Number(avgLatencyMs.toFixed(1)),
-            totalTurns,
+            avgFps: Number(safeAvgFps.toFixed(1)),
+            minFps: Number(safeMinFps.toFixed(1)),
+            maxFps: Number(safeMaxFps.toFixed(1)),
+            avgLatencyMs: Number(safeAvgLatency.toFixed(1)),
+            totalTurns: safeNumber(totalTurns, 1),
             battleStatus,
             deviceInfo
         };

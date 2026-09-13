@@ -82,18 +82,19 @@ export default class VictoryScene extends Phaser.Scene {
             repeat: -1
         });
 
+        const raw = localStorage.getItem('aetheria_player');
+        const playerData = raw ? JSON.parse(raw) : {};
+        this.selectedPresetSlot = playerData.selected_preset_slot || 1;
+
         // Trigger POST /api/battle/result and fetch party data
         const payload = {
             bsId: this.bsId,
             playerId: this.playerId,
             questId: this.questId,
             potionsUsed: this.potionsUsed,
-            fullPotionsUsed: this.fullPotionsUsed
+            fullPotionsUsed: this.fullPotionsUsed,
+            presetSlot: this.selectedPresetSlot
         };
-
-        const raw = localStorage.getItem('aetheria_player');
-        const playerData = raw ? JSON.parse(raw) : {};
-        this.selectedPresetSlot = playerData.selected_preset_slot || 1;
 
         // Send telemetry benchmark report to server log
         TelemetryApi.reportBattleBenchmark(this.questId, 'VICTORY');
@@ -109,14 +110,6 @@ export default class VictoryScene extends Phaser.Scene {
                     if (!path) return;
                     let fullPath = path;
                     if (!fullPath.endsWith('.png') && !fullPath.endsWith('.jpg')) fullPath += '.png';
-                    if (this.textures.exists(key)) {
-                        const tex = this.textures.get(key);
-                        const src = tex && tex.source && tex.source[0] && tex.source[0].src ? tex.source[0].src : '';
-                        const decodedSrc = decodeURIComponent(src);
-                        if (decodedSrc && !decodedSrc.includes(fullPath) && !decodedSrc.endsWith(fullPath)) {
-                            this.textures.remove(key);
-                        }
-                    }
                     if (!this.textures.exists(key)) {
                         this.load.image(key, fullPath);
                         assetsToLoad++;
@@ -222,7 +215,28 @@ export default class VictoryScene extends Phaser.Scene {
             fontSize: "11px", color: THEME.TEXT_SECONDARY, letterSpacing: 2
         }).setOrigin(0.5);
 
-        const party = expData.party_exp_details || [];
+        const partyRaw = expData.party_exp_details || [];
+        let party = partyRaw;
+
+        if (presets) {
+            const presetList = Array.isArray(presets) ? presets : (presets.data || []);
+            const preset = presetList.find(p => p.preset_slot === this.selectedPresetSlot) || presetList[0];
+            if (preset) {
+                const orderedInvIds = [
+                    preset.main_char_inv_id,
+                    preset.char_slot_1_inv_id,
+                    preset.char_slot_2_inv_id,
+                    preset.char_slot_3_inv_id
+                ].filter(id => id !== null && id !== undefined);
+
+                party = [...partyRaw].sort((a, b) => {
+                    const idxA = orderedInvIds.indexOf(a.inv_id);
+                    const idxB = orderedInvIds.indexOf(b.inv_id);
+                    return (idxA !== -1 ? idxA : 99) - (idxB !== -1 ? idxB : 99);
+                });
+            }
+        }
+
         const cW = 85, gap = 15, total = party.length;
         const totalW = (total * cW) + ((total - 1) * gap);
         const startX = (W - totalW) / 2 + (cW / 2);

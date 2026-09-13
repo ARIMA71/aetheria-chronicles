@@ -14,6 +14,8 @@ export default class PartyScene extends Phaser.Scene {
 
     init(data) {
         this.targetData = data || {};
+        this.fromScene = this.targetData.fromScene || null;
+        this.questId = this.targetData.questId || null;
     }
 
     preload() {
@@ -34,11 +36,19 @@ export default class PartyScene extends Phaser.Scene {
         this.add.rectangle(CX, 30, W, 60, THEME.PANEL, THEME.PANEL_ALPHA).setStrokeStyle(1, THEME.BORDER).setScrollFactor(0).setDepth(100);
         this.add.text(CX, 30, 'PARTY SETTINGS', { fontSize: '15px', fontStyle: 'bold', color: THEME.TEXT_PRIMARY, fontFamily: 'Outfit', letterSpacing: 2 }).setOrigin(0.5).setScrollFactor(0).setDepth(100);
 
+        const isFromQuest = this.fromScene === 'QuestScene';
+        const backLabel = isFromQuest ? 'BACK' : 'HOME';
         const backBtn = this.add.circle(40, 30, 18, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true }).setScrollFactor(0).setDepth(100);
-        const homeTxt = this.add.text(40, 30, 'HOME', { fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5).setScrollFactor(0).setDepth(100);
+        const homeTxt = this.add.text(40, 30, backLabel, { fontSize: '8px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5).setScrollFactor(0).setDepth(100);
         backBtn.on('pointerover', () => { backBtn.setFillStyle(0x334155); homeTxt.setColor('#ffffff'); });
         backBtn.on('pointerout', () => { backBtn.setFillStyle(THEME.PANEL); homeTxt.setColor(THEME.TEXT_PRIMARY); });
-        backBtn.on('pointerdown', () => this.scene.start('LoadingScene', { targetScene: 'MainMenuScene' }));
+        backBtn.on('pointerdown', () => {
+            if (isFromQuest) {
+                this.scene.start('LoadingScene', { targetScene: 'QuestScene', targetData: { openQuestId: this.questId } });
+            } else {
+                this.scene.start('LoadingScene', { targetScene: 'MainMenuScene' });
+            }
+        });
 
         this.topMenu = new TopMenuComponent(this);
 
@@ -411,12 +421,7 @@ export default class PartyScene extends Phaser.Scene {
 
                 const sZone = this.add.zone(sx, sy, 36, 36).setInteractive({ useHandCursor: true });
                 sZone.on('pointerdown', () => {
-                    if (skill) {
-                        const skillData = this.mcSkills.find(s => s.ms_id === skill.ms_id);
-                        if (skillData) this.showSkillReadOnlyModal(skillData, false);
-                    } else {
-                        this.showMcSkillSelectionList(i);
-                    }
+                    this.showMcSkillSelectionList(i);
                 });
 
                 this.uiGroup.addMultiple([sBox, sZone]);
@@ -430,12 +435,12 @@ export default class PartyScene extends Phaser.Scene {
             }
         }
 
-        // Change Skills Button at top right (replacing info button)
-        const btnZone = this.add.zone(410, cy - 30, 80, 22).setInteractive({ useHandCursor: true });
-        this.drawRoundedBox(410, cy - 30, 80, 22, 4, 0x458B74, null); // HEALTH color
+        // Change Skills Button at top right (Prominent 96x26 button)
+        const btnZone = this.add.zone(405, cy - 30, 96, 26).setInteractive({ useHandCursor: true });
+        this.drawRoundedBox(405, cy - 30, 96, 26, 6, 0x22c55e, null); // Emerald Green color
         btnZone.on('pointerdown', () => this.showMcSkillsManagerModal());
 
-        this.uiGroup.addMultiple([btnZone, this.add.text(410, cy - 30, 'CHANGE SKILLS', { fontSize: '9px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5)]);
+        this.uiGroup.addMultiple([btnZone, this.add.text(405, cy - 30, '⚡ GANTI SKILL', { fontSize: '10px', color: '#fff', fontStyle: 'bold', fontFamily: 'Outfit' }).setOrigin(0.5)]);
     }
 
     renderCharacters(preset, stats) {

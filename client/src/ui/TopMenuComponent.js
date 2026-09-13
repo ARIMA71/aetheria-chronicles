@@ -177,7 +177,10 @@ export default class TopMenuComponent {
             btn.setInteractive({ useHandCursor: true });
         }
 
-        const txt = this.scene.add.text(x, y, 'HOME', {
+        const isFromQuest = this.scene.fromScene === 'QuestScene';
+        const homeLabel = isFromQuest ? 'BACK' : 'HOME';
+
+        const txt = this.scene.add.text(x, y, homeLabel, {
             fontSize: '8px',
             fontStyle: 'bold',
             fontFamily: 'Outfit',
@@ -206,7 +209,9 @@ export default class TopMenuComponent {
             btn.setDisplaySize(baseSize * 0.95, baseSize * 0.95);
             circleBg.setScale(0.95);
             txt.setScale(0.95);
-            if (this.scene.scene.key !== 'MainMenuScene') {
+            if (isFromQuest) {
+                this.scene.scene.start('LoadingScene', { targetScene: 'QuestScene', targetData: { openQuestId: this.scene.questId } });
+            } else if (this.scene.scene.key !== 'MainMenuScene') {
                 this.scene.scene.start('LoadingScene', { targetScene: 'MainMenuScene' });
             }
         });

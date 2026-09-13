@@ -61,8 +61,14 @@ exports.getPartyPresets = async (req, res) => {
             }
         }
 
-        // Inisialisasi Pemain Baru: Generate 1 Preset di Slot 1 jika kosong
-        if (presets.length === 0) {
+        // Inisialisasi Preset yang Belum Ada: Pastikan Slot 1 s/d 5 selalu tersedia
+        const existingSlots = new Set(presets.map(p => p.preset_slot));
+        const missingSlots = [];
+        for (let s = 1; s <= 5; s++) {
+            if (!existingSlots.has(s)) missingSlots.push(s);
+        }
+
+        if (missingSlots.length > 0) {
             const [mcRows] = await conn.query("SELECT inv_id FROM player_inventories WHERE player_id = ? AND master_item_id = 1 AND item_type = 'Character' LIMIT 1", [playerId]);
             const [weapRows] = await conn.query("SELECT inv_id FROM player_inventories WHERE player_id = ? AND item_type = 'Weapon' ORDER BY (master_item_id = 22) DESC, (master_item_id = 7) DESC, inv_id ASC LIMIT 1", [playerId]);
 
@@ -70,18 +76,20 @@ exports.getPartyPresets = async (req, res) => {
                 const mcInvId = mcRows[0].inv_id;
                 const weapInvId = weapRows[0].inv_id;
 
-                const [insertRes] = await conn.query(
-                    `INSERT INTO player_party_presets 
-                    (player_id, preset_slot, main_char_inv_id, weap_grid_1_inv_id) 
-                    VALUES (?, 1, ?, ?)`,
-                    [playerId, mcInvId, weapInvId]
-                );
+                for (const slot of missingSlots) {
+                    const [insertRes] = await conn.query(
+                        `INSERT INTO player_party_presets 
+                        (player_id, preset_slot, main_char_inv_id, weap_grid_1_inv_id) 
+                        VALUES (?, ?, ?, ?)`,
+                        [playerId, slot, mcInvId, weapInvId]
+                    );
 
-                const pppId = insertRes.insertId;
-                await conn.query(
-                    `INSERT INTO player_mc_skills (ppp_id, slot_number, ms_id) VALUES (?, 1, 1)`,
-                    [pppId]
-                );
+                    const pppId = insertRes.insertId;
+                    await conn.query(
+                        `INSERT INTO player_mc_skills (ppp_id, slot_number, ms_id) VALUES (?, 1, 1)`,
+                        [pppId]
+                    );
+                }
 
                 // Refetch presets
                 [presets] = await conn.query('SELECT * FROM player_party_presets WHERE player_id = ? ORDER BY preset_slot ASC', [playerId]);

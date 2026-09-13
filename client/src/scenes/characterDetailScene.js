@@ -379,7 +379,7 @@ export default class CharacterDetailScene extends Phaser.Scene {
         const H = this.cameras.main.height;
         const CX = W / 2;
         const CY = H / 2;
-        const playerId = 1; // HARDCODED for now
+        const playerId = this.playerId;
 
         if (this.modalGroup) {
             this.modalGroup.clear(true, true);

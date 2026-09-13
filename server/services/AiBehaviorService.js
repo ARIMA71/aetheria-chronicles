@@ -93,7 +93,7 @@ class AiBehaviorService {
         // ─────────────────────────────────────────────────────────────────────────
         // 2. PHASE FILTERING
         // ─────────────────────────────────────────────────────────────────────────
-        const currentPhase = (boss.phase || boss.modeState || 'Normal').trim().toLowerCase();
+        const currentPhase = (boss.phase || boss.mode_state || boss.modeState || 'Normal').trim().toLowerCase();
 
         const phaseSkills = bossSkills.filter(s => {
             // HP triggers bypass phase filtering
@@ -129,8 +129,8 @@ class AiBehaviorService {
 
             // If CA is not ready or boss is exhausted, exclude normal skills (non-override skills)
             if (!isOverride) {
-                const currentCa = boss.current_ca !== undefined ? boss.current_ca : 0;
-                const caMax = boss.caMax !== undefined ? boss.caMax : 5;
+                const currentCa = boss.current_ca !== undefined ? boss.current_ca : (boss.ca !== undefined ? boss.ca : 0);
+                const caMax = boss.caMax !== undefined ? boss.caMax : (boss.ca_max !== undefined ? boss.ca_max : (boss.final_stats && (boss.final_stats.ca_max || boss.final_stats.caMax)) || 5);
                 const isExhausted = (boss.mode_state || boss.modeState) === 'exhausted';
 
                 const isCaReady = currentCa >= caMax && !isExhausted;

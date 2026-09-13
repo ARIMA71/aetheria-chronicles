@@ -41,12 +41,18 @@ exports.register = async (req, res) => {
         }
 
         // --------------------------------------------------
-        // Langkah A: Insert ke tabel players (Guest Account)
+        // Langkah A: Insert ke tabel players
+        // [HEADSTART PLAYTEST]: Gift 3000 Diamond & 100000 Gold for playtesting
+        // Initial Level 1 Max Stamina = 50
         // --------------------------------------------------
+        const initialGold = 100000;   // [HEADSTART PLAYTEST] (Prod default: 0)
+        const initialDiamond = 3000;  // [HEADSTART PLAYTEST] (Prod default: 0)
+        const initialStamina = 50;    // Level 1 Max Stamina (50 + (1-1)*5)
+
         const [playerResult] = await conn.query(
             `INSERT INTO players (username, password_hash, gender, player_level, player_exp, stamina, gold, diamond, is_guest)
-             VALUES (?, NULL, ?, 1, 0, 100, 0, 0, 1)`,
-            [username, gender]
+             VALUES (?, NULL, ?, 1, 0, ?, ?, ?, 1)`,
+            [username, gender, initialStamina, initialGold, initialDiamond]
         );
         const newPlayerId = playerResult.insertId;
 
@@ -72,23 +78,23 @@ exports.register = async (req, res) => {
         const [mcInvId, emberBladeInvId] = invIds;
 
         // --------------------------------------------------
-        // Langkah C: Party Preset Slot 1 — Parameterized Query (Party Kosong, Main Weapon: Ember Blade)
+        // Langkah C: Party Preset Slot 1 s/d 5 — Default MC + Ember Blade + Inspire
         // --------------------------------------------------
-        const [presetResult] = await conn.query(
-            `INSERT INTO player_party_presets
-                (player_id, preset_slot, main_char_inv_id, char_slot_1_inv_id, weap_grid_1_inv_id)
-             VALUES (?, 1, ?, NULL, ?)`,
-            [newPlayerId, mcInvId, emberBladeInvId]
-        );
-        const newPppId = presetResult.insertId;
+        for (let slot = 1; slot <= 5; slot++) {
+            const [presetResult] = await conn.query(
+                `INSERT INTO player_party_presets
+                    (player_id, preset_slot, main_char_inv_id, char_slot_1_inv_id, weap_grid_1_inv_id)
+                 VALUES (?, ?, ?, NULL, ?)`,
+                [newPlayerId, slot, mcInvId, emberBladeInvId]
+            );
+            const newPppId = presetResult.insertId;
 
-        // --------------------------------------------------
-        // Langkah D: MC Default Skill (Slot 1 → ms_id 1 Inspire)
-        // --------------------------------------------------
-        await conn.query(
-            'INSERT INTO player_mc_skills (ppp_id, slot_number, ms_id) VALUES (?, 1, 1)',
-            [newPppId]
-        );
+            // MC Default Skill (Slot 1 → ms_id 1 Inspire)
+            await conn.query(
+                'INSERT INTO player_mc_skills (ppp_id, slot_number, ms_id) VALUES (?, 1, 1)',
+                [newPppId]
+            );
+        }
 
         // --------------------------------------------------
         // Langkah E: Starter Material — 3x Green Potion (mat_id: 6)
@@ -112,15 +118,15 @@ exports.register = async (req, res) => {
 
         return res.status(201).json({
             status: 'success',
-            message: `Akun berhasil dibuat! Selamat datang, ${username}!`,
+            message: `Akun berhasil dibuat! Selamat datang, ${username}! (Bonus Playtest: 💎 3,000 & 🪙 100,000)`,
             token,
             data: {
                 player_id: newPlayerId,
                 username,
                 player_level: 1,
-                stamina: 100,
-                gold: 0,
-                diamond: 0,
+                stamina: initialStamina,
+                gold: initialGold,
+                diamond: initialDiamond,
                 is_guest: 1
             }
         });

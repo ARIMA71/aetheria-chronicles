@@ -62,12 +62,15 @@ export default class TelemetryApi {
             const playerObj = rawPlayer ? JSON.parse(rawPlayer) : {};
 
             const samples = window.__fpsSamples && window.__fpsSamples.length > 0 ? window.__fpsSamples : [window.__currentFps || 60];
-            const latencies = window.__latencySamples && window.__latencySamples.length > 0 ? window.__latencySamples : [15];
+            const rawLatencies = window.__latencySamples && window.__latencySamples.length > 0 ? window.__latencySamples : [];
 
-            const avgFps = samples.reduce((a, b) => a + b, 0) / samples.length;
-            const minFps = Math.min(...samples);
-            const maxFps = Math.max(...samples);
-            const avgLatency = latencies.reduce((a, b) => a + b, 0) / latencies.length;
+            const numericFps = samples.map(s => parseFloat(s)).filter(n => !isNaN(n));
+            const numericLatencies = rawLatencies.map(l => parseFloat(l)).filter(n => !isNaN(n));
+
+            const avgFps = numericFps.length > 0 ? numericFps.reduce((a, b) => a + b, 0) / numericFps.length : 60;
+            const minFps = numericFps.length > 0 ? Math.min(...numericFps) : 60;
+            const maxFps = numericFps.length > 0 ? Math.max(...numericFps) : 60;
+            const avgLatency = numericLatencies.length > 0 ? numericLatencies.reduce((a, b) => a + b, 0) / numericLatencies.length : 15;
 
             const deviceInfo = detectDeviceInfo();
 
