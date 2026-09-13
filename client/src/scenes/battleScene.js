@@ -133,8 +133,13 @@ export default class BattleScene extends Phaser.Scene {
         const bg = this.add.image(CX, H / 2, 'bg_battle').setOrigin(0.5);
         const scale = Math.max(W / bg.width, H / bg.height);
         bg.setScale(scale);
-        this.topHudBg = this.add.rectangle(CX, 26, W + 40, 52, 0x0F192E, 1.0).setDepth(10);
-        this.topHudLine = this.add.rectangle(CX, 52, W + 40, 3, 0x38BDF8).setDepth(10);
+        if (this.textures.exists('bg_card_x5')) {
+            this.topHudBg = this.add.image(CX, -286, 'bg_card_x5').setDisplaySize(530, 740).setDepth(10);
+            this.topHudBg.setTint(0x38bdf8);
+        } else {
+            this.topHudBg = this.add.rectangle(CX, 26, W + 40, 52, 0x0F192E, 1.0).setDepth(10);
+            this.topHudLine = this.add.rectangle(CX, 52, W + 40, 3, 0x38BDF8).setDepth(10);
+        }
 
         // Immediately add the black overlay so there is no blue flash from the background
         // Using 0.95 transparency so the player can faintly see the arena, as requested
@@ -971,10 +976,15 @@ export default class BattleScene extends Phaser.Scene {
         const W = 480;
         const CX = 240;
 
-        // Container Area Player HUD (dibawah tombol attack) — Full-Bleed Dark Blue Fill + Sky Blue Top Stroke
+        // Container Area Player HUD (dibawah tombol attack) — Card X5 out-of-frame on left, right, and bottom
         if (this._playerHudBg) this._playerHudBg.destroy();
-        this._playerHudBg = this.add.rectangle(CX, 705, W + 40, 350, 0x0F192E, 0.95).setDepth(1);
-        this._playerHudBg.setStrokeStyle(3, 0x38BDF8);
+        if (this.textures.exists('bg_card_x5')) {
+            this._playerHudBg = this.add.image(CX, 873, 'bg_card_x5').setDisplaySize(530, 740).setDepth(1);
+            this._playerHudBg.setTint(0x38bdf8); // Sky Blue tint
+        } else {
+            this._playerHudBg = this.add.rectangle(CX, 683, W + 40, 350, 0x0F192E, 0.95).setDepth(1);
+            this._playerHudBg.setStrokeStyle(3, 0x38BDF8);
+        }
 
         // 1. AETHER GAUGE
         if (this.textures.exists('progressbar_bg')) {

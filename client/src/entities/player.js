@@ -88,7 +88,7 @@ export default class Player extends Phaser.GameObjects.Container {
         this._isHighlight = false;
 
         // ── Visual Elements ───────────────────────────────────────────────────
-        this._bg = scene.add.rectangle(0, 0, this._W, this._H, 0x12192b);
+        this._bg = scene.add.rectangle(0, 0, this._W, this._H, 0x000000, 0);
         this._bg.setStrokeStyle(1, 0x334155);
 
         const keyId = data.mc_id || data.id || data.slot;

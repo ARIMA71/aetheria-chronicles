@@ -28,6 +28,8 @@ export default class TopMenuComponent {
         const load = this.scene.load;
         let needsStart = false;
 
+        if (!this.scene.textures.exists('bg_card_x5')) { load.image('bg_card_x5', 'assets/ui/card/Card X5.png'); needsStart = true; }
+
         if (!this.scene.textures.exists('btn_a_normal')) { load.image('btn_a_normal', 'assets/ui/button/A/Normal.png'); needsStart = true; }
         if (!this.scene.textures.exists('btn_a_hover')) { load.image('btn_a_hover', 'assets/ui/button/A/Hover.png'); needsStart = true; }
         if (!this.scene.textures.exists('btn_a_active')) { load.image('btn_a_active', 'assets/ui/button/A/Active.png'); needsStart = true; }
@@ -44,17 +46,77 @@ export default class TopMenuComponent {
         if (!this.scene.textures.exists('btn_d_active')) { load.image('btn_d_active', 'assets/ui/button/D/Button Active.png'); needsStart = true; }
 
         if (needsStart) {
+            load.once('complete', () => {
+                if (this.scene && this.scene.sys && this.scene.sys.settings.active) {
+                    this._applyCardX5Textures();
+                }
+            });
             load.start();
         }
     }
 
+    _applyCardX5Textures() {
+        if (!this.scene || !this.scene.textures.exists('bg_card_x5')) return;
+
+        // Top HUD Header
+        if (this.topHudBg) {
+            if (this.topHudBg.setTexture) {
+                this.topHudBg.setTexture('bg_card_x5');
+            } else {
+                if (this.topHudBg.destroy) this.topHudBg.destroy();
+                this.topHudBg = this.scene.add.image(this.CX, -281, 'bg_card_x5')
+                    .setDisplaySize(530, 740)
+                    .setDepth(9996)
+                    .setScrollFactor(0);
+                this.topHudBg.setTint(0x38bdf8);
+            }
+        }
+
+        // Menu Modal Panel Box (Dynamic bottom below LOGOUT/BIND button, out-of-frame top rounded corners)
+        if (this.menuPanel) {
+            const isGuest = this.playerData && this.playerData.is_guest === 1;
+            const targetBottom = isGuest ? 475 : 425;
+            const targetH = targetBottom + 30;
+            const targetCenterY = (targetBottom - 30) / 2;
+
+            if (this.menuPanel.setTexture) {
+                this.menuPanel.setTexture('bg_card_x5');
+                this.menuPanel.setPosition(this.CX, targetCenterY);
+                this.menuPanel.setDisplaySize(530, targetH);
+                this.menuPanel.setTint(0x38bdf8);
+            } else if (this.menuPanel.destroy) {
+                const oldPanel = this.menuPanel;
+                const idx = this.menuContainer ? this.menuContainer.getIndex(oldPanel) : -1;
+                this.menuPanel = this.scene.add.image(this.CX, targetCenterY, 'bg_card_x5')
+                    .setDisplaySize(530, targetH);
+                this.menuPanel.setTint(0x38bdf8);
+                this.menuPanel.setInteractive();
+                this.menuPanel.disableClickSound = true;
+                this.menuPanel.on('pointerdown', (pointer, localX, localY, event) => event.stopPropagation());
+
+                if (this.menuContainer && idx >= 0) {
+                    this.menuContainer.addAt(this.menuPanel, idx);
+                    oldPanel.destroy();
+                }
+            }
+        }
+    }
+
     _buildTopHUDHeader() {
-        // Solid Dark Navy Header Panel matching authScene.js
-        const topBarGraphics = this.scene.add.graphics().setDepth(9996).setScrollFactor(0);
-        topBarGraphics.fillStyle(0x0f172a, 1.0);
-        topBarGraphics.fillRect(0, 0, this.W, 60);
-        topBarGraphics.lineStyle(2, 0x38bdf8, 0.9);
-        topBarGraphics.lineBetween(0, 59, this.W, 59);
+        if (this.scene.textures.exists('bg_card_x5')) {
+            this.topHudBg = this.scene.add.image(this.CX, -281, 'bg_card_x5')
+                .setDisplaySize(530, 740)
+                .setDepth(9996)
+                .setScrollFactor(0);
+            this.topHudBg.setTint(0x38bdf8);
+        } else {
+            const topBarGraphics = this.scene.add.graphics().setDepth(9996).setScrollFactor(0);
+            topBarGraphics.fillStyle(0x0f172a, 1.0);
+            topBarGraphics.fillRect(0, 0, this.W, 60);
+            topBarGraphics.lineStyle(2, 0x38bdf8, 0.9);
+            topBarGraphics.lineBetween(0, 59, this.W, 59);
+            this.topHudBg = topBarGraphics;
+        }
 
         // Scan and format scene title text at y ~ 30 with White fill & Sky Blue stroke
         const formatTitleText = () => {
@@ -69,8 +131,8 @@ export default class TopMenuComponent {
                     });
                     child.setDepth(9997).setScrollFactor(0);
                 }
-                // Hide primitive rectangle topBar created in scenes so solid dark navy topBarGraphics shows cleanly
-                if (child.type === 'Rectangle' && Math.abs(child.y - 30) < 15 && child.width >= this.W - 20 && child !== topBarGraphics) {
+                // Hide primitive rectangle topBar created in scenes so Card X5 topHudBg shows cleanly
+                if (child.type === 'Rectangle' && Math.abs(child.y - 30) < 15 && child.width >= this.W - 20 && child !== this.topHudBg) {
                     child.setVisible(false);
                 }
                 // Hide primitive backBtn / homeTxt created by individual scenes at x ~ 40, y ~ 30
@@ -254,10 +316,21 @@ export default class TopMenuComponent {
             }
         });
 
-        // 2. Modal panel box with Sky Blue outline
-        this.menuPanel = this.scene.add.rectangle(this.CX, this.panelTargetHeight / 2, this.W, this.panelTargetHeight, 0x0b1120).setInteractive();
+        // 2. Modal panel box using Card X5 UI asset (Dynamic height ending right below LOGOUT/BIND button)
+        const targetBottom = isGuest ? 475 : 425;
+        const targetH = targetBottom + 30;
+        const targetCenterY = (targetBottom - 30) / 2;
+
+        if (this.scene.textures.exists('bg_card_x5')) {
+            this.menuPanel = this.scene.add.image(this.CX, targetCenterY, 'bg_card_x5')
+                .setDisplaySize(530, targetH);
+            this.menuPanel.setTint(0x38bdf8);
+            this.menuPanel.setInteractive();
+        } else {
+            this.menuPanel = this.scene.add.rectangle(this.CX, this.panelTargetHeight / 2, this.W, this.panelTargetHeight, 0x0b1120).setInteractive();
+            this.menuPanel.setStrokeStyle(2, 0x38bdf8);
+        }
         this.menuPanel.disableClickSound = true;
-        this.menuPanel.setStrokeStyle(2, 0x38bdf8);
         this.menuPanel.on('pointerdown', (pointer, localX, localY, event) => {
             event.stopPropagation();
         });
@@ -780,15 +853,20 @@ export default class TopMenuComponent {
                         if (this.menuPanel) {
                             this.panelTargetHeight = 420;
                             this.scene.tweens.addCounter({
-                                from: 470,
-                                to: 420,
+                                from: 505,
+                                to: 455,
                                 duration: 300,
                                 ease: 'Power2',
                                 onUpdate: (tween) => {
                                     const val = tween.getValue();
-                                    this.menuPanel.setSize(this.W, val);
-                                    this.menuPanel.y = val / 2;
-                                    this.menuPanel.input.hitArea.setTo(0, 0, this.W, val);
+                                    const cY = (val - 60) / 2;
+                                    if (this.menuPanel.setDisplaySize) {
+                                        this.menuPanel.setDisplaySize(530, val);
+                                        this.menuPanel.y = cY;
+                                    } else {
+                                        this.menuPanel.setSize(this.W, val - 35);
+                                        this.menuPanel.y = (val - 35) / 2;
+                                    }
                                 }
                             });
                         }

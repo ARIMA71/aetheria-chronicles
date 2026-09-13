@@ -24,6 +24,13 @@ export default class QuestScene extends Phaser.Scene {
         this.load.image('bg_quest', 'assets/backgrounds/questScene.jpg');
         if (!this.textures.exists('btn_icon_normal')) this.load.image('btn_icon_normal', 'assets/ui/button/C/Icon Button.png');
         if (!this.textures.exists('btn_icon_hover')) this.load.image('btn_icon_hover', 'assets/ui/button/C/Icon Button Hover.png');
+        if (!this.textures.exists('btn_a_normal')) this.load.image('btn_a_normal', 'assets/ui/button/A/Normal.png');
+        if (!this.textures.exists('btn_a_hover')) this.load.image('btn_a_hover', 'assets/ui/button/A/Hover.png');
+        if (!this.textures.exists('btn_a_active')) this.load.image('btn_a_active', 'assets/ui/button/A/Active.png');
+        if (!this.textures.exists('btn_b_normal')) this.load.image('btn_b_normal', 'assets/ui/button/B/Button Normal 1.png');
+        if (!this.textures.exists('btn_b_hover')) this.load.image('btn_b_hover', 'assets/ui/button/B/Button Hover 1.png');
+        if (!this.textures.exists('btn_b_active')) this.load.image('btn_b_active', 'assets/ui/button/B/Button Active 1.png');
+        if (!this.textures.exists('card_x100')) this.load.image('card_x100', 'assets/ui/card/Card X100.png');
         if (!this.textures.exists('card_x101')) this.load.image('card_x101', 'assets/ui/card/Card X101.png');
         if (!this.textures.exists('card_x12')) this.load.image('card_x12', 'assets/ui/card/Card X12.png');
     }
@@ -262,15 +269,8 @@ export default class QuestScene extends Phaser.Scene {
         this.questPanelTitle.setText(`${area.area_name} — ${area.quests.length} Quests`);
         this._renderQuestList(area.quests);
 
-        // Slide up animation from out-of-frame bottom when area is selected
         if (this.questPanelContainer) {
-            this.questPanelContainer.y = 350;
-            this.tweens.add({
-                targets: this.questPanelContainer,
-                y: 0,
-                duration: 400,
-                ease: 'Power2.out'
-            });
+            this.questPanelContainer.y = 0;
         }
     }
 
@@ -351,45 +351,106 @@ export default class QuestScene extends Phaser.Scene {
         // 2. Fullscreen Dark Overlay
         const overlay = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.85).setInteractive();
 
-        // 3. Main Modal Background Window (Shifted down below TOP HUD: Y = 80 to 800, center Y = 440, height = 720px)
-        const panelBg = this.add.rectangle(CX, 440, W - 30, 720, 0x0d1b2a);
-        panelBg.setStrokeStyle(2, THEME.AETHER).setInteractive();
+        // 3. Main Modal Background Window (Card X100, Sky Blue tint, height = 738px, extended by 10px)
+        let panelBg;
+        if (this.textures.exists('card_x100')) {
+            panelBg = this.add.image(CX, 440, 'card_x100').setDisplaySize(W - 12, 738);
+            panelBg.setTint(0x38bdf8); // Sky Blue tint
+        } else {
+            panelBg = this.add.rectangle(CX, 440, W - 22, 738, 0x0d1b2a);
+            panelBg.setStrokeStyle(2, THEME.AETHER);
+        }
+        panelBg.setInteractive();
 
-        // 4. Fixed Header Bar (Y = 110)
-        const headerBg = this.add.rectangle(CX, 110, W - 30, 60, 0x1e293b).setStrokeStyle(1, THEME.BORDER);
-        const headerTitle = this.add.text(CX, 100, 'PRE-BATTLE STAGE', {
+        // 4. Fixed Header Title & Subtitle (Lowered slightly to Y = 116 / 138, No dark background box)
+        const headerTitle = this.add.text(CX, 116, 'PRE-BATTLE STAGE', {
             fontSize: '15px', fontStyle: 'bold', fontFamily: 'Outfit', color: '#A5B4FC', letterSpacing: 2
         }).setOrigin(0.5);
-        const headerSubtitle = this.add.text(CX, 120, quest.name, {
+        const headerSubtitle = this.add.text(CX, 138, quest.name, {
             fontSize: '11px', fontFamily: 'Outfit', color: THEME.TEXT_MUTED
         }).setOrigin(0.5);
 
-        const closeBtn = this.add.circle(W - 40, 110, 15, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
-        const closeTxt = this.add.text(W - 40, 110, '✕', { fontSize: '12px', fontStyle: 'bold', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
+        // Enlarged & Raised UI Close Button (Y = 112, size = 42x42)
+        let closeBtn;
+        if (this.textures.exists('btn_icon_normal')) {
+            closeBtn = this.add.image(W - 32, 112, 'btn_icon_normal').setDisplaySize(42, 42);
+            closeBtn.setTint(0xef4444); // Red UI Button
+        } else {
+            closeBtn = this.add.circle(W - 32, 112, 18, THEME.PANEL).setStrokeStyle(1, THEME.BORDER);
+        }
+        const closeTxt = this.add.text(W - 32, 112, '✕', { fontSize: '14px', fontStyle: 'bold', color: '#ffffff' }).setOrigin(0.5);
 
-        closeBtn.on('pointerover', () => closeBtn.setFillStyle(0x334155));
-        closeBtn.on('pointerout', () => closeBtn.setFillStyle(THEME.PANEL));
+        closeBtn.setInteractive({ useHandCursor: true });
+        closeBtn.on('pointerover', () => {
+            if (this.textures.exists('btn_icon_hover')) closeBtn.setTexture('btn_icon_hover');
+            if (closeBtn.setTint) closeBtn.setTint(0xf87171);
+            closeBtn.setDisplaySize(46, 46);
+            closeTxt.setScale(1.1);
+        });
+        closeBtn.on('pointerout', () => {
+            if (this.textures.exists('btn_icon_normal')) closeBtn.setTexture('btn_icon_normal');
+            if (closeBtn.setTint) closeBtn.setTint(0xef4444);
+            closeBtn.setDisplaySize(42, 42);
+            closeTxt.setScale(1.0);
+        });
         closeBtn.on('pointerdown', () => this._destroyPreBattleModal());
 
-        // 5. Fixed Footer Action Buttons (Floating at Y = 768 without dark footer bar)
-        const partyBtn = this.add.rectangle(CX - 85, 768, 140, 44, THEME.PANEL).setStrokeStyle(1, THEME.BORDER).setInteractive({ useHandCursor: true });
-        const partyTxt = this.add.text(CX - 85, 768, '⚙ Atur Party', { fontSize: '11px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0.5);
-        partyBtn.on('pointerover', () => partyBtn.setFillStyle(0x334155));
-        partyBtn.on('pointerout', () => partyBtn.setFillStyle(THEME.PANEL));
+        // 5. Fixed Sticky Footer Action Buttons with Gap (Raised 5px to Y = 763)
+        const btnAW = 145, btnAH = 46;
+        let partyBtn, startBtn;
+
+        if (this.textures.exists('btn_a_normal')) {
+            partyBtn = this.add.image(CX - 90, 763, 'btn_a_normal').setDisplaySize(btnAW, btnAH);
+            partyBtn.setTint(0x38bdf8); // Sky blue tint
+        } else {
+            partyBtn = this.add.rectangle(CX - 90, 763, 135, 44, THEME.PANEL).setStrokeStyle(1, THEME.BORDER);
+        }
+        const partyTxt = this.add.text(CX - 90, 763, '⚙ Atur Party', {
+            fontSize: '12px', fontStyle: 'bold', fontFamily: 'Outfit', color: '#ffffff'
+        }).setOrigin(0.5);
+
+        partyBtn.setInteractive({ useHandCursor: true });
+        partyBtn.on('pointerover', () => {
+            if (this.textures.exists('btn_a_hover')) partyBtn.setTexture('btn_a_hover');
+            if (partyBtn.setTint) partyBtn.setTint(0x60a5fa);
+        });
+        partyBtn.on('pointerout', () => {
+            if (this.textures.exists('btn_a_normal')) partyBtn.setTexture('btn_a_normal');
+            if (partyBtn.setTint) partyBtn.setTint(0x38bdf8);
+        });
         partyBtn.on('pointerdown', () => {
+            if (this.textures.exists('btn_a_active')) partyBtn.setTexture('btn_a_active');
             this._destroyPreBattleModal();
             this.scene.start('LoadingScene', { targetScene: 'PartyScene' });
         });
 
-        const startBtn = this.add.rectangle(CX + 80, 768, 160, 44, 0x166534).setStrokeStyle(2, 0x22c55e).setInteractive({ useHandCursor: true });
-        const startTxt = this.add.text(CX + 80, 768, '⚔ Mulai Battle', { fontSize: '12px', fontStyle: 'bold', fontFamily: 'Outfit', color: '#a8e6cf' }).setOrigin(0.5);
-        startBtn.on('pointerover', () => startBtn.setFillStyle(0x15803d));
-        startBtn.on('pointerout', () => startBtn.setFillStyle(0x166534));
-        startBtn.on('pointerdown', () => this._startBattle(quest));
+        if (this.textures.exists('btn_a_normal')) {
+            startBtn = this.add.image(CX + 90, 763, 'btn_a_normal').setDisplaySize(btnAW + 10, btnAH);
+            startBtn.setTint(0x22c55e); // Emerald green tint for Start Battle
+        } else {
+            startBtn = this.add.rectangle(CX + 90, 763, 145, 44, 0x166534).setStrokeStyle(2, 0x22c55e);
+        }
+        const startTxt = this.add.text(CX + 90, 763, '⚔ Mulai Battle', {
+            fontSize: '12px', fontStyle: 'bold', fontFamily: 'Outfit', color: '#ffffff'
+        }).setOrigin(0.5);
 
-        // 6. Scroll Viewport Setup (Y = 142 to Y = 735, height = 593px)
-        const viewY = 142;
-        const viewH = 593;
+        startBtn.setInteractive({ useHandCursor: true });
+        startBtn.on('pointerover', () => {
+            if (this.textures.exists('btn_a_hover')) startBtn.setTexture('btn_a_hover');
+            if (startBtn.setTint) startBtn.setTint(0x4ade80);
+        });
+        startBtn.on('pointerout', () => {
+            if (this.textures.exists('btn_a_normal')) startBtn.setTexture('btn_a_normal');
+            if (startBtn.setTint) startBtn.setTint(0x22c55e);
+        });
+        startBtn.on('pointerdown', () => {
+            if (this.textures.exists('btn_a_active')) startBtn.setTexture('btn_a_active');
+            this._startBattle(quest);
+        });
+
+        // 6. Scroll Viewport Setup (Y = 152 to Y = 735, height = 583px)
+        const viewY = 152;
+        const viewH = 583;
 
         const maskShape = this.make.graphics();
         maskShape.fillRect(15, viewY, W - 30, viewH);
@@ -432,9 +493,9 @@ export default class QuestScene extends Phaser.Scene {
             this.scrollContainer.y = newY;
         });
 
-        // Add static modal structures to preBattleContainer (No footerBg)
+        // Add static modal structures to preBattleContainer (No headerBg, No footerBg)
         this.preBattleContainer.add([
-            overlay, panelBg, headerBg, headerTitle, headerSubtitle, closeBtn, closeTxt,
+            overlay, panelBg, headerTitle, headerSubtitle, closeBtn, closeTxt,
             dragZone, this.scrollContainer,
             partyBtn, partyTxt, startBtn, startTxt
         ]);
@@ -442,13 +503,13 @@ export default class QuestScene extends Phaser.Scene {
         // 7. Populate Content inside scrollContainer
         let currentY = 15;
 
-        // --- SECTION 1: QUEST BADGES & INFO ---
-        const badgeBg1 = this.add.rectangle(CX - 90, currentY + 12, 150, 26, 0x1e293b).setStrokeStyle(1, THEME.BORDER);
+        // --- SECTION 1: QUEST BADGES & INFO (No Fill, Stroke Outline Only) ---
+        const badgeBg1 = this.add.rectangle(CX - 90, currentY + 12, 150, 26).setStrokeStyle(1, THEME.BORDER);
         const badgeTxt1 = this.add.text(CX - 90, currentY + 12, `⚡ Stamina Cost: ${quest.stamina_cost}`, {
             fontSize: '10px', fontStyle: 'bold', fontFamily: 'Outfit', color: '#f59e0b'
         }).setOrigin(0.5);
 
-        const badgeBg2 = this.add.rectangle(CX + 90, currentY + 12, 150, 26, 0x1e293b).setStrokeStyle(1, THEME.BORDER);
+        const badgeBg2 = this.add.rectangle(CX + 90, currentY + 12, 150, 26).setStrokeStyle(1, THEME.BORDER);
         const badgeTxt2 = this.add.text(CX + 90, currentY + 12, `💪 Rec. Power: ${quest.power_level}`, {
             fontSize: '10px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_SECONDARY
         }).setOrigin(0.5);
@@ -460,7 +521,7 @@ export default class QuestScene extends Phaser.Scene {
         this.scrollContainer.add(divider1);
         currentY += 15;
 
-        // --- SECTION 2: TARGET ENEMIES ---
+        // --- SECTION 2: TARGET ENEMIES (No Fill, Stroke Outline Only) ---
         const enemyHeader = this.add.text(35, currentY, 'TARGET ENEMIES', {
             fontSize: '11px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_SECONDARY, letterSpacing: 1
         }).setOrigin(0, 0.5);
@@ -476,7 +537,7 @@ export default class QuestScene extends Phaser.Scene {
 
         uniqueEnemies.forEach((e) => {
             const elemColor = { Fire: '#ef4444', Wind: '#22c55e', Earth: '#d97706' }[e.element] || '#94a3b8';
-            const eBg = this.add.rectangle(CX, currentY + 10, W - 70, 24, 0x1e293b, 0.6).setStrokeStyle(1, 0x334155);
+            const eBg = this.add.rectangle(CX, currentY + 10, W - 70, 24).setStrokeStyle(1, 0x334155);
             const eName = this.add.text(45, currentY + 10, `👹 ${e.name}`, { fontSize: '11px', fontStyle: 'bold', fontFamily: 'Outfit', color: THEME.TEXT_PRIMARY }).setOrigin(0, 0.5);
             const eLvl = this.add.text(260, currentY + 10, `Lv.${e.level}`, { fontSize: '10px', fontFamily: 'Outfit', color: '#ffffff' }).setOrigin(0, 0.5);
             const eElem = this.add.text(340, currentY + 10, e.element, { fontSize: '10px', fontStyle: 'bold', fontFamily: 'Outfit', color: elemColor }).setOrigin(0, 0.5);
@@ -553,13 +614,38 @@ export default class QuestScene extends Phaser.Scene {
         for (let s = 1; s <= 5; s++) {
             const bx = CX - 160 + (s - 1) * 80;
             const active = s === this.selectedPresetSlot;
-            const btn = this.add.rectangle(bx, currentY, 72, 34, active ? 0x1e3a8a : THEME.PANEL).setStrokeStyle(2, active ? 0x3b82f6 : THEME.BORDER).setInteractive({ useHandCursor: true });
-            const txt = this.add.text(bx, currentY, `Slot ${s}`, { fontSize: '10px', fontStyle: 'bold', color: active ? '#ffffff' : THEME.TEXT_SECONDARY, fontFamily: 'Outfit' }).setOrigin(0.5);
-            
+
+            let btn;
+            if (this.textures.exists('btn_b_normal')) {
+                const btnTex = active ? 'btn_b_active' : 'btn_b_normal';
+                btn = this.add.image(bx, currentY, btnTex).setDisplaySize(72, 34);
+                btn.setTint(active ? 0x38bdf8 : 0x475569);
+            } else {
+                btn = this.add.rectangle(bx, currentY, 72, 34, active ? 0x1e3a8a : THEME.PANEL).setStrokeStyle(2, active ? 0x3b82f6 : THEME.BORDER);
+            }
+
+            const txt = this.add.text(bx, currentY, `Slot ${s}`, {
+                fontSize: '11px', fontStyle: 'bold', color: active ? '#ffffff' : '#cbd5e1', fontFamily: 'Outfit'
+            }).setOrigin(0.5);
+
+            btn.setInteractive({ useHandCursor: true });
+            btn.on('pointerover', () => {
+                if (!active && this.textures.exists('btn_b_hover')) {
+                    btn.setTexture('btn_b_hover');
+                    btn.setTint(0x60a5fa);
+                }
+            });
+            btn.on('pointerout', () => {
+                if (!active && this.textures.exists('btn_b_normal')) {
+                    btn.setTexture('btn_b_normal');
+                    btn.setTint(0x475569);
+                }
+            });
             btn.on('pointerdown', () => {
                 this.selectedPresetSlot = s;
                 this._showPreBattleModal(quest);
             });
+
             this._presetBtns.push({ btn, txt });
             this.scrollContainer.add([btn, txt]);
         }
@@ -685,9 +771,8 @@ export default class QuestScene extends Phaser.Scene {
             else if (char.mc_rarity === 'SR') { rColorInt = 0xa855f7; rColorHex = '#a855f7'; }
             else if (char.mc_rarity === 'R') { rColorInt = 0xef4444; rColorHex = '#ef4444'; }
 
-            // Portrait Background
-            const portBg = this.add.rectangle(px, cardY, 85, 145, THEME.PANEL, 0.7);
-            portBg.setStrokeStyle(2, rColorInt);
+            // Portrait Background (No fill, stroke outline only)
+            const portBg = this.add.rectangle(px, cardY, 85, 145).setStrokeStyle(2, rColorInt);
             this.presetCardsContainer.add(portBg);
 
             // Image
@@ -757,7 +842,7 @@ export default class QuestScene extends Phaser.Scene {
             let sy = cardY + 72.5 + 25;
             for (let r = 0; r < 4; r++) {
                 const skName = activeSkills[r];
-                const skBg = this.add.rectangle(px, sy, 80, 14, 0x1e293b).setStrokeStyle(1, 0x334155);
+                const skBg = this.add.rectangle(px, sy, 80, 14).setStrokeStyle(1, 0x334155);
                 this.presetCardsContainer.add(skBg);
                 if (skName) {
                     const skTxt = this.add.text(px, sy, skName.substring(0, 12), { fontSize: '8px', color: '#cbd5e1' }).setOrigin(0.5);
@@ -889,48 +974,81 @@ export default class QuestScene extends Phaser.Scene {
         overlay.on('pointerdown', (p, x, y, e) => e.stopPropagation());
         items.push(overlay);
 
-        // Panel
-        const panel = this.add.rectangle(CX, H / 2, 360, 320, 0x0d1b2a).setStrokeStyle(2, THEME.AETHER).setInteractive();
+        // Panel Box using Card X101 UI asset
+        let panel;
+        const panelW = 380;
+        const panelH = 340;
+        if (this.textures.exists('card_x101')) {
+            panel = this.add.image(CX, H / 2, 'card_x101').setDisplaySize(panelW, panelH);
+            panel.setTint(0x38bdf8); // Sky Blue tint
+        } else if (this.textures.exists('bg_card_x101')) {
+            panel = this.add.image(CX, H / 2, 'bg_card_x101').setDisplaySize(panelW, panelH);
+            panel.setTint(0x38bdf8);
+        } else {
+            panel = this.add.rectangle(CX, H / 2, panelW, panelH, 0x0d1b2a).setStrokeStyle(2, 0x38bdf8);
+        }
+        panel.setInteractive();
         panel.on('pointerdown', (p, x, y, e) => e.stopPropagation());
         items.push(panel);
 
-        // Icon
-        items.push(this.add.text(CX, H / 2 - 120, '⚔️', { fontSize: '32px' }).setOrigin(0.5));
-
         // Title
-        items.push(this.add.text(CX, H / 2 - 80, 'PERTEMPURAN AKTIF', {
-            fontSize: '16px', fontStyle: 'bold', color: '#A5B4FC',
-            fontFamily: 'Outfit', letterSpacing: 2
-        }).setOrigin(0.5));
+        const titleTxt = this.add.text(CX, H / 2 - 125, 'PERTEMPURAN AKTIF', {
+            fontSize: '17px', fontStyle: 'bold', color: '#38bdf8',
+            fontFamily: 'Outfit, Inter, sans-serif', stroke: '#000000', strokeThickness: 3,
+            letterSpacing: 2
+        }).setOrigin(0.5);
+        items.push(titleTxt);
 
         // Quest name
-        items.push(this.add.text(CX, H / 2 - 50, data.quest_name || 'Unknown Quest', {
-            fontSize: '13px', color: THEME.TEXT_PRIMARY, fontFamily: 'Outfit'
-        }).setOrigin(0.5));
+        const questNameTxt = this.add.text(CX, H / 2 - 90, data.quest_name || 'Unknown Quest', {
+            fontSize: '14px', fontStyle: 'bold', color: '#ffffff', fontFamily: 'Outfit, Inter, sans-serif'
+        }).setOrigin(0.5);
+        items.push(questNameTxt);
 
         // Remaining time
         const mins = Math.floor((data.remaining_time || 0) / 60);
         const secs = (data.remaining_time || 0) % 60;
         const timeStr = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-        items.push(this.add.text(CX, H / 2 - 25, `⏱ Sisa Waktu: ${timeStr}`, {
-            fontSize: '12px', color: data.remaining_time < 300 ? '#ff4444' : '#f39c12',
-            fontFamily: 'Outfit'
-        }).setOrigin(0.5));
-
-        // Info
-        items.push(this.add.text(CX, H / 2 + 5, 'Kamu memiliki pertempuran yang belum selesai.\nLanjutkan atau menyerah?', {
-            fontSize: '10px', color: THEME.TEXT_SECONDARY, fontFamily: 'Outfit',
-            align: 'center', lineSpacing: 4
-        }).setOrigin(0.5));
-
-        // Lanjutkan Button
-        const resumeBtn = this.add.rectangle(CX, H / 2 + 60, 300, 44, 0x1a3a2a).setStrokeStyle(2, THEME.HEALTH).setInteractive({ useHandCursor: true });
-        const resumeTxt = this.add.text(CX, H / 2 + 60, '⚔ Lanjutkan Pertempuran', {
-            fontSize: '13px', fontStyle: 'bold', color: '#a8e6cf', fontFamily: 'Outfit'
+        const timeTxt = this.add.text(CX, H / 2 - 60, `⏱ Sisa Waktu: ${timeStr}`, {
+            fontSize: '12px', fontStyle: 'bold', color: data.remaining_time < 300 ? '#ff4444' : '#f39c12',
+            fontFamily: 'Outfit, Inter, sans-serif'
         }).setOrigin(0.5);
-        resumeBtn.on('pointerover', () => resumeBtn.setFillStyle(0x245a3a));
-        resumeBtn.on('pointerout', () => resumeBtn.setFillStyle(0x1a3a2a));
-        resumeBtn.on('pointerdown', () => {
+        items.push(timeTxt);
+
+        // Info description
+        const descTxt = this.add.text(CX, H / 2 - 25, 'Kamu memiliki pertempuran yang belum selesai.\nLanjutkan atau menyerah?', {
+            fontSize: '11px', color: '#94a3b8', fontFamily: 'Outfit, Inter, sans-serif',
+            align: 'center', lineSpacing: 4
+        }).setOrigin(0.5);
+        items.push(descTxt);
+
+        // --- BUTTON 1: Lanjutkan Pertempuran (Button A with Green tint) ---
+        const btnW = 300;
+        const btn1H = 46;
+        const btn1Y = H / 2 + 35;
+        let resumeBtnImg;
+        if (this.textures.exists('btn_a_normal')) {
+            resumeBtnImg = this.add.image(CX, btn1Y, 'btn_a_normal').setDisplaySize(btnW, btn1H);
+            resumeBtnImg.setTint(0x2ecc71); // Green tint
+        } else {
+            resumeBtnImg = this.add.rectangle(CX, btn1Y, btnW, btn1H, 0x1a3a2a).setStrokeStyle(2, 0x2ecc71);
+        }
+        const resumeTxt = this.add.text(CX, btn1Y, '⚔  Lanjutkan Pertempuran', {
+            fontSize: '13px', fontStyle: 'bold', color: '#ffffff', fontFamily: 'Outfit, Inter, sans-serif',
+            stroke: '#000000', strokeThickness: 3
+        }).setOrigin(0.5);
+
+        const resumeHitZone = this.add.rectangle(CX, btn1Y, btnW, btn1H, 0x000000, 0).setInteractive({ useHandCursor: true });
+        resumeHitZone.on('pointerover', () => {
+            if (this.textures.exists('btn_a_hover')) resumeBtnImg.setTexture('btn_a_hover');
+            resumeBtnImg.setTint(0x52be80);
+        });
+        resumeHitZone.on('pointerout', () => {
+            if (this.textures.exists('btn_a_normal')) resumeBtnImg.setTexture('btn_a_normal');
+            resumeBtnImg.setTint(0x2ecc71);
+        });
+        resumeHitZone.on('pointerdown', () => {
+            if (this.textures.exists('btn_a_active')) resumeBtnImg.setTexture('btn_a_active');
             this.resumeContainer.destroy();
             this.scene.start('LoadingScene', {
                 targetScene: 'ReadyScene',
@@ -942,16 +1060,37 @@ export default class QuestScene extends Phaser.Scene {
                 }
             });
         });
-        items.push(resumeBtn, resumeTxt);
+        resumeHitZone.on('pointerup', () => {
+            if (this.textures.exists('btn_a_normal')) resumeBtnImg.setTexture('btn_a_normal');
+        });
+        items.push(resumeBtnImg, resumeTxt, resumeHitZone);
 
-        // Menyerah Button
-        const surrenderBtn = this.add.rectangle(CX, H / 2 + 115, 300, 38, 0x2a0d0d).setStrokeStyle(1, 0xef4444).setInteractive({ useHandCursor: true });
-        const surrenderTxt = this.add.text(CX, H / 2 + 115, '🏳 Menyerah (Stamina Hangus)', {
-            fontSize: '11px', fontStyle: 'bold', color: '#ff8a80', fontFamily: 'Outfit'
+        // --- BUTTON 2: Menyerah (Button A with Red tint) ---
+        const btn2H = 42;
+        const btn2Y = H / 2 + 95;
+        let surrenderBtnImg;
+        if (this.textures.exists('btn_a_normal')) {
+            surrenderBtnImg = this.add.image(CX, btn2Y, 'btn_a_normal').setDisplaySize(btnW, btn2H);
+            surrenderBtnImg.setTint(0xe74c3c); // Red tint
+        } else {
+            surrenderBtnImg = this.add.rectangle(CX, btn2Y, btnW, btn2H, 0x2a0d0d).setStrokeStyle(1, 0xe74c3c);
+        }
+        const surrenderTxt = this.add.text(CX, btn2Y, '🏳  Menyerah (Stamina Hangus)', {
+            fontSize: '11px', fontStyle: 'bold', color: '#ff8a80', fontFamily: 'Outfit, Inter, sans-serif',
+            stroke: '#000000', strokeThickness: 3
         }).setOrigin(0.5);
-        surrenderBtn.on('pointerover', () => surrenderBtn.setFillStyle(0x3d1111));
-        surrenderBtn.on('pointerout', () => surrenderBtn.setFillStyle(0x2a0d0d));
-        surrenderBtn.on('pointerdown', async () => {
+
+        const surrenderHitZone = this.add.rectangle(CX, btn2Y, btnW, btn2H, 0x000000, 0).setInteractive({ useHandCursor: true });
+        surrenderHitZone.on('pointerover', () => {
+            if (this.textures.exists('btn_a_hover')) surrenderBtnImg.setTexture('btn_a_hover');
+            surrenderBtnImg.setTint(0xec7063);
+        });
+        surrenderHitZone.on('pointerout', () => {
+            if (this.textures.exists('btn_a_normal')) surrenderBtnImg.setTexture('btn_a_normal');
+            surrenderBtnImg.setTint(0xe74c3c);
+        });
+        surrenderHitZone.on('pointerdown', async () => {
+            if (this.textures.exists('btn_a_active')) surrenderBtnImg.setTexture('btn_a_active');
             try {
                 await BattleApi.surrenderBattle(data.bs_id, this.playerId);
                 this.resumeContainer.destroy();
@@ -959,7 +1098,10 @@ export default class QuestScene extends Phaser.Scene {
                 console.error('Surrender failed:', e);
             }
         });
-        items.push(surrenderBtn, surrenderTxt);
+        surrenderHitZone.on('pointerup', () => {
+            if (this.textures.exists('btn_a_normal')) surrenderBtnImg.setTexture('btn_a_normal');
+        });
+        items.push(surrenderBtnImg, surrenderTxt, surrenderHitZone);
 
         this.resumeContainer.add(items);
     }

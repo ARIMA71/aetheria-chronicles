@@ -31,16 +31,30 @@ export default class BattleMenu extends Phaser.GameObjects.Container {
 
     buildUI() {
         // Overlay backdrop (depth 39)
-        this._menuOverlay = this.scene.add.rectangle(this.CX, this.H / 2, this.W, this.H, 0x000000, 0.75)
+        this._menuOverlay = this.scene.add.rectangle(this.CX, this.H / 2, this.W, this.H, 0x000000, 0)
             .setDepth(39)
             .setInteractive();
         
         this._menuOverlay.on('pointerdown', (pointer, x, y, event) => {
             event.stopPropagation();
+            this.closeMenu();
         });
 
-        // Main Menu Container centered
-        this.setPosition(this.CX, this.H / 2);
+        this.scene.tweens.add({
+            targets: this._menuOverlay,
+            fillAlpha: 0.75,
+            duration: 300,
+            ease: 'Cubic.easeOut'
+        });
+
+        // Main Menu Container starting offscreen top (-500) and sliding in to CY
+        this.setPosition(this.CX, -500);
+        this.scene.tweens.add({
+            targets: this,
+            y: this.CY,
+            duration: 300,
+            ease: 'Cubic.easeOut'
+        });
 
         // Panel Box (440x590) using Card X10 asset
         let panel;
@@ -50,6 +64,10 @@ export default class BattleMenu extends Phaser.GameObjects.Container {
         } else {
             panel = this.scene.add.rectangle(0, 0, 440, 590, 0x0a0f1d).setStrokeStyle(3, 0x38bdf8);
         }
+        panel.setInteractive();
+        panel.on('pointerdown', (pointer, x, y, event) => {
+            event.stopPropagation();
+        });
         this.add(panel);
 
         // Header Title (Sky Blue font, lowered slightly)
@@ -214,7 +232,27 @@ export default class BattleMenu extends Phaser.GameObjects.Container {
     }
 
     closeMenu() {
-        this.destroy(); // Destroy itself and overlay
+        if (this._isClosing) return;
+        this._isClosing = true;
+
+        if (this._menuOverlay) {
+            this.scene.tweens.add({
+                targets: this._menuOverlay,
+                fillAlpha: 0,
+                duration: 250,
+                ease: 'Cubic.easeIn'
+            });
+        }
+
+        this.scene.tweens.add({
+            targets: this,
+            y: -500,
+            duration: 250,
+            ease: 'Cubic.easeIn',
+            onComplete: () => {
+                this.destroy();
+            }
+        });
     }
 
     switchMenuTab(tab) {

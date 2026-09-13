@@ -20,6 +20,17 @@ export default class VictoryScene extends Phaser.Scene {
         this.bsId = data.bsId || null;
     }
 
+    preload() {
+        if (!this.textures.exists('card_x3')) this.load.image('card_x3', 'assets/ui/card/Card X3.png');
+        if (!this.textures.exists('btn_a_normal')) this.load.image('btn_a_normal', 'assets/ui/button/A/Normal.png');
+        if (!this.textures.exists('btn_a_hover')) this.load.image('btn_a_hover', 'assets/ui/button/A/Hover.png');
+        if (!this.textures.exists('btn_a_active')) this.load.image('btn_a_active', 'assets/ui/button/A/Active.png');
+        if (!this.textures.exists('element_fire')) this.load.image('element_fire', 'assets/icons/elements/fire.png');
+        if (!this.textures.exists('element_wind')) this.load.image('element_wind', 'assets/icons/elements/wind.png');
+        if (!this.textures.exists('element_earth')) this.load.image('element_earth', 'assets/icons/elements/rock.png');
+        if (!this.textures.exists('char_sq_8')) this.load.image('char_sq_8', 'assets/portraits/char/dummy-square-f.png');
+    }
+
     create() {
         if (!checkSession(this)) return;
 
@@ -407,80 +418,164 @@ export default class VictoryScene extends Phaser.Scene {
         const overlay = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.8).setInteractive();
         modal.add(overlay);
 
-        // Modal BG
-        const bg = this.add.rectangle(CX, H / 2, 300, 400, THEME.BG, 1);
-        bg.setStrokeStyle(2, 0xD4A017); // Gold border
+        // Panel size based on type
+        const isChar = item.type === 'character';
+        const panelW = 340;
+        const panelH = isChar ? 430 : 250;
+
+        // Modal Container Background using Card X3.png
+        let bg;
+        if (this.textures.exists('card_x3')) {
+            bg = this.add.image(CX, H / 2, 'card_x3').setDisplaySize(panelW, panelH);
+            if (isChar) {
+                bg.setTint(0x38bdf8); // Sky Blue tint for Card X3
+            } else {
+                bg.setTint(0x3b82f6); // Blue tint for skill modal Card X3
+            }
+        } else {
+            bg = this.add.rectangle(CX, H / 2, panelW, panelH, THEME.BG, 1);
+            bg.setStrokeStyle(2, 0xD4A017);
+        }
         modal.add(bg);
 
-        if (item.type === 'character') {
+        if (isChar) {
             const char = item.data;
+            const mcId = char.reward_item_id || char.mc_id || 8;
+
+            // Rarity colors (matching inventoryScene model)
+            let rarityColorInt = 0x38bdf8;
+            let rarityColorHex = '#38bdf8';
+            const rarityUpper = (char.rarity || 'SR').toUpperCase();
+            if (rarityUpper === 'SSR') { rarityColorInt = 0xffd700; rarityColorHex = '#ffd700'; }
+            else if (rarityUpper === 'SR') { rarityColorInt = 0xa855f7; rarityColorHex = '#a855f7'; }
+            else if (rarityUpper === 'R') { rarityColorInt = 0xef4444; rarityColorHex = '#ef4444'; }
+
             // Title
             modal.add(this.add.text(CX, H / 2 - 160, "NEW CHARACTER UNLOCKED!", {
-                fontSize: "16px", color: "#D4A017", fontStyle: "bold", letterSpacing: 1
+                fontSize: "15px", color: "#ffffff", fontStyle: "bold", fontFamily: "Outfit", letterSpacing: 1
             }).setOrigin(0.5));
 
-            // Portrait placeholder
-            const portBg = this.add.rectangle(CX, H / 2 - 20, 160, 200, 0x1E293B);
-            portBg.setStrokeStyle(1, THEME.BORDER);
+            // Square 1:1 Portrait Container (150x150)
+            const pSize = 150;
+            const pX = CX;
+            const pY = H / 2 - 30;
+
+            const portBg = this.add.rectangle(pX, pY, pSize, pSize, 0x0f172a, 1.0);
             modal.add(portBg);
 
-            modal.add(this.add.text(CX, H / 2 - 20, "👤", { fontSize: "64px" }).setOrigin(0.5));
+            // Portrait Image (Square 1:1)
+            const sqKey = `char_sq_${mcId}`;
+            const normKey = `portrait_${mcId}`;
+            let loadedTexKey = null;
+            if (this.textures.exists(sqKey)) loadedTexKey = sqKey;
+            else if (this.textures.exists(normKey)) loadedTexKey = normKey;
 
-            // Rarity & Element
-            modal.add(this.add.text(CX, H / 2 + 100, `${char.rarity || 'SSR'} | ${char.element || 'Any'}`, {
-                fontSize: "14px", color: THEME.TEXT_MUTED
-            }).setOrigin(0.5));
+            if (loadedTexKey) {
+                const portImg = this.add.image(pX, pY, loadedTexKey).setDisplaySize(pSize, pSize);
+                const maskShape = this.make.graphics();
+                maskShape.fillStyle(0xffffff);
+                maskShape.fillRoundedRect(pX - pSize / 2, pY - pSize / 2, pSize, pSize, 6);
+                portImg.setMask(maskShape.createGeometryMask());
+                modal.add(portImg);
+            } else {
+                modal.add(this.add.text(pX, pY, "👤", { fontSize: "56px" }).setOrigin(0.5));
+            }
+
+            // Outline / Border with Rarity Color matching inventoryScene model
+            const border = this.add.graphics();
+            border.lineStyle(2.5, rarityColorInt);
+            border.strokeRoundedRect(pX - pSize / 2, pY - pSize / 2, pSize, pSize, 6);
+            modal.add(border);
+
+            // Element Icon on Top Right Corner
+            const element = char.element || 'Fire';
+            const elKey = `element_${element.toLowerCase()}`;
+            const elX = pX + pSize / 2 - 12;
+            const elY = pY - pSize / 2 + 12;
+
+            if (this.textures.exists(elKey)) {
+                const elImg = this.add.image(elX, elY, elKey).setDisplaySize(18, 18);
+                const shape = this.make.graphics();
+                shape.fillCircle(elX, elY, 9);
+                elImg.setMask(shape.createGeometryMask());
+                const strokeCircle = this.add.circle(elX, elY, 9).setStrokeStyle(1, 0x0f172a);
+                modal.addMultiple([elImg, strokeCircle]);
+            } else {
+                const elCircle = this.add.circle(elX, elY, 9, rarityColorInt).setStrokeStyle(1, 0x0f172a);
+                const elTxt = this.add.text(elX, elY, element.charAt(0).toUpperCase(), { fontSize: '10px', color: '#ffffff', fontStyle: 'bold', fontFamily: 'Outfit' }).setOrigin(0.5);
+                modal.addMultiple([elCircle, elTxt]);
+            }
+
+            // Rarity Label on Bottom Left Corner
+            const rX = pX - pSize / 2 + 8;
+            const rY = pY + pSize / 2 - 4;
+            const rTxt = this.add.text(rX, rY, rarityUpper, {
+                fontSize: '12px', color: rarityColorHex, fontStyle: 'bold', stroke: '#000000', strokeThickness: 3, fontFamily: 'Outfit'
+            }).setOrigin(0, 1);
+            modal.add(rTxt);
 
             // Character Name
-            modal.add(this.add.text(CX, H / 2 + 130, char.name || 'Unknown', {
-                fontSize: "20px", color: THEME.TEXT_PRIMARY, fontStyle: "bold"
+            modal.add(this.add.text(CX, H / 2 + 75, char.name || 'Unknown', {
+                fontSize: "20px", color: "#ffffff", fontStyle: "bold", fontFamily: "Outfit"
             }).setOrigin(0.5));
+
         } else if (item.type === 'skill') {
             const skillData = item.data;
 
-            // Clean Flat Vector aesthetics
-            bg.setSize(300, 220); // Smaller modal for skill
-            bg.setStrokeStyle(2, 0x3b82f6); // Blue border for skill unlock
-
-            modal.add(this.add.text(CX, H / 2 - 60, "SKILL UNLOCKED!", {
-                fontSize: "18px", color: "#3b82f6", fontStyle: "bold", letterSpacing: 1
+            modal.add(this.add.text(CX, H / 2 - 70, "SKILL UNLOCKED!", {
+                fontSize: "18px", color: "#ffffff", fontStyle: "bold", fontFamily: "Outfit", letterSpacing: 1
             }).setOrigin(0.5));
 
-            modal.add(this.add.text(CX, H / 2 - 10, skillData.charName, {
-                fontSize: "14px", color: THEME.TEXT_MUTED
+            modal.add(this.add.text(CX, H / 2 - 25, skillData.charName, {
+                fontSize: "14px", color: THEME.TEXT_MUTED, fontFamily: "Outfit"
             }).setOrigin(0.5));
 
-            modal.add(this.add.text(CX, H / 2 + 20, skillData.skillName, {
-                fontSize: "22px", color: THEME.TEXT_PRIMARY, fontStyle: "bold"
+            modal.add(this.add.text(CX, H / 2 + 10, skillData.skillName, {
+                fontSize: "20px", color: "#ffffff", fontStyle: "bold", fontFamily: "Outfit"
             }).setOrigin(0.5));
-
-            // Adjust button position
         }
 
-        // OK Button
-        const btnY = item.type === 'character' ? (H / 2 + 175) : (H / 2 + 75);
-        const btnBg = this.add.rectangle(CX, btnY, 120, 36, THEME.PANEL).setInteractive({ useHandCursor: true });
-        btnBg.setStrokeStyle(1, THEME.BORDER);
+        // Button A Implementation for Modal
+        const btnY = isChar ? (H / 2 + 145) : (H / 2 + 65);
+        const btnW = 160;
+        const btnH = 42;
+
+        let btnBg;
+        if (this.textures.exists('btn_a_normal')) {
+            btnBg = this.add.image(CX, btnY, 'btn_a_normal').setDisplaySize(btnW, btnH).setInteractive({ useHandCursor: true });
+        } else {
+            btnBg = this.add.rectangle(CX, btnY, btnW, btnH, THEME.PANEL).setInteractive({ useHandCursor: true });
+            btnBg.setStrokeStyle(1.5, 0x38bdf8);
+        }
         modal.add(btnBg);
 
-        const btnTxtColor = item.type === 'character' ? "#D4A017" : "#3b82f6";
         const btnTxt = this.add.text(CX, btnY, "AWESOME!", {
-            fontSize: "14px", color: btnTxtColor, fontStyle: "bold"
+            fontSize: "14px", color: "#ffffff", fontStyle: "bold", fontFamily: "Outfit", letterSpacing: 1
         }).setOrigin(0.5);
         modal.add(btnTxt);
 
-        // Pop animation
-        modal.setScale(0.8);
-        modal.setAlpha(0);
-        this.tweens.add({
-            targets: modal,
-            scale: 1,
-            alpha: 1,
-            duration: 300,
-            ease: 'Back.easeOut'
+        // Button Interactivity (Hover, Active, Click)
+        btnBg.on('pointerover', () => {
+            if (this.textures.exists('btn_a_hover')) btnBg.setTexture('btn_a_hover');
+            btnBg.setDisplaySize(btnW * 1.05, btnH * 1.05);
+            btnTxt.setScale(1.05);
+        });
+
+        btnBg.on('pointerout', () => {
+            if (this.textures.exists('btn_a_normal')) btnBg.setTexture('btn_a_normal');
+            btnBg.setDisplaySize(btnW, btnH);
+            btnTxt.setScale(1.0);
         });
 
         btnBg.on('pointerdown', () => {
+            if (this.textures.exists('btn_a_active')) btnBg.setTexture('btn_a_active');
+            btnBg.setDisplaySize(btnW * 0.95, btnH * 0.95);
+            btnTxt.setScale(0.95);
+        });
+
+        btnBg.on('pointerup', () => {
+            btnBg.setDisplaySize(btnW, btnH);
+            btnTxt.setScale(1.0);
             this.tweens.add({
                 targets: modal,
                 scale: 0.8,
@@ -492,6 +587,17 @@ export default class VictoryScene extends Phaser.Scene {
                     this.showNextUnlockModal(); // Show next if queue has more
                 }
             });
+        });
+
+        // Pop in animation for modal
+        modal.setScale(0.8);
+        modal.setAlpha(0);
+        this.tweens.add({
+            targets: modal,
+            scale: 1,
+            alpha: 1,
+            duration: 300,
+            ease: 'Back.easeOut'
         });
     }
 

@@ -64,7 +64,7 @@ exports.getPartyPresets = async (req, res) => {
         // Inisialisasi Pemain Baru: Generate 1 Preset di Slot 1 jika kosong
         if (presets.length === 0) {
             const [mcRows] = await conn.query("SELECT inv_id FROM player_inventories WHERE player_id = ? AND master_item_id = 1 AND item_type = 'Character' LIMIT 1", [playerId]);
-            const [weapRows] = await conn.query("SELECT inv_id FROM player_inventories WHERE player_id = ? AND item_type = 'Weapon' ORDER BY (master_item_id = 7) DESC, inv_id ASC LIMIT 1", [playerId]);
+            const [weapRows] = await conn.query("SELECT inv_id FROM player_inventories WHERE player_id = ? AND item_type = 'Weapon' ORDER BY (master_item_id = 22) DESC, (master_item_id = 7) DESC, inv_id ASC LIMIT 1", [playerId]);
 
             if (mcRows.length > 0 && weapRows.length > 0) {
                 const mcInvId = mcRows[0].inv_id;

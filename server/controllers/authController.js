@@ -51,12 +51,11 @@ exports.register = async (req, res) => {
         const newPlayerId = playerResult.insertId;
 
         // --------------------------------------------------
-        // Langkah B: Inventory Awal (MC + Agris + Ember Blade) — Parameterized Query
+        // Langkah B: Inventory Awal (MC + Ember Blade mw_id: 22) — Parameterized Query
         // --------------------------------------------------
         const inventoryItems = [
             [newPlayerId, 1, 'Character', 1, 0, 0], // Main Character (mc_id: 1)
-            [newPlayerId, 8, 'Character', 1, 0, 0], // Agris (mc_id: 8)
-            [newPlayerId, 22, 'Weapon', 1, 0, 0], // Ember Blade (mw_id: 22)
+            [newPlayerId, 22, 'Weapon', 1, 0, 0],   // Ember Blade (mw_id: 22)
         ];
 
         const invIds = [];
@@ -70,16 +69,16 @@ exports.register = async (req, res) => {
             invIds.push(invResult.insertId);
         }
 
-        const [mcInvId, agrisInvId, emberBladeInvId] = invIds;
+        const [mcInvId, emberBladeInvId] = invIds;
 
         // --------------------------------------------------
-        // Langkah C: Party Preset Slot 1 — Parameterized Query
+        // Langkah C: Party Preset Slot 1 — Parameterized Query (Party Kosong, Main Weapon: Ember Blade)
         // --------------------------------------------------
         const [presetResult] = await conn.query(
             `INSERT INTO player_party_presets
                 (player_id, preset_slot, main_char_inv_id, char_slot_1_inv_id, weap_grid_1_inv_id)
-             VALUES (?, 1, ?, ?, ?)`,
-            [newPlayerId, mcInvId, agrisInvId, emberBladeInvId]
+             VALUES (?, 1, ?, NULL, ?)`,
+            [newPlayerId, mcInvId, emberBladeInvId]
         );
         const newPppId = presetResult.insertId;
 

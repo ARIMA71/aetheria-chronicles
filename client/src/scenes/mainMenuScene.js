@@ -28,11 +28,16 @@ export default class MainMenuScene extends Phaser.Scene {
         saveCurrentScene(this.scene.key);
         playGlobalBGM(this, 'main_menu');
 
-        // Clean up timer on scene shutdown to prevent memory leaks
+        // Clean up timer and tweens on scene shutdown to prevent memory leaks
         this.events.on('shutdown', () => {
             if (this.staminaTimer) {
                 this.staminaTimer.destroy();
                 this.staminaTimer = null;
+            }
+            if (this._questPulseTween) {
+                this._questPulseTween.stop();
+                this._questPulseTween.destroy();
+                this._questPulseTween = null;
             }
         });
 
@@ -274,18 +279,18 @@ export default class MainMenuScene extends Phaser.Scene {
         const skyBlue = 0x38bdf8;
         const skyBlueHover = 0x60a5fa;
 
-        // Party (Kiri - Y=555)
-        this.partyFab = this._createButtonC(155, 555, 88, 'PARTY', skyBlue, skyBlueHover, () => {
+        // Party (Kiri - Y=555, size=94)
+        this.partyFab = this._createButtonC(155, 555, 94, 'PARTY', skyBlue, skyBlueHover, () => {
             this.scene.start('LoadingScene', { targetScene: 'PartyScene' });
         });
 
-        // Quest (Tengah - Y=520)
-        this.questFab = this._createButtonC(CX, 520, 113, 'QUEST', skyBlue, skyBlueHover, () => {
+        // Quest (Tengah - Y=520, size=119)
+        this.questFab = this._createButtonC(CX, 520, 119, 'QUEST', skyBlue, skyBlueHover, () => {
             this.scene.start('LoadingScene', { targetScene: 'QuestScene' });
         });
 
-        // Gacha (Kanan - Y=555)
-        this.gachaFab = this._createButtonC(325, 555, 88, 'GACHA', skyBlue, skyBlueHover, () => {
+        // Gacha (Kanan - Y=555, size=94)
+        this.gachaFab = this._createButtonC(325, 555, 94, 'GACHA', skyBlue, skyBlueHover, () => {
             this.scene.start('LoadingScene', { targetScene: 'GachaScene' });
         });
     }
@@ -308,7 +313,7 @@ export default class MainMenuScene extends Phaser.Scene {
         }
 
         const txt = this.add.text(x, y, label, {
-            fontSize: baseSize > 95 ? '13px' : '10px',
+            fontSize: baseSize > 100 ? '14px' : '11px',
             fontStyle: 'bold',
             fontFamily: 'Outfit',
             color: '#ffffff',
@@ -316,6 +321,7 @@ export default class MainMenuScene extends Phaser.Scene {
         }).setOrigin(0.5);
 
         btn.on('pointerover', () => {
+            btn._isHovered = true;
             if (this.textures.exists('btn_icon_hover')) btn.setTexture('btn_icon_hover');
             if (btn.setTint) btn.setTint(hoverTint);
             btn.setDisplaySize(baseSize * 1.06, baseSize * 1.06);
@@ -324,8 +330,9 @@ export default class MainMenuScene extends Phaser.Scene {
         });
 
         btn.on('pointerout', () => {
+            btn._isHovered = false;
             if (this.textures.exists('btn_icon_normal')) btn.setTexture('btn_icon_normal');
-            if (btn.setTint) btn.setTint(defaultTint);
+            if (btn.setTint && !btn._isPulsing) btn.setTint(defaultTint);
             btn.setDisplaySize(baseSize, baseSize);
             circleBg.setScale(1.0);
             txt.setScale(1.0);
@@ -559,20 +566,69 @@ export default class MainMenuScene extends Phaser.Scene {
         try {
             const res = await BattleApi.checkActiveBattle(this.playerData.player_id);
             if (res.status === 'success' && res.data && res.data.has_active) {
-                // Tampilkan indikator merah berkedip di tombol Quest
-                if (this.questFab && this.questFab.circle) {
-                    const cx = this.questFab.circle.x + 25;
-                    const cy = this.questFab.circle.y - 25;
-                    const redDot = this.add.circle(cx, cy, 8, 0xef4444).setDepth(50);
-                    redDot.setStrokeStyle(1, 0xffffff);
+                // Tampilkan indikator berkedip di tombol Quest HANYA jika ada battle aktif yang belum selesai
+                if (this.questFab && this.questFab.btn) {
+                    this.questFab.btn._isPulsing = true;
 
-                    this.tweens.add({
-                        targets: redDot,
-                        alpha: 0.2,
-                        yoyo: true,
-                        repeat: -1,
-                        duration: 800
-                    });
+                    if (!this._questPulseTween) {
+                        const redColor = Phaser.Display.Color.ValueToColor(0xef4444);
+                        const blueColor = Phaser.Display.Color.ValueToColor(0x38bdf8);
+
+                        this._questPulseTween = this.tweens.addCounter({
+                            from: 0,
+                            to: 100,
+                            duration: 1500,
+                            yoyo: true,
+                            repeat: -1,
+                            ease: 'Sine.easeInOut',
+                            onUpdate: (tween) => {
+                                const value = tween.getValue();
+                                const col = Phaser.Display.Color.Interpolate.ColorWithColor(blueColor, redColor, 100, value);
+                                const tint = Phaser.Display.Color.GetColor(col.r, col.g, col.b);
+                                if (this.questFab && this.questFab.btn && !this.questFab.btn._isHovered) {
+                                    if (this.questFab.btn.setTint) {
+                                        this.questFab.btn.setTint(tint);
+                                    }
+                                }
+                            }
+                        });
+                    }
+                }
+
+                // Indikator red dot berkedip di pojok kanan atas tombol Quest
+                if (this.questFab && (this.questFab.btn || this.questFab.circleBg)) {
+                    const baseObj = this.questFab.btn || this.questFab.circleBg;
+                    const cx = baseObj.x + 30;
+                    const cy = baseObj.y - 30;
+                    if (!this._redDot) {
+                        this._redDot = this.add.circle(cx, cy, 8, 0xef4444).setDepth(50);
+                        this._redDot.setStrokeStyle(1, 0xffffff);
+
+                        this.tweens.add({
+                            targets: this._redDot,
+                            alpha: 0.2,
+                            yoyo: true,
+                            repeat: -1,
+                            duration: 800
+                        });
+                    }
+                }
+            } else {
+                // Jika tidak ada battle aktif, kembalikan tombol Quest ke Sky Blue tanpa efek berkedip
+                if (this.questFab && this.questFab.btn) {
+                    this.questFab.btn._isPulsing = false;
+                    if (this.questFab.btn.setTint) {
+                        this.questFab.btn.setTint(0x38bdf8);
+                    }
+                }
+                if (this._questPulseTween) {
+                    this._questPulseTween.stop();
+                    this._questPulseTween.destroy();
+                    this._questPulseTween = null;
+                }
+                if (this._redDot) {
+                    this._redDot.destroy();
+                    this._redDot = null;
                 }
             }
         } catch (e) {

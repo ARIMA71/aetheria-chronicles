@@ -1731,7 +1731,7 @@ CREATE TABLE `quest_rewards` (
 insert  into `quest_rewards`(`qr_id`,`mq_id`,`reward_type`,`reward_item_id`,`quantity`,`drop_chance`,`is_first_clear`) values 
 (1,1,'Gold',0,1200,1,0),
 (2,1,'Material',6,4,1,0),
-(3,1,'Weapon',13,1,1,1),
+(3,1,'Weapon',7,1,1,1),
 (4,1,'Diamond',0,500,1,1),
 (5,2,'Gold',0,3000,1,0),
 (6,2,'Material',1,4,0.4,0),
