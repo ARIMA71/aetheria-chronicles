@@ -179,6 +179,59 @@ export default class MainMenuScene extends Phaser.Scene {
             const stage = this.playerData.current_quest_stage || 1;
             this.questText.setText(`📍 Quest: Stage ${stage}`);
         }
+        this.updateRankExpUI();
+    }
+
+    _getRankCumulativeExp(lvl) {
+        if (lvl <= 1) return 0;
+        let total = 0;
+        for (let i = 2; i <= lvl; i++) {
+            total += Math.floor(100 * Math.pow(i, 1.8));
+        }
+        return total;
+    }
+
+    updateRankExpUI() {
+        if (!this.playerData || (!this.rankFill && !this.rankExpText)) return;
+
+        const currentLevel = Math.max(1, this.playerData.player_level || 1);
+        const totalExp = this.playerData.player_exp || 0;
+        const maxLevel = 100;
+
+        const baseExp = this._getRankCumulativeExp(currentLevel);
+        const nextExp = this._getRankCumulativeExp(currentLevel + 1);
+
+        let currentLevelExp = totalExp - baseExp;
+        let neededExp = nextExp - baseExp;
+
+        const rankBarW = this.rankBarW || ((this.cameras.main.width - 40) - 55);
+        const maxFillW = Math.max(1, rankBarW - 4);
+
+        if (currentLevel >= maxLevel) {
+            if (this.rankExpText) this.rankExpText.setText('EXP MAX');
+            if (this.rankFill) {
+                if (this.rankFill.setDisplaySize) this.rankFill.setDisplaySize(maxFillW, 10);
+                else if (this.rankFill.setSize) this.rankFill.setSize(maxFillW, 8);
+            }
+        } else {
+            if (currentLevelExp < 0) currentLevelExp = 0;
+            if (neededExp <= 0) neededExp = 1;
+
+            const ratio = Math.min(1, Math.max(0, currentLevelExp / neededExp));
+            const targetW = Math.max(1, maxFillW * ratio);
+
+            if (this.rankExpText) {
+                this.rankExpText.setText(`EXP ${currentLevelExp} / ${neededExp}`);
+            }
+
+            if (this.rankFill) {
+                if (this.rankFill.setDisplaySize) {
+                    this.rankFill.setDisplaySize(targetW, 10);
+                } else if (this.rankFill.setSize) {
+                    this.rankFill.setSize(targetW, 8);
+                }
+            }
+        }
     }
 
     updateStaminaText() {
@@ -260,6 +313,276 @@ export default class MainMenuScene extends Phaser.Scene {
         } else {
             this.staminaFill = this.add.rectangle(barX, barY, barW, 6, THEME.HEALTH).setOrigin(0, 0.5);
         }
+
+        // Interactive Hit Zone for Stamina Container Box
+        const staminaHitZone = this.add.rectangle(boxX + boxW / 2, boxY + boxH / 2, boxW, boxH, 0x000000, 0)
+            .setInteractive({ useHandCursor: true });
+        staminaHitZone.on('pointerdown', () => {
+            this.showStaminaRefillModal();
+        });
+    }
+
+    async showStaminaRefillModal() {
+        if (this.staminaModalContainer) this.staminaModalContainer.destroy();
+        this.staminaModalContainer = this.add.container(0, 0).setDepth(400);
+
+        const W = this.cameras.main.width;
+        const H = this.cameras.main.height;
+        const CX = W / 2;
+        const CY = H / 2;
+
+        // 1. Dark Overlay Backdrop
+        const ov = this.add.rectangle(CX, CY, W, H, 0x000000, 0.85).setInteractive();
+        ov.on('pointerdown', (p, x, y, e) => e.stopPropagation());
+
+        // 2. Main Box Panel (card_x101 or fallback)
+        const panelW = 380;
+        const panelH = 430;
+        let pnl;
+        if (this.textures.exists('card_x101')) {
+            pnl = this.add.image(CX, CY, 'card_x101').setDisplaySize(panelW, panelH);
+            pnl.setTint(0x38bdf8);
+        } else {
+            pnl = this.add.rectangle(CX, CY, panelW, panelH, 0x0d1b2a).setStrokeStyle(2, 0x38bdf8);
+        }
+        pnl.setInteractive();
+        pnl.on('pointerdown', (p, x, y, e) => e.stopPropagation());
+
+        // Title
+        const titleTxt = this.add.text(CX, CY - 165, '⚡ ISI ULANG STAMINA', {
+            fontSize: '18px',
+            fontStyle: 'bold',
+            color: '#f59e0b',
+            fontFamily: 'Outfit, Inter, sans-serif',
+            stroke: '#000000',
+            strokeThickness: 3,
+            letterSpacing: 2
+        }).setOrigin(0.5);
+
+        const loadingTxt = this.add.text(CX, CY - 20, 'Memuat data inventory...', {
+            fontSize: '13px',
+            color: THEME.TEXT_MUTED,
+            fontFamily: 'Outfit, Inter, sans-serif'
+        }).setOrigin(0.5);
+
+        this.staminaModalContainer.add([ov, pnl, titleTxt, loadingTxt]);
+
+        let potionCount = 0;
+        try {
+            const res = await fetch(`${API_BASE}/api/party/${this.playerId}/inventory/all`);
+            const json = await res.json();
+            if (json.status === 'success') {
+                const materials = json.data.materials || [];
+                const pot = materials.find(m => m.mat_id === 7 || m.mat_id === 8);
+                potionCount = pot ? pot.quantity : 0;
+            }
+        } catch (e) {
+            console.error('Failed to fetch inventory for stamina modal:', e);
+        }
+
+        loadingTxt.destroy();
+
+        const maxStam = this.playerData ? (this.playerData.max_stamina || 100) : 100;
+        const currentStam = this.playerData ? (this.playerData.stamina || 0) : 0;
+
+        // Info Text: Natural Refill
+        const infoRefill = this.add.text(CX, CY - 125, `⚡ Refill Alami: 1 Stamina / 5 Menit (Max ${maxStam})`, {
+            fontSize: '12px',
+            color: '#94a3b8',
+            fontFamily: 'Outfit, Inter, sans-serif'
+        }).setOrigin(0.5);
+
+        // Info Text: Potion Effect
+        const infoPotion = this.add.text(CX, CY - 100, `🧪 1x Full Potion memulihkan +120 Stamina (Max Cap 999)`, {
+            fontSize: '12px',
+            color: '#38bdf8',
+            fontStyle: 'bold',
+            fontFamily: 'Outfit, Inter, sans-serif'
+        }).setOrigin(0.5);
+
+        // Stock Info
+        const stockTxt = this.add.text(CX, CY - 75, `Stok Full Potion: ${potionCount}x tersedia`, {
+            fontSize: '14px',
+            fontStyle: 'bold',
+            color: potionCount > 0 ? '#10b981' : '#ef4444',
+            fontFamily: 'Outfit, Inter, sans-serif'
+        }).setOrigin(0.5);
+
+        // Separator line
+        const sep = this.add.rectangle(CX, CY - 55, panelW - 60, 1, 0x334155);
+
+        let selectedQty = potionCount > 0 ? 1 : 0;
+
+        // Quantity Selector UI
+        const qtyLabel = this.add.text(CX, CY - 38, 'Jumlah yang ingin digunakan:', {
+            fontSize: '12px',
+            color: '#cbd5e1',
+            fontFamily: 'Outfit, Inter, sans-serif'
+        }).setOrigin(0.5);
+
+        const qtyY = CY - 5;
+        const qtyValueTxt = this.add.text(CX, qtyY, `${selectedQty}`, {
+            fontSize: '24px',
+            fontStyle: 'bold',
+            color: '#ffffff',
+            fontFamily: 'Outfit, Inter, sans-serif'
+        }).setOrigin(0.5);
+
+        const minusBtn = this.add.text(CX - 50, qtyY, '-', {
+            fontSize: '22px', fontStyle: 'bold', color: '#ffffff', backgroundColor: '#334155', padding: { x: 12, y: 3 }
+        }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+        const plusBtn = this.add.text(CX + 50, qtyY, '+', {
+            fontSize: '22px', fontStyle: 'bold', color: '#ffffff', backgroundColor: '#334155', padding: { x: 12, y: 3 }
+        }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+        const minus10Btn = this.add.text(CX - 100, qtyY, '-10', {
+            fontSize: '14px', fontStyle: 'bold', color: '#94a3b8', backgroundColor: '#1e293b', padding: { x: 8, y: 5 }
+        }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+        const plus10Btn = this.add.text(CX + 100, qtyY, '+10', {
+            fontSize: '14px', fontStyle: 'bold', color: '#94a3b8', backgroundColor: '#1e293b', padding: { x: 8, y: 5 }
+        }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+        // Result calculation text
+        const resultTxt = this.add.text(CX, CY + 30, `Pemulihan: +${selectedQty * 120} Stamina ➔ Total: ${Math.min(999, currentStam + selectedQty * 120)} Stamina`, {
+            fontSize: '12px',
+            fontStyle: 'bold',
+            color: '#facc15',
+            fontFamily: 'Outfit, Inter, sans-serif'
+        }).setOrigin(0.5);
+
+        // Buttons (2 Vertical Buttons: USE above CANCEL)
+        const btnW = 300;
+        const btnH = 44;
+
+        // 1. USE BUTTON (Top)
+        const btnUseY = CY + 80;
+        let useBtnImg;
+        if (this.textures.exists('btn_a_normal')) {
+            useBtnImg = this.add.image(CX, btnUseY, 'btn_a_normal').setDisplaySize(btnW, btnH);
+        } else {
+            useBtnImg = this.add.rectangle(CX, btnUseY, btnW, btnH, 0x1a3a2a).setStrokeStyle(2, 0x2ecc71);
+        }
+        useBtnImg.setTint(potionCount > 0 ? 0x2ecc71 : 0x555555);
+
+        const useBtnTxt = this.add.text(CX, btnUseY, potionCount > 0 ? `🧪 GUNAKAN (${selectedQty})` : 'STOK HABIS', {
+            fontSize: '13px',
+            fontStyle: 'bold',
+            color: '#ffffff',
+            fontFamily: 'Outfit, Inter, sans-serif',
+            stroke: '#000000',
+            strokeThickness: 3
+        }).setOrigin(0.5);
+
+        const updateQty = (delta) => {
+            if (potionCount <= 0) {
+                selectedQty = 0;
+            } else {
+                let n = selectedQty + delta;
+                if (n < 1) n = 1;
+                if (n > potionCount) n = potionCount;
+                selectedQty = n;
+            }
+            qtyValueTxt.setText(`${selectedQty}`);
+            const added = selectedQty * 120;
+            const finalStam = Math.min(999, currentStam + added);
+            resultTxt.setText(`Pemulihan: +${added} Stamina ➔ Total: ${finalStam} Stamina`);
+
+            if (selectedQty > 0) {
+                useBtnTxt.setText(`🧪 GUNAKAN (${selectedQty})`);
+                useBtnImg.setTint(0x2ecc71);
+            } else {
+                useBtnTxt.setText('STOK HABIS');
+                useBtnImg.setTint(0x555555);
+            }
+        };
+
+        minusBtn.on('pointerdown', () => updateQty(-1));
+        plusBtn.on('pointerdown', () => updateQty(1));
+        minus10Btn.on('pointerdown', () => updateQty(-10));
+        plus10Btn.on('pointerdown', () => updateQty(10));
+
+        const useHitZone = this.add.rectangle(CX, btnUseY, btnW, btnH, 0x000000, 0).setInteractive({ useHandCursor: true });
+        useHitZone.on('pointerover', () => {
+            if (selectedQty > 0) {
+                if (this.textures.exists('btn_a_hover')) useBtnImg.setTexture('btn_a_hover');
+                useBtnImg.setTint(0x52be80);
+            }
+        });
+        useHitZone.on('pointerout', () => {
+            if (selectedQty > 0) {
+                if (this.textures.exists('btn_a_normal')) useBtnImg.setTexture('btn_a_normal');
+                useBtnImg.setTint(0x2ecc71);
+            }
+        });
+        useHitZone.on('pointerdown', async () => {
+            if (selectedQty <= 0) return;
+            useBtnTxt.setText('MEMPROSES...').setColor('#f59e0b');
+            try {
+                const res = await fetch(`${API_BASE}/api/player/use-stamina-potion`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ playerId: this.playerId, quantity: selectedQty })
+                });
+                const json = await res.json();
+                if (json.status === 'success') {
+                    if (this.playerData) {
+                        this.playerData.stamina = json.data.stamina;
+                    }
+                    const pd = JSON.parse(localStorage.getItem('aetheria_player') || '{}');
+                    pd.stamina = json.data.stamina;
+                    localStorage.setItem('aetheria_player', JSON.stringify(pd));
+
+                    this.updateUIElements();
+                    if (this.staminaModalContainer) this.staminaModalContainer.destroy();
+                } else {
+                    useBtnTxt.setText(json.message || 'GAGAL').setColor('#ef4444');
+                }
+            } catch (e) {
+                console.error('Use stamina potion error:', e);
+                useBtnTxt.setText('ERROR JARINGAN').setColor('#ef4444');
+            }
+        });
+
+        // 2. CANCEL BUTTON (Bottom)
+        const btnCancelY = CY + 140;
+        let cancelBtnImg;
+        if (this.textures.exists('btn_a_normal')) {
+            cancelBtnImg = this.add.image(CX, btnCancelY, 'btn_a_normal').setDisplaySize(btnW, 40);
+            cancelBtnImg.setTint(0xe74c3c);
+        } else {
+            cancelBtnImg = this.add.rectangle(CX, btnCancelY, btnW, 40, 0x2a0d0d).setStrokeStyle(1, 0xe74c3c);
+        }
+
+        const cancelTxt = this.add.text(CX, btnCancelY, 'BATAL', {
+            fontSize: '13px',
+            fontStyle: 'bold',
+            color: '#ffffff',
+            fontFamily: 'Outfit, Inter, sans-serif',
+            stroke: '#000000',
+            strokeThickness: 2
+        }).setOrigin(0.5);
+
+        const cancelHitZone = this.add.rectangle(CX, btnCancelY, btnW, 40, 0x000000, 0).setInteractive({ useHandCursor: true });
+        cancelHitZone.on('pointerover', () => {
+            if (this.textures.exists('btn_a_hover')) cancelBtnImg.setTexture('btn_a_hover');
+            cancelBtnImg.setTint(0xec7063);
+        });
+        cancelHitZone.on('pointerout', () => {
+            if (this.textures.exists('btn_a_normal')) cancelBtnImg.setTexture('btn_a_normal');
+            cancelBtnImg.setTint(0xe74c3c);
+        });
+        cancelHitZone.on('pointerdown', () => {
+            if (this.staminaModalContainer) this.staminaModalContainer.destroy();
+        });
+
+        this.staminaModalContainer.add([
+            infoRefill, infoPotion, stockTxt, sep, qtyLabel, qtyValueTxt,
+            minusBtn, plusBtn, minus10Btn, plus10Btn, resultTxt,
+            useBtnImg, useBtnTxt, useHitZone,
+            cancelBtnImg, cancelTxt, cancelHitZone
+        ]);
     }
 
     _buildCenterArea() {
@@ -421,6 +744,7 @@ export default class MainMenuScene extends Phaser.Scene {
         // Row 3: EXP Progress Bar (Using assets/ui/progressBar/ProgressBar Background & Foreground)
         const barY = panelY + 28;
         const rankBarW = panelW - 55;
+        this.rankBarW = rankBarW;
         if (this.textures.exists('progressbar_bg')) {
             this.add.image(CX, barY, 'progressbar_bg').setDisplaySize(rankBarW, 14);
         } else {
@@ -430,12 +754,12 @@ export default class MainMenuScene extends Phaser.Scene {
         const fillStartX = CX - rankBarW / 2 + 2;
         if (this.textures.exists('progressbar_fg')) {
             this.rankFill = this.add.image(fillStartX, barY, 'progressbar_fg').setOrigin(0, 0.5);
-            this.rankFill.setDisplaySize(Math.max(1, (rankBarW - 4) * 0.4), 10);
+            this.rankFill.setDisplaySize(1, 10);
         } else {
-            this.rankFill = this.add.rectangle(fillStartX, barY, (rankBarW - 4) * 0.4, 8, THEME.HEALTH).setOrigin(0, 0.5);
+            this.rankFill = this.add.rectangle(fillStartX, barY, 1, 8, THEME.HEALTH).setOrigin(0, 0.5);
         }
 
-        this.rankExpText = this.add.text(CX, barY, 'EXP 40 / 100', {
+        this.rankExpText = this.add.text(CX, barY, 'EXP 0 / 100', {
             fontSize: '9px',
             fontStyle: 'bold',
             fontFamily: 'Outfit',
@@ -443,6 +767,8 @@ export default class MainMenuScene extends Phaser.Scene {
             stroke: '#000000',
             strokeThickness: 2
         }).setOrigin(0.5);
+
+        this.updateRankExpUI();
 
         // Row 4: Main Quest Info (Left) & Highest Party Power (Right)
         const bottomRowY = panelY + 52;

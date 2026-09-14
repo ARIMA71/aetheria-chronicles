@@ -21,6 +21,7 @@ export default class WeaponDetailScene extends Phaser.Scene {
         this.fromParty = data.fromParty || false;
         this.partyState = data.partyState || null;
         this.playerId = getPlayerId();
+        this.weaponsData = null;
     }
 
     preload() {

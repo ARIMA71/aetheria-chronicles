@@ -102,11 +102,12 @@ exports.getPlayerProfile = async (req, res) => {
 
 // ============================================================
 // POST /api/player/use-stamina-potion
-// Body: { playerId }
-// Konsumsi 1x Full Potion (mat_id=8) dan isi ulang stamina ke max.
+// Body: { playerId, quantity }
+// Konsumsi Full Potion (mat_id=7/8) dan isi ulang stamina (+120 per potion, max 999).
 // ============================================================
 exports.useStaminaPotion = async (req, res) => {
     const { playerId } = req.body;
+    const qty = Math.max(1, parseInt(req.body.quantity) || 1);
 
     if (!playerId) {
         return res.status(400).json({
@@ -119,32 +120,36 @@ exports.useStaminaPotion = async (req, res) => {
     try {
         await conn.beginTransaction();
 
-        // 1. Cek stok Full Potion (mat_id = 8)
+        // 1. Cek stok Full Potion (mat_id = 7 atau 8)
         const [potionRows] = await conn.query(
-            'SELECT quantity FROM player_materials WHERE player_id = ? AND mat_id = 8',
+            'SELECT mat_id, quantity FROM player_materials WHERE player_id = ? AND mat_id IN (7, 8) ORDER BY mat_id ASC',
             [playerId]
         );
 
-        const currentQty = potionRows[0] ? potionRows[0].quantity : 0;
-        if (currentQty <= 0) {
+        const targetMat = potionRows.find(p => p.quantity > 0) || potionRows[0];
+        const currentQty = targetMat ? targetMat.quantity : 0;
+        const matId = targetMat ? targetMat.mat_id : 7;
+
+        if (currentQty < qty) {
             await conn.rollback();
             conn.release();
             return res.status(400).json({
                 status: 'error',
-                message: 'Full Potion tidak tersedia di inventory.'
+                message: `Full Potion tidak cukup di inventory (dibutuhkan ${qty}, tersedia ${currentQty}).`
             });
         }
 
-        // 2. Tambah 120 Stamina (Max 999)
+        // 2. Tambah 120 Stamina per potion (Max Cap 999)
         const HARD_CAP = 999;
         const [playerRows] = await conn.query('SELECT stamina FROM players WHERE player_id = ?', [playerId]);
         const currentStam = playerRows[0] ? playerRows[0].stamina : 0;
-        const newStam = Math.min(HARD_CAP, currentStam + 120);
+        const addedStam = 120 * qty;
+        const newStam = Math.min(HARD_CAP, currentStam + addedStam);
 
-        // 3. Kurangi 1x Full Potion
+        // 3. Kurangi Full Potion sebanyak qty
         await conn.query(
-            'UPDATE player_materials SET quantity = quantity - 1 WHERE player_id = ? AND mat_id = 8',
-            [playerId]
+            'UPDATE player_materials SET quantity = quantity - ? WHERE player_id = ? AND mat_id = ?',
+            [qty, playerId, matId]
         );
 
         // 4. Set stamina baru
@@ -158,10 +163,10 @@ exports.useStaminaPotion = async (req, res) => {
 
         return res.status(200).json({
             status: 'success',
-            message: `Stamina berhasil ditambah 120! Full Potion tersisa: ${currentQty - 1}.`,
+            message: `Stamina berhasil ditambah ${addedStam}! Full Potion tersisa: ${currentQty - qty}.`,
             data: {
                 stamina: newStam,
-                full_potion_count: currentQty - 1
+                full_potion_count: currentQty - qty
             }
         });
 

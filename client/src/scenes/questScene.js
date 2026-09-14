@@ -945,32 +945,33 @@ export default class QuestScene extends Phaser.Scene {
         if (this.staminaModalContainer) this.staminaModalContainer.destroy();
         this.staminaModalContainer = this.add.container(0, 0).setDepth(400);
 
+        const CY = H / 2;
         const items = [];
 
         // 1. Dark Overlay Backdrop
-        const ov = this.add.rectangle(CX, H / 2, W, H, 0x000000, 0.85).setInteractive();
+        const ov = this.add.rectangle(CX, CY, W, H, 0x000000, 0.85).setInteractive();
         ov.on('pointerdown', (p, x, y, e) => e.stopPropagation());
         items.push(ov);
 
         // 2. Main Panel Box using Card X101 UI asset
         const panelW = 380;
-        const panelH = 340;
+        const panelH = 430;
         let pnl;
         if (this.textures.exists('card_x101')) {
-            pnl = this.add.image(CX, H / 2, 'card_x101').setDisplaySize(panelW, panelH);
+            pnl = this.add.image(CX, CY, 'card_x101').setDisplaySize(panelW, panelH);
             pnl.setTint(0x38bdf8); // Sky Blue tint
         } else if (this.textures.exists('bg_card_x101')) {
-            pnl = this.add.image(CX, H / 2, 'bg_card_x101').setDisplaySize(panelW, panelH);
+            pnl = this.add.image(CX, CY, 'bg_card_x101').setDisplaySize(panelW, panelH);
             pnl.setTint(0x38bdf8);
         } else {
-            pnl = this.add.rectangle(CX, H / 2, panelW, panelH, 0x0d1b2a).setStrokeStyle(2, 0xf39c12);
+            pnl = this.add.rectangle(CX, CY, panelW, panelH, 0x0d1b2a).setStrokeStyle(2, 0xf39c12);
         }
         pnl.setInteractive();
         pnl.on('pointerdown', (p, x, y, e) => e.stopPropagation());
         items.push(pnl);
 
         // 3. Title Text
-        const titleTxt = this.add.text(CX, H / 2 - 118, '⚡ STAMINA HABIS', {
+        const titleTxt = this.add.text(CX, CY - 165, '⚡ STAMINA HABIS', {
             fontSize: '18px',
             fontStyle: 'bold',
             color: '#f59e0b',
@@ -981,164 +982,202 @@ export default class QuestScene extends Phaser.Scene {
         }).setOrigin(0.5);
         items.push(titleTxt);
 
-        // 4. Subtitle / Info
-        const costTxt = this.add.text(CX, H / 2 - 82, `Butuh: ${staminaData.stamina_cost} Stamina   |   Tersisa: ${staminaData.current_stamina}`, {
-            fontSize: '13px',
+        // 4. Quest requirement notice
+        const costTxt = this.add.text(CX, CY - 135, `Dibutuhkan: ${staminaData.stamina_cost} Stamina  |  Tersisa: ${staminaData.current_stamina}`, {
+            fontSize: '12px',
             fontStyle: 'bold',
-            color: '#e2e8f0',
+            color: '#ef4444',
             fontFamily: 'Outfit, Inter, sans-serif'
         }).setOrigin(0.5);
         items.push(costTxt);
 
-        const potCountTxt = this.add.text(CX, H / 2 - 48, `🧪 Full Potion tersedia: ${staminaData.full_potion_count}x`, {
-            fontSize: '14px',
-            fontStyle: 'bold',
+        // Natural refill info & potion info
+        const infoRefill = this.add.text(CX, CY - 110, `⚡ Refill Alami: 1 Stamina / 5 Menit`, {
+            fontSize: '12px',
+            color: '#94a3b8',
+            fontFamily: 'Outfit, Inter, sans-serif'
+        }).setOrigin(0.5);
+        items.push(infoRefill);
+
+        const infoPotion = this.add.text(CX, CY - 90, `🧪 1x Full Potion memulihkan +120 Stamina (Max Cap 999)`, {
+            fontSize: '12px',
             color: '#38bdf8',
+            fontStyle: 'bold',
+            fontFamily: 'Outfit, Inter, sans-serif'
+        }).setOrigin(0.5);
+        items.push(infoPotion);
+
+        const potionCount = staminaData.full_potion_count || 0;
+        const potCountTxt = this.add.text(CX, CY - 68, `Stok Full Potion: ${potionCount}x tersedia`, {
+            fontSize: '13px',
+            fontStyle: 'bold',
+            color: potionCount > 0 ? '#10b981' : '#ef4444',
             fontFamily: 'Outfit, Inter, sans-serif'
         }).setOrigin(0.5);
         items.push(potCountTxt);
 
-        const descTxt = this.add.text(CX, H / 2 - 12, 'Gunakan 1x Full Potion untuk\nmengisi ulang stamina ke 100%?', {
-            fontSize: '12px',
-            color: '#94a3b8',
-            fontFamily: 'Outfit, Inter, sans-serif',
-            align: 'center',
-            lineSpacing: 4
-        }).setOrigin(0.5);
-        items.push(descTxt);
+        const sep = this.add.rectangle(CX, CY - 50, panelW - 60, 1, 0x334155);
+        items.push(sep);
 
-        // 5. Buttons (Button A asset with Green tint for Use, Red tint for Cancel)
+        let selectedQty = potionCount > 0 ? 1 : 0;
+        const currentStam = staminaData.current_stamina || 0;
+
+        // Quantity Selector UI
+        const qtyLabel = this.add.text(CX, CY - 33, 'Jumlah yang ingin digunakan:', {
+            fontSize: '12px',
+            color: '#cbd5e1',
+            fontFamily: 'Outfit, Inter, sans-serif'
+        }).setOrigin(0.5);
+        items.push(qtyLabel);
+
+        const qtyY = CY - 2;
+        const qtyValueTxt = this.add.text(CX, qtyY, `${selectedQty}`, {
+            fontSize: '24px',
+            fontStyle: 'bold',
+            color: '#ffffff',
+            fontFamily: 'Outfit, Inter, sans-serif'
+        }).setOrigin(0.5);
+        items.push(qtyValueTxt);
+
+        const minusBtn = this.add.text(CX - 50, qtyY, '-', {
+            fontSize: '22px', fontStyle: 'bold', color: '#ffffff', backgroundColor: '#334155', padding: { x: 12, y: 3 }
+        }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+        const plusBtn = this.add.text(CX + 50, qtyY, '+', {
+            fontSize: '22px', fontStyle: 'bold', color: '#ffffff', backgroundColor: '#334155', padding: { x: 12, y: 3 }
+        }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+        const minus10Btn = this.add.text(CX - 100, qtyY, '-10', {
+            fontSize: '14px', fontStyle: 'bold', color: '#94a3b8', backgroundColor: '#1e293b', padding: { x: 8, y: 5 }
+        }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+        const plus10Btn = this.add.text(CX + 100, qtyY, '+10', {
+            fontSize: '14px', fontStyle: 'bold', color: '#94a3b8', backgroundColor: '#1e293b', padding: { x: 8, y: 5 }
+        }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+        items.push(minusBtn, plusBtn, minus10Btn, plus10Btn);
+
+        // Result calculation text
+        const resultTxt = this.add.text(CX, CY + 32, `Pemulihan: +${selectedQty * 120} Stamina ➔ Total: ${Math.min(999, currentStam + selectedQty * 120)} Stamina`, {
+            fontSize: '12px',
+            fontStyle: 'bold',
+            color: '#facc15',
+            fontFamily: 'Outfit, Inter, sans-serif'
+        }).setOrigin(0.5);
+        items.push(resultTxt);
+
+        // Buttons (2 Vertical Buttons: USE above CANCEL)
         const btnW = 300;
         const btnH = 44;
 
-        if (staminaData.full_potion_count > 0) {
-            // --- Use Potion Button (Green Button A) ---
-            const btnUseY = H / 2 + 42;
-            let useBtnImg;
-            if (this.textures.exists('btn_a_normal')) {
-                useBtnImg = this.add.image(CX, btnUseY, 'btn_a_normal').setDisplaySize(btnW, btnH);
-                useBtnImg.setTint(0x2ecc71); // Green tint
-            } else {
-                useBtnImg = this.add.rectangle(CX, btnUseY, btnW, btnH, 0x1a3a2a).setStrokeStyle(2, 0x2ecc71);
-            }
-            const useTxt = this.add.text(CX, btnUseY, '🧪 Gunakan Full Potion', {
-                fontSize: '13px',
-                fontStyle: 'bold',
-                color: '#ffffff',
-                fontFamily: 'Outfit, Inter, sans-serif',
-                stroke: '#000000',
-                strokeThickness: 3
-            }).setOrigin(0.5);
+        // 1. USE BUTTON (Top)
+        const btnUseY = CY + 80;
+        let useBtnImg;
+        if (this.textures.exists('btn_a_normal')) {
+            useBtnImg = this.add.image(CX, btnUseY, 'btn_a_normal').setDisplaySize(btnW, btnH);
+        } else {
+            useBtnImg = this.add.rectangle(CX, btnUseY, btnW, btnH, 0x1a3a2a).setStrokeStyle(2, 0x2ecc71);
+        }
+        useBtnImg.setTint(potionCount > 0 ? 0x2ecc71 : 0x555555);
 
-            const useHitZone = this.add.rectangle(CX, btnUseY, btnW, btnH, 0x000000, 0).setInteractive({ useHandCursor: true });
-            useHitZone.on('pointerover', () => {
+        const useBtnTxt = this.add.text(CX, btnUseY, potionCount > 0 ? `🧪 GUNAKAN (${selectedQty})` : 'STOK HABIS', {
+            fontSize: '13px',
+            fontStyle: 'bold',
+            color: '#ffffff',
+            fontFamily: 'Outfit, Inter, sans-serif',
+            stroke: '#000000',
+            strokeThickness: 3
+        }).setOrigin(0.5);
+
+        const updateQty = (delta) => {
+            if (potionCount <= 0) {
+                selectedQty = 0;
+            } else {
+                let n = selectedQty + delta;
+                if (n < 1) n = 1;
+                if (n > potionCount) n = potionCount;
+                selectedQty = n;
+            }
+            qtyValueTxt.setText(`${selectedQty}`);
+            const added = selectedQty * 120;
+            const finalStam = Math.min(999, currentStam + added);
+            resultTxt.setText(`Pemulihan: +${added} Stamina ➔ Total: ${finalStam} Stamina`);
+
+            if (selectedQty > 0) {
+                useBtnTxt.setText(`🧪 GUNAKAN (${selectedQty})`);
+                useBtnImg.setTint(0x2ecc71);
+            } else {
+                useBtnTxt.setText('STOK HABIS');
+                useBtnImg.setTint(0x555555);
+            }
+        };
+
+        minusBtn.on('pointerdown', () => updateQty(-1));
+        plusBtn.on('pointerdown', () => updateQty(1));
+        minus10Btn.on('pointerdown', () => updateQty(-10));
+        plus10Btn.on('pointerdown', () => updateQty(10));
+
+        const useHitZone = this.add.rectangle(CX, btnUseY, btnW, btnH, 0x000000, 0).setInteractive({ useHandCursor: true });
+        useHitZone.on('pointerover', () => {
+            if (selectedQty > 0) {
                 if (this.textures.exists('btn_a_hover')) useBtnImg.setTexture('btn_a_hover');
                 useBtnImg.setTint(0x52be80);
-            });
-            useHitZone.on('pointerout', () => {
+            }
+        });
+        useHitZone.on('pointerout', () => {
+            if (selectedQty > 0) {
                 if (this.textures.exists('btn_a_normal')) useBtnImg.setTexture('btn_a_normal');
                 useBtnImg.setTint(0x2ecc71);
-            });
-            useHitZone.on('pointerdown', () => {
-                if (this.textures.exists('btn_a_active')) useBtnImg.setTexture('btn_a_active');
-                this._useStaminaPotion(quest);
-            });
-            useHitZone.on('pointerup', () => {
-                if (this.textures.exists('btn_a_normal')) useBtnImg.setTexture('btn_a_normal');
-            });
-            items.push(useBtnImg, useTxt, useHitZone);
-
-            // --- Cancel Button (Red Button A) ---
-            const btnCancelY = H / 2 + 98;
-            let cancelBtnImg;
-            if (this.textures.exists('btn_a_normal')) {
-                cancelBtnImg = this.add.image(CX, btnCancelY, 'btn_a_normal').setDisplaySize(btnW, 40);
-                cancelBtnImg.setTint(0xe74c3c); // Red tint
-            } else {
-                cancelBtnImg = this.add.rectangle(CX, btnCancelY, btnW, 40, 0x2a0d0d).setStrokeStyle(1, 0xe74c3c);
             }
-            const cancelTxt = this.add.text(CX, btnCancelY, 'BATAL', {
-                fontSize: '12px',
-                fontStyle: 'bold',
-                color: '#ffffff',
-                fontFamily: 'Outfit, Inter, sans-serif',
-                stroke: '#000000',
-                strokeThickness: 2
-            }).setOrigin(0.5);
+        });
+        useHitZone.on('pointerdown', () => {
+            if (selectedQty <= 0) return;
+            this._useStaminaPotion(quest, selectedQty);
+        });
+        items.push(useBtnImg, useBtnTxt, useHitZone);
 
-            const cancelHitZone = this.add.rectangle(CX, btnCancelY, btnW, 40, 0x000000, 0).setInteractive({ useHandCursor: true });
-            cancelHitZone.on('pointerover', () => {
-                if (this.textures.exists('btn_a_hover')) cancelBtnImg.setTexture('btn_a_hover');
-                cancelBtnImg.setTint(0xec7063);
-            });
-            cancelHitZone.on('pointerout', () => {
-                if (this.textures.exists('btn_a_normal')) cancelBtnImg.setTexture('btn_a_normal');
-                cancelBtnImg.setTint(0xe74c3c);
-            });
-            cancelHitZone.on('pointerdown', () => {
-                if (this.textures.exists('btn_a_active')) cancelBtnImg.setTexture('btn_a_active');
-                this.staminaModalContainer.destroy();
-            });
-            cancelHitZone.on('pointerup', () => {
-                if (this.textures.exists('btn_a_normal')) cancelBtnImg.setTexture('btn_a_normal');
-            });
-            items.push(cancelBtnImg, cancelTxt, cancelHitZone);
+        // 2. CANCEL BUTTON (Bottom)
+        const btnCancelY = CY + 140;
+        let cancelBtnImg;
+        if (this.textures.exists('btn_a_normal')) {
+            cancelBtnImg = this.add.image(CX, btnCancelY, 'btn_a_normal').setDisplaySize(btnW, 40);
+            cancelBtnImg.setTint(0xe74c3c);
         } else {
-            // --- No Potion Warning ---
-            const noPotTxt = this.add.text(CX, H / 2 + 35, '⚠️ Tidak ada Full Potion di inventory.', {
-                fontSize: '12px',
-                fontStyle: 'bold',
-                color: '#ff8a80',
-                fontFamily: 'Outfit, Inter, sans-serif'
-            }).setOrigin(0.5);
-            items.push(noPotTxt);
-
-            // --- Cancel Button (Button A with Red tint) ---
-            const btnCancelY = H / 2 + 90;
-            let cancelBtnImg;
-            if (this.textures.exists('btn_a_normal')) {
-                cancelBtnImg = this.add.image(CX, btnCancelY, 'btn_a_normal').setDisplaySize(btnW, btnH);
-                cancelBtnImg.setTint(0xe74c3c);
-            } else {
-                cancelBtnImg = this.add.rectangle(CX, btnCancelY, btnW, btnH, 0x2a0d0d).setStrokeStyle(1, 0xe74c3c);
-            }
-            const cancelTxt = this.add.text(CX, btnCancelY, 'BATAL', {
-                fontSize: '13px',
-                fontStyle: 'bold',
-                color: '#ffffff',
-                fontFamily: 'Outfit, Inter, sans-serif',
-                stroke: '#000000',
-                strokeThickness: 3
-            }).setOrigin(0.5);
-
-            const cancelHitZone = this.add.rectangle(CX, btnCancelY, btnW, btnH, 0x000000, 0).setInteractive({ useHandCursor: true });
-            cancelHitZone.on('pointerover', () => {
-                if (this.textures.exists('btn_a_hover')) cancelBtnImg.setTexture('btn_a_hover');
-                cancelBtnImg.setTint(0xec7063);
-            });
-            cancelHitZone.on('pointerout', () => {
-                if (this.textures.exists('btn_a_normal')) cancelBtnImg.setTexture('btn_a_normal');
-                cancelBtnImg.setTint(0xe74c3c);
-            });
-            cancelHitZone.on('pointerdown', () => {
-                if (this.textures.exists('btn_a_active')) cancelBtnImg.setTexture('btn_a_active');
-                this.staminaModalContainer.destroy();
-            });
-            cancelHitZone.on('pointerup', () => {
-                if (this.textures.exists('btn_a_normal')) cancelBtnImg.setTexture('btn_a_normal');
-            });
-            items.push(cancelBtnImg, cancelTxt, cancelHitZone);
+            cancelBtnImg = this.add.rectangle(CX, btnCancelY, btnW, 40, 0x2a0d0d).setStrokeStyle(1, 0xe74c3c);
         }
+
+        const cancelTxt = this.add.text(CX, btnCancelY, 'BATAL', {
+            fontSize: '13px',
+            fontStyle: 'bold',
+            color: '#ffffff',
+            fontFamily: 'Outfit, Inter, sans-serif',
+            stroke: '#000000',
+            strokeThickness: 2
+        }).setOrigin(0.5);
+
+        const cancelHitZone = this.add.rectangle(CX, btnCancelY, btnW, 40, 0x000000, 0).setInteractive({ useHandCursor: true });
+        cancelHitZone.on('pointerover', () => {
+            if (this.textures.exists('btn_a_hover')) cancelBtnImg.setTexture('btn_a_hover');
+            cancelBtnImg.setTint(0xec7063);
+        });
+        cancelHitZone.on('pointerout', () => {
+            if (this.textures.exists('btn_a_normal')) cancelBtnImg.setTexture('btn_a_normal');
+            cancelBtnImg.setTint(0xe74c3c);
+        });
+        cancelHitZone.on('pointerdown', () => {
+            this.staminaModalContainer.destroy();
+        });
+        items.push(cancelBtnImg, cancelTxt, cancelHitZone);
 
         this.staminaModalContainer.add(items);
     }
 
-    async _useStaminaPotion(quest) {
+    async _useStaminaPotion(quest, quantity = 1) {
         try {
             const res = await fetch(`${API_BASE}/player/use-stamina-potion`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ playerId: this.playerId })
+                body: JSON.stringify({ playerId: this.playerId, quantity })
             });
             const json = await res.json();
             if (json.status === 'success') {

@@ -205,6 +205,58 @@ describe('Core Battle Engine & State Management', () => {
             expect(evaluateChainMultiplier(3)).toBe(1.5);
             expect(evaluateChainMultiplier(4)).toBe(2.0);
         });
+
+        it('should trigger SA Chain Burst event at end of turn when 2 or more SAs are executed in batch', async () => {
+            const mockState = {
+                current_wave_index: 0,
+                aether_gauge: 0,
+                current_turn_sa_count: 0,
+                player_party: {
+                    characters: [
+                        {
+                            slot: 'Main Character',
+                            mc_id: 1,
+                            element: 'Fire',
+                            current_hp: 5000,
+                            current_sa: 100,
+                            final_stats: { hp: 5000, atk: 1000, def: 500, crit: 0.1 },
+                            skills: [{ id: 35, category: 'Special', name: 'Lord of Vermilion', type: 'Damage', modifier: 4.5 }]
+                        },
+                        {
+                            slot: 'Char Slot 1',
+                            mc_id: 2,
+                            element: 'Fire',
+                            current_hp: 4000,
+                            current_sa: 100,
+                            final_stats: { hp: 4000, atk: 900, def: 400, crit: 0.1 },
+                            skills: [{ id: 12, category: 'Special', name: 'Feuersturm Glanz', type: 'Damage', modifier: 3.5 }]
+                        }
+                    ]
+                },
+                enemies: [
+                    {
+                        monsterId: 'enemy_0',
+                        name: 'Syren',
+                        element: 'Wind',
+                        current_hp: 100000,
+                        final_stats: { hp: 100000, atk: 500, def: 200 }
+                    }
+                ]
+            };
+
+            BattleMemoryStore.set('test_chain_burst_session', mockState);
+
+            const result = await BattleService.processTurnBatch('test_chain_burst_session', [
+                { slot: 'Main Character', action_type: 'special_attack', target_index: 0 },
+                { slot: 'Char Slot 1', action_type: 'special_attack', target_index: 0 }
+            ]);
+
+            const chainBurstEv = result.events.find(e => e.skillCategory === 'chain_burst');
+            expect(chainBurstEv).toBeDefined();
+            expect(chainBurstEv.sourceId).toBe('sa_chain_burst');
+            expect(chainBurstEv.skillName).toContain('💥 SA CHAIN BURST (2x)');
+            expect(chainBurstEv.value).toBeGreaterThan(0);
+        });
     });
 
     // ─────────────────────────────────────────────────────────────────────────────
@@ -382,4 +434,148 @@ describe('Core Battle Engine & State Management', () => {
             expect(events[0].value).toBe(300);
         });
     });
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // SUITE 10: Counter Stance Mechanics, Anti-Overkill & SA Gauge Isolation
+    // ─────────────────────────────────────────────────────────────────────────────
+    describe('Counter Stance Mechanics, Anti-Overkill & SA Gauge Isolation', () => {
+        const mockBsId = 'test_counter_session_999';
+
+        beforeEach(() => {
+            const counterMockState = {
+                bs_id: mockBsId,
+                player_id: 1,
+                current_turn: 1,
+                current_wave_index: 0,
+                aether_gauge: 50,
+                heals_remaining: 3,
+                is_processing: false,
+                player_party: {
+                    characters: [
+                        {
+                            id: 'narmaya',
+                            slot: 'Main Character',
+                            name: 'Narmaya',
+                            element: 'Wind',
+                            current_hp: 1000,
+                            current_sa: 20,
+                            final_stats: { hp: 1000, atk: 600, def: 200 },
+                            skills: [],
+                            active_buffs: [
+                                { effect_name: 'Counter Stance', target_stat: 'STANCE', value: 1.0, duration: 2 }
+                            ]
+                        },
+                        {
+                            id: 'ally_counter',
+                            slot: 'Char Slot 1',
+                            name: 'Ally Counter',
+                            element: 'Fire',
+                            current_hp: 800,
+                            current_sa: 10,
+                            final_stats: { hp: 800, atk: 500, def: 150 },
+                            skills: [],
+                            active_buffs: [
+                                { effect_name: 'Counter Stance', target_stat: 'STANCE', value: 1.0, duration: 2 }
+                            ]
+                        }
+                    ]
+                },
+                enemies: [
+                    {
+                        id: 501,
+                        name: 'Fragile Monster',
+                        element: 'Earth',
+                        current_hp: 50, // Low HP so 1st counter kills it
+                        final_stats: { hp: 500, atk: 100, def: 50 },
+                        current_ca: 0,
+                        caMax: 5,
+                        active_buffs: [],
+                        ai_behaviors: [
+                            {
+                                skill: {
+                                    id: 9001,
+                                    name: 'Swipe All',
+                                    category: 'Special',
+                                    type: 'Damage',
+                                    target_type: 'All_Enemies',
+                                    modifier: 1.0,
+                                    element: 'Earth'
+                                }
+                            }
+                        ]
+                    }
+                ],
+                waves: [
+                    [
+                        {
+                            id: 501,
+                            name: 'Fragile Monster',
+                            element: 'Earth',
+                            current_hp: 50,
+                            final_stats: { hp: 500, atk: 100, def: 50 },
+                            current_ca: 0,
+                            caMax: 5,
+                            active_buffs: []
+                        }
+                    ]
+                ]
+            };
+
+            BattleMemoryStore.set(mockBsId, counterMockState);
+        });
+
+        test('Aturan 1 (Anti-Overkill & Crash Prevention): Musuh mati pada serangan balasan pertama tidak menerima counter beruntun', async () => {
+            const batchPayload = {
+                character_actions: [
+                    { slot: 'Main Character', action_type: 'basic_attack', target_index: 0 }
+                ]
+            };
+
+            // Player 1 attacks, then Enemy uses Swipe All (AoE against both characters with Counter Stance)
+            const result = await BattleService.processTurnBatch(mockBsId, batchPayload);
+
+            const counterEvents = result.events.filter(e => e.type === 'counter_attack');
+            
+            // Because enemy has only 50 HP left, Narmaya's 1st counter attack kills it (enemy HP reaches 0)
+            // Rule 1 dictates that enemy.current_hp must not go negative and counter loop breaks!
+            expect(counterEvents.length).toBeLessThanOrEqual(1);
+
+            const enemy = result.stateSnapshot.enemies ? result.stateSnapshot.enemies[0] : null;
+            if (enemy) {
+                expect(enemy.current_hp).toBe(0); // Anti-Overkill: HP clamp to 0, not negative
+            }
+        });
+
+        test('Aturan 2 (Isolasi SA Gauge): Serangan counter TIDAK menambahkan SA Gauge ke karakter', async () => {
+            const state = BattleMemoryStore.get(mockBsId);
+            // Set enemy HP high enough so it survives player basic attack and attacks back
+            state.enemies[0].current_hp = 3000;
+            state.enemies[0].final_stats.hp = 3000;
+
+            // Keep only Narmaya so enemy is guaranteed to target Narmaya
+            state.player_party.characters = [state.player_party.characters[0]];
+
+            const narmaya = state.player_party.characters[0];
+            const saBefore = narmaya.current_sa;
+
+            const batchPayload = {
+                character_actions: [
+                    { slot: 'Main Character', action_type: 'basic_attack', target_index: 0 }
+                ]
+            };
+
+            const result = await BattleService.processTurnBatch(mockBsId, batchPayload);
+            const updatedNarmaya = result.stateSnapshot.player_party.characters[0];
+
+            // Verify counter attack event actually occurred
+            const counterEvents = result.events.filter(e => e.type === 'counter_attack');
+            expect(counterEvents.length).toBeGreaterThan(0);
+
+            // Narmaya gets +20 SA from Basic Attack (Player Phase) + +20 SA from taking damage (Enemy Phase)
+            // But 0 SA from Counter Attack itself!
+            const expectedSa = Math.min(100, saBefore + 20 + 20); // 20 (base) + 20 (attack) + 20 (damaged) = 60
+            expect(updatedNarmaya.current_sa).toBe(expectedSa);
+        });
+    });
 });
+

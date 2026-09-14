@@ -690,7 +690,7 @@ class BattleService {
 
         try {
             const events = [];
-            const characterActions = batchData.character_actions || [];
+            const characterActions = Array.isArray(batchData) ? batchData : (batchData.character_actions || []);
             const executedSkillsThisTurn = new Set();
             
             // Helper function to resolve targets based on ms_target_type
@@ -809,6 +809,13 @@ class BattleService {
                     skillObj = (character.skills || []).find(s => (s.category || '').toLowerCase() === 'special') || {
                         name: 'Special Attack', type: 'Damage', target_type: 'Single_Enemy', modifier: 3.5, element: character.element, status_effects: []
                     };
+
+                    // Track SA Chain Burst count
+                    state.current_turn_sa_count = (state.current_turn_sa_count || 0) + 1;
+                    if (state.current_turn_sa_count === 1) {
+                        state.first_sa_element = character.element || 'Neutral';
+                        state.first_sa_attacker_id = sourceEntityId;
+                    }
                 } else if (action_type === 'skill') {
                     const foundSkill = (character.skills || []).find(s => s.id == skill_id);
                     if (!foundSkill || (foundSkill.current_cooldown && foundSkill.current_cooldown > 0)) continue;
@@ -977,31 +984,37 @@ class BattleService {
                 if (state.current_turn_sa_count === 3) chainMult = 1.5;
                 if (state.current_turn_sa_count >= 4) chainMult = 2.0;
 
-                const attacker = this._findEntity(state, state.first_sa_attacker_id);
+                // Main Character (MC) as the primary attacker calculating Chain Burst damage & element
+                const partyChars = state.player_party && state.player_party.characters ? state.player_party.characters : [];
+                const mcAttacker = partyChars.find(c => (c.slot || '').toLowerCase().includes('main') || c.mc_id === 1 || c.id === 1) || partyChars[0];
                 const target = state.enemies && state.enemies.find(e => (e.current_hp !== undefined ? e.current_hp : e.hp) > 0);
                 
-                if (attacker && target && target.current_hp > 0) {
+                if (mcAttacker && target && (target.current_hp !== undefined ? target.current_hp : target.hp) > 0) {
+                    const chainElement = mcAttacker.element || state.first_sa_element || 'Fire';
                     const chainSkill = {
-                        name: `SA Chain Burst`,
+                        name: `SA Chain Burst (${state.current_turn_sa_count}x)`,
                         type: 'Damage',
                         modifier: chainMult,
-                        element: state.first_sa_element || 'Neutral'
+                        element: chainElement
                     };
                     
-                    const calcResult = DamageCalculatorService.calculateDamage(attacker, target, chainSkill);
-                    target.current_hp = Math.max(0, (target.current_hp || target.final_stats.hp) - calcResult.damage);
+                    const calcResult = DamageCalculatorService.calculateDamage(mcAttacker, target, chainSkill);
+                    const targetCurHp = target.current_hp !== undefined ? target.current_hp : target.hp;
+                    target.current_hp = Math.max(0, targetCurHp - calcResult.damage);
+                    if (target.hp !== undefined) target.hp = target.current_hp;
                     
                     events.push({
                         type: 'damage',
-                        sourceId: attacker.slot || attacker.id,
+                        sourceId: 'sa_chain_burst',
                         targetId: `enemy_${state.enemies.indexOf(target)}`,
                         value: calcResult.damage,
                         isCrit: calcResult.isCrit,
                         mitigation: calcResult.mitigationPercent,
-                        skillName: `💥 SA Chain Burst (${state.current_turn_sa_count}x)`,
+                        skillName: `💥 SA CHAIN BURST (${state.current_turn_sa_count}x)`,
                         skillCategory: 'chain_burst',
                         elementMultiplier: calcResult.elementMultiplier,
-                        sourceElement: chainSkill.element
+                        sourceElement: chainElement,
+                        attackerSlot: mcAttacker.slot || mcAttacker.id || 'mc'
                     });
 
                     // Check if chain burst cleared the wave
@@ -1030,6 +1043,7 @@ class BattleService {
             if (!waveCleared && remainingAliveEnemies.length > 0) {
                 events.push({ type: 'delay', delayMs: 500 });
                 for (const enemy of remainingAliveEnemies) {
+                    if ((enemy.current_hp !== undefined ? enemy.current_hp : (enemy.final_stats ? enemy.final_stats.hp : 1000)) <= 0) continue;
                     const isStunned = (enemy.active_buffs || []).some(b =>
                         (b.target_stat || '').toUpperCase() === 'STUN' ||
                         (b.effect_name || '').toUpperCase().includes('STUN')
@@ -1165,6 +1179,62 @@ class BattleService {
                                 sourceElement: (!enemySkill.element || enemySkill.element === 'Any' || enemySkill.element === 'Neutral') ? (enemy.element || 'Neutral') : enemySkill.element,
                                 sourceCa: enemy.current_ca
                             });
+
+                            // Counter Stance Evaluation (Rule 1: Anti-Overkill & Rule 2: SA Isolasi)
+                            const enemyCurrentHp = enemy.current_hp !== undefined ? enemy.current_hp : (enemy.final_stats ? enemy.final_stats.hp : 1000);
+                            if (tgtObj.type === 'player' && targetEntity.current_hp > 0 && enemyCurrentHp > 0) {
+                                // Rule 1 Validation: Check enemy death before executing counter logic
+                                if (enemy.current_hp <= 0) break;
+
+                                const hasCounter = (targetEntity.active_buffs || []).some(b => {
+                                    if (!b) return false;
+                                    const stat = String(b.target_stat || b.stat || b.modifier_target || '').toUpperCase();
+                                    const name = String(b.effect_name || b.name || b.mse_name || '').toUpperCase();
+                                    return stat === 'STANCE' || name.includes('COUNTER');
+                                });
+
+                                if (hasCounter) {
+                                    const basicSkill = {
+                                        name: 'Counter Attack',
+                                        category: 'Basic',
+                                        type: 'Damage',
+                                        target_type: 'Single_Enemy',
+                                        modifier: 1.0,
+                                        element: targetEntity.element || 'Neutral'
+                                    };
+
+                                    // Rule 2: SA Gauge Isolation - Counter attack deals pure damage with 0 SA Gauge addition
+                                    // targetEntity.current_sa is NOT modified by counter action
+                                    const counterCalc = DamageCalculatorService.calculateDamage(targetEntity, enemy, basicSkill);
+                                    const newEnemyHp = Math.max(0, (enemy.current_hp !== undefined ? enemy.current_hp : enemyCurrentHp) - counterCalc.damage);
+                                    enemy.current_hp = newEnemyHp;
+
+                                    events.push({
+                                        type: 'counter_attack',
+                                        sourceId: targetEntityId,
+                                        targetId: sourceEntityId,
+                                        value: counterCalc.damage,
+                                        isCrit: counterCalc.isCrit,
+                                        mitigation: counterCalc.mitigationPercent,
+                                        skillName: 'Counter Attack',
+                                        skillCategory: 'basic',
+                                        elementMultiplier: counterCalc.elementMultiplier,
+                                        sourceElement: targetEntity.element || 'Neutral'
+                                    });
+
+                                    const charName = targetEntity.name || targetEntity.charName || 'Character';
+                                    const enemyNameStr = enemy.name || 'Enemy';
+                                    events.push({
+                                        type: 'log',
+                                        message: `⚔️ ${charName} COUNTER ATTACKED ${enemyNameStr} for ${counterCalc.damage} DMG!`
+                                    });
+
+                                    // Rule 1: Anti-Overkill - If enemy dies from counter attack, break out of target loop immediately
+                                    if (enemy.current_hp <= 0) {
+                                        break;
+                                    }
+                                }
+                            }
                         } 
                         else if (sType === 'heal' || sType === 'support' || sType === 'cleanse') {
                             const triggerHealPct = parseFloat(enemySkill.trigger_heal_pct) || (sType === 'heal' ? 0.25 : 0);
@@ -1220,6 +1290,13 @@ class BattleService {
                         }
                     }
                 }
+            }
+
+            // Post-Enemy Phase wave clear evaluation (if counter attack killed remaining enemies)
+            const prevWaveIndexPhase2 = state.current_wave_index;
+            this._checkWaveClear(state, events);
+            if (state.current_wave_index > prevWaveIndexPhase2) {
+                waveCleared = true;
             }
 
             // ==========================================

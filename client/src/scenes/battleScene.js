@@ -2545,10 +2545,12 @@ export default class BattleScene extends Phaser.Scene {
                             if (String(group.sourceId).startsWith('enemy_') || String(group.sourceId) === 'enemy') {
                                 const eIdx = String(group.sourceId).startsWith('enemy_') ? parseInt(String(group.sourceId).split('_')[1], 10) : 0;
                                 source = this.enemies[eIdx] || this.enemies[0];
+                            } else if (group.sourceId === 'sa_chain_burst') {
+                                source = this.players.find(p => (p.slot || '').toLowerCase().includes('main') || p.mc_id === 1) || this.players[0];
                             } else {
                                 source = this.players.find(p => (p.slot || p.id) === group.sourceId);
                             }
-                            const sourceName = source ? (source.charName || source.name || 'Unknown') : 'Entity';
+                            const sourceName = group.sourceId === 'sa_chain_burst' ? (source ? `${source.charName || 'MC'} (Chain Burst)` : 'Main Character (Chain Burst)') : (source ? (source.charName || source.name || 'Unknown') : 'Entity');
 
                             const isStunnedAction = group.skillName === 'STUNNED' || group.events.some(e => e.type === 'stun_skip');
                             if (isStunnedAction) {
@@ -2766,7 +2768,48 @@ export default class BattleScene extends Phaser.Scene {
                                 }
                             }
 
-                            if (ev && ev.type === 'enrage') {
+                            if (ev && ev.type === 'counter_attack') {
+                                let source = null;
+                                if (ev.sourceId !== undefined && ev.sourceId !== null) {
+                                    source = this.players.find(p => p.slot === ev.sourceId || p.id === ev.sourceId || String(p.slot) === String(ev.sourceId) || String(p.id) === String(ev.sourceId));
+                                }
+                                const sourceName = source ? (source.charName || source.name || 'Character') : 'Character';
+                                const tgtName = target ? (target.charName || (target.monsterId ? 'ENEMY' : 'Enemy')) : 'Enemy';
+
+                                this.showLog(`⚔️ ${sourceName} COUNTER ATTACKS ${tgtName}!`, 'popup');
+                                this.playSFX('sfx_charBasicAtk', { volume: 0.7 });
+
+                                // Step 1: Sequential async lunge
+                                if (source && source.battleSprite) {
+                                    await this.playCharacterLungeAnim(source);
+                                }
+
+                                // Step 2: VFX, damage text & HP deduction
+                                if (target) {
+                                    target.hp = Math.max(0, target.hp - (ev.value || 0));
+                                    this._refreshEnemyHUD();
+                                    this.playSpriteHitAnim(target);
+                                    const tgtPos = this._getVfxTargetPos(target);
+                                    this.playExactVFX('hit', tgtPos.x, tgtPos.y, { scale: 1.2 });
+                                    this.showFloatingDamage(target, ev.value, ev.isCrit, ev.elementMultiplier, ev.sourceElement);
+
+                                    if (target.hp <= 0 && target.battleSprite) {
+                                        this.playSFX('sfx_monsterDefeated', { volume: 0.7 });
+                                        this.tweens.add({
+                                            targets: [target.battleSprite, target.shadowSprite].filter(Boolean),
+                                            alpha: 0.3,
+                                            duration: 500
+                                        });
+                                    }
+                                }
+
+                                // Step 3: Sequential async return
+                                if (source && source.battleSprite) {
+                                    await this.playCharacterReturnAnim(source);
+                                }
+
+                                delay = 300;
+                            } else if (ev && ev.type === 'enrage') {
                                 if (target) {
                                     this.playSFX('sfx_monsEnraged', { volume: 0.8 });
                                     target.modeState = 'enraged';
