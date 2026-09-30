@@ -67,8 +67,50 @@ web_modules/
 
 # dotenv environment variable files
 .env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 .env.*
 !.env.example
+!.env.template
+
+# Security & Secrets / Credentials
+*.pem
+*.key
+*.crt
+*.pfx
+*.p12
+*.cer
+*.asc
+id_rsa
+id_ed25519
+credentials.json
+service-account*.json
+secrets.json
+
+# IDE & Editor folders
+.idea/
+*.swp
+*.swo
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# AI Agent & Workspace / Internal cache
+.gemini/
+brain/
+server/jest_results.json
+
+# OS Junk Files
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache
