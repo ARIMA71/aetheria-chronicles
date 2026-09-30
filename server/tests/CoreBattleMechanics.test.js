@@ -5,6 +5,17 @@
  * and Anti-Corruption Snapshot Rollback Mechanism.
  */
 
+jest.mock('../config/db', () => ({
+    query: jest.fn().mockResolvedValue([[], []]),
+    getConnection: jest.fn().mockResolvedValue({
+        query: jest.fn().mockResolvedValue([[], []]),
+        beginTransaction: jest.fn(),
+        commit: jest.fn(),
+        rollback: jest.fn(),
+        release: jest.fn()
+    })
+}));
+
 const BattleService = require('../services/BattleService');
 const BattleMemoryStore = require('../cache/BattleMemoryStore');
 
